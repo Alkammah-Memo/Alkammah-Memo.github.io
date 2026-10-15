@@ -198,7 +198,7 @@ export async function extractInkCandidates(
   const res = await generate([m.vision, m.chat, ...m.chatFallbacks], {
     contents: {
       parts: [
-        { inlineData: { mimeType: 'image/png', data: imageBase64.replace(/^data:image\/\w+;base64,/, '') } },
+        { inlineData: { mimeType: /^data:(image\/[\w+.-]+);base64,/.exec(imageBase64)?.[1] || 'image/png', data: imageBase64.replace(/^data:image\/[\w+.-]+;base64,/, '') } },
         { text: `${INK_PROMPT}\n\nCurrent Cairo date/time: ${cairoNowIsoLabel()}` },
       ],
     },
