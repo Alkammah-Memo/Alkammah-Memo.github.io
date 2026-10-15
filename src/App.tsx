@@ -9,6 +9,7 @@ import {
   Meeting,
   Notebook,
   NotebookPage,
+  PlannerImportPage,
   Person,
   Project,
   AssistantMessage,
@@ -24,6 +25,8 @@ import { getCairoDateString, cairoLocalToIso, normalizeToIso, parseTimeTo24h } f
 import { localDB } from './lib/indexedDb';
 import type { WorkspaceState } from './lib/indexedDb';
 import { newId, hasDuplicateName } from './lib/taskLogic';
+import { PLANNER_CANVAS, findPageForDate, plannerPageDefaults } from './lib/planner';
+import type { PlannerPageRequest } from './lib/planner';
 import { INITIAL_DEPARTMENTS } from './lib/referenceData';
 import {
   isCloudConfigured,
@@ -601,6 +604,145 @@ export default function App() {
     syncPageToCloud(newPage).catch(console.warn);
   };
 
+  /** Finds a notebook by title or creates it (offline first, then cloud). Updates refs synchronously so double taps cannot duplicate it. */
+  const ensureNotebook = async (title: string, category: Notebook['category'], description: string): Promise<Notebook> => {
+    const existing = notebooksRef.current.find((n) => n.title === title);
+    if (existing) return existing;
+    const now = new Date().toISOString();
+    const nb: Notebook = {
+      id: newId('nb'),
+      workspaceId: 'default-ws',
+      title,
+      description,
+      category,
+      pageCount: 0,
+      createdAt: now,
+      updatedAt: now,
+    };
+    notebooksRef.current = [...notebooksRef.current, nb];
+    setNotebooks(notebooksRef.current);
+    await localDB.put('notebooks', nb);
+    syncNotebookToCloud(nb).catch(console.warn);
+    return nb;
+  };
+
+  /** Appends pages to a notebook (page numbers continue); persists to IndexedDB and cloud. Does not change the active page. */
+  const appendPagesToNotebook = async (
+    nb: Notebook,
+    specs: Array<Pick<NotebookPage, 'title' | 'template'> & Partial<NotebookPage>>
+  ): Promise<NotebookPage[]> => {
+    if (specs.length === 0) return [];
+    const now = new Date().toISOString();
+    let num = pagesRef.current.filter((p) => p.notebookId === nb.id).reduce((m, p) => Math.max(m, p.pageNumber || 0), 0);
+    const created: NotebookPage[] = specs.map((spec) => {
+      num += 1;
+      return {
+        strokes: [],
+        textNotes: [],
+        versions: [],
+        linkedTaskIds: [],
+        linkedMeetingIds: [],
+        viewMode: 'handwritten',
+        orientation: 'landscape',
+        paperStyle: 'ruled',
+        paperColor: 'cream',
+        createdBy: 'executive-user',
+        ...spec,
+        id: newId('page'),
+        notebookId: nb.id,
+        workspaceId: 'default-ws',
+        pageNumber: num,
+        createdAt: now,
+        updatedAt: now,
+      };
+    });
+    pagesRef.current = [...pagesRef.current, ...created];
+    setPages(pagesRef.current);
+    const updatedNb: Notebook = {
+      ...nb,
+      pageCount: pagesRef.current.filter((p) => p.notebookId === nb.id).length,
+      updatedAt: now,
+    };
+    notebooksRef.current = notebooksRef.current.map((n) => (n.id === nb.id ? updatedNb : n));
+    setNotebooks(notebooksRef.current);
+    await localDB.bulkPut('pages', created);
+    await localDB.put('notebooks', updatedNb);
+    syncNotebookToCloud(updatedNb).catch(console.warn);
+    // cloud sync in the background, a few at a time (imports can be hundreds of pages)
+    void (async () => {
+      for (let i = 0; i < created.length; i += 4) {
+        await Promise.allSettled(created.slice(i, i + 4).map((p) => syncPageToCloud(p)));
+      }
+    })();
+    return created;
+  };
+
+  const PLANNER_NOTEBOOK_TITLE = 'Daily Planner 2026';
+
+  /**
+   * Opens the planner page a request points at, creating it first when it does not exist (always a user action).
+   * An imported/archive page with the same plannerDate counts as existing.
+   */
+  const handleOpenPlannerPage = async (req: PlannerPageRequest) => {
+    const defaults = plannerPageDefaults(req);
+    if (req.kind === 'daily' || req.kind === 'monthly') {
+      const date = req.kind === 'daily' ? req.date : req.month;
+      const found = findPageForDate(pagesRef.current, date, req.kind === 'daily' ? 'day' : 'month');
+      if (found) {
+        setActiveNotebookId(found.notebookId);
+        setActivePageId(found.id);
+        return;
+      }
+    }
+    const nb =
+      req.kind === 'daily' || req.kind === 'monthly'
+        ? await ensureNotebook(PLANNER_NOTEBOOK_TITLE, 'Executive Meetings & Decisions', 'Daily, monthly, to-do and meeting pages that follow the printed planner')
+        : notebooksRef.current.find((n) => n.id === activeNotebookId) ||
+          (await ensureNotebook(PLANNER_NOTEBOOK_TITLE, 'Executive Meetings & Decisions', 'Daily, monthly, to-do and meeting pages that follow the printed planner'));
+    // re-check after the await: a double tap may already have created it
+    if (req.kind === 'daily' || req.kind === 'monthly') {
+      const date = req.kind === 'daily' ? req.date : req.month;
+      const again = findPageForDate(pagesRef.current, date, req.kind === 'daily' ? 'day' : 'month');
+      if (again) {
+        setActiveNotebookId(again.notebookId);
+        setActivePageId(again.id);
+        return;
+      }
+    }
+    const [page] = await appendPagesToNotebook(nb, [
+      {
+        title: defaults.title,
+        template: defaults.template,
+        ...(defaults.plannerDate ? { plannerDate: defaults.plannerDate } : {}),
+        paperColor: defaults.paperColor,
+        canvasSize: { ...PLANNER_CANVAS },
+        orientation: 'landscape',
+      },
+    ]);
+    if (page) {
+      setActiveNotebookId(nb.id);
+      setActivePageId(page.id);
+    }
+  };
+
+  /** Adds pages produced by the planner PDF importer to a (found or created) notebook, without changing the active page. */
+  const handleImportPlannerPages = async (notebookTitle: string, importPages: PlannerImportPage[]): Promise<void> => {
+    const title = notebookTitle.trim() || PLANNER_NOTEBOOK_TITLE;
+    const nb = await ensureNotebook(title, 'Executive Meetings & Decisions', 'Imported planner pages');
+    await appendPagesToNotebook(
+      nb,
+      importPages.map((ip) => ({
+        title: ip.title,
+        template: ip.template,
+        backgroundImage: ip.backgroundImage,
+        canvasSize: ip.canvasSize,
+        ...(ip.plannerDate ? { plannerDate: ip.plannerDate } : {}),
+        ...(ip.transcription ? { transcription: ip.transcription } : {}),
+        paperColor: 'white' as const,
+      }))
+    );
+  };
+
   const handleDeletePage = async (pageId: string) => {
     const pageToDelete = pagesRef.current.find((p) => p.id === pageId);
     if (!pageToDelete) return;
@@ -721,7 +863,8 @@ export default function App() {
       location: '',
       ownerAlias: candidate.suggestedOwnerAlias || 'Unassigned',
       isOwnerVerified: false,
-      status: 'Pending',
+      status: candidate.suggestedStatus || 'Pending',
+      completionDate: candidate.suggestedStatus === 'Done' ? new Date().toISOString() : undefined,
       priority: 'Normal',
       dueDate: candidate.suggestedDueDate,
       nextAction: candidate.suggestedNextAction,
@@ -1213,6 +1356,7 @@ export default function App() {
             setIsTaskModalOpen(true);
           }}
           onNewPage={handleNewPage}
+          onOpenPlanner={handleOpenPlannerPage}
           onDeletePage={handleDeletePage}
         />
       )}
@@ -1397,6 +1541,7 @@ export default function App() {
         locale={locale}
         onClose={() => setIsBackupModalOpen(false)}
         onRestoreCompleted={handleRestoreCompleted}
+        onImportPlannerPages={handleImportPlannerPages}
         onClearAllData={async () => {
           await localDB.clearAll();
           await clearCloudCollections(['tasks', 'meetings', 'projects', 'people', 'notebooks', 'pages']).catch(console.warn);
