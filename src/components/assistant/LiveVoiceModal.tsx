@@ -45,6 +45,8 @@ interface LiveVoiceModalProps {
   tasks?: any[];
   onExecuteToolAction?: (toolName: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>;
   onClose?: () => void;
+  /** hide the floating bubble (e.g. on the assistant page, which has its own voice button) unless a session is running */
+  hideBubble?: boolean;
 }
 
 // On phones the fixed bottom tab bar occupies the lower edge; keep the floating bubble above it
@@ -75,6 +77,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
   tasks = [],
   onExecuteToolAction,
   onClose,
+  hideBubble = false,
 }) => {
   // Session active state (controls live audio / WebSocket regardless of whether modal window is open or minimized)
   const [isSessionActive, setIsSessionActive] = useState<boolean>(false);
@@ -237,7 +240,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         const parsed = JSON.parse(saved);
         if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
           const maxX = typeof window !== 'undefined' ? window.innerWidth - 76 : 300;
-          const maxY = typeof window !== 'undefined' ? window.innerHeight - 76 - bottomNavInset() : 600;
+          const maxY = typeof window !== 'undefined' ? window.innerHeight - 124 - bottomNavInset() : 600;
           return {
             x: Math.min(Math.max(16, parsed.x), Math.max(16, maxX)),
             y: Math.min(Math.max(16, parsed.y), Math.max(16, maxY)),
@@ -247,7 +250,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     } catch {}
     return {
       x: typeof window !== 'undefined' ? window.innerWidth - 84 : 300,
-      y: typeof window !== 'undefined' ? window.innerHeight - 88 - bottomNavInset() : 600,
+      y: typeof window !== 'undefined' ? window.innerHeight - 136 - bottomNavInset() : 600,
     };
   });
 
@@ -287,7 +290,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     const handleResize = () => {
       setBubblePos((prev) => ({
         x: Math.min(Math.max(16, prev.x), window.innerWidth - 76),
-        y: Math.min(Math.max(16, prev.y), window.innerHeight - 76 - bottomNavInset()),
+        y: Math.min(Math.max(16, prev.y), window.innerHeight - 124 - bottomNavInset()),
       }));
     };
     window.addEventListener('resize', handleResize);
@@ -703,7 +706,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         meetings: buildMeetingContext(),
         tasks: buildTaskContext(),
       });
-      const reply = data.text || (locale === 'ar' ? 'تمام يافندم، تم تنفيذ الأمر.' : 'Understood, done.');
+      const reply = data.text || (locale === 'ar' ? 'تم تنفيذ الأمر، المهندس محمد.' : 'Understood, done.');
       setLastTranscript(reply);
       setStatus('speaking');
       addDebugLog('SUCCESS', 'GeminiLive', `Spero reply received: "${reply}"`);
@@ -842,7 +845,9 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
           }
 
           if (data.error && data.fatal) {
+            terminateSession();
             setReconnectNote(locale === 'ar' ? 'أضف مفتاح Gemini من الإعدادات أولاً.' : 'Add a Gemini key in Settings first.');
+            setTimeout(() => setReconnectNote(''), 6000);
             addDebugLog('ERROR', 'GeminiLive', String(data.error));
           }
 
@@ -988,7 +993,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
 
     if (start.moved) {
       const maxX = window.innerWidth - 76;
-      const maxY = window.innerHeight - 76 - bottomNavInset();
+      const maxY = window.innerHeight - 124 - bottomNavInset();
       const newX = Math.min(Math.max(16, start.initX + dx), maxX);
       const newY = Math.min(Math.max(16, start.initY + dy), maxY);
       setBubblePos({ x: newX, y: newY });
@@ -1021,11 +1026,12 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       audioContextOutRef.current.resume().catch(console.warn);
     }
 
-    // Always expand window modal on bubble click; maintain active live session if already running
-    setIsWindowOpen(true);
+    // Tap on an idle bubble: start talking right here (the window stays closed). Tap on an active bubble: open the window.
     if (!isSessionActive || !activeRef.current) {
       setIsSessionActive(true);
       initLiveSession();
+    } else {
+      setIsWindowOpen(true);
     }
   };
 
@@ -1440,137 +1446,183 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
 
   // Render floating draggable bubble when modal is closed
   const renderFloatingBubble = () => {
-    if (isWindowOpen) return null;
+    if (isWindowOpen || (hideBubble && !isSessionActive)) return null;
+
+    const ar = locale === 'ar';
+    const reconnecting = !!reconnectNote;
+    // Development-only visual QA override (stripped from production builds)
+    const forced = import.meta.env.DEV ? (localStorage.getItem('qa_bubble') as 'idle' | 'connecting' | 'reconnecting' | 'speaking' | 'listening' | null) : null;
+    const controlsVisible = isSessionActive || !!forced;
+    const phase: 'idle' | 'connecting' | 'reconnecting' | 'speaking' | 'listening' = forced
+      ? forced
+      : !isSessionActive
+      ? 'idle'
+      : reconnecting
+      ? 'reconnecting'
+      : status === 'connecting'
+      ? 'connecting'
+      : status === 'speaking'
+      ? 'speaking'
+      : 'listening';
+
+    const label = {
+      idle: ar ? 'اضغط للتحدث' : 'Tap to talk',
+      connecting: ar ? 'جارٍ الاتصال' : 'Connecting',
+      reconnecting: ar ? 'إعادة الاتصال' : 'Reconnecting',
+      speaking: ar ? 'سبيرو تتحدث' : 'Spero is speaking',
+      listening: nearVoiceDetected ? (ar ? 'أسمعك' : 'Hearing you') : ar ? 'أستمع إليك' : 'Listening',
+    }[phase];
+
+    const glow =
+      phase === 'speaking'
+        ? 'rgba(255,0,127,0.55), rgba(121,40,202,0.45), rgba(0,242,254,0.4)'
+        : phase === 'reconnecting'
+        ? 'rgba(245,158,11,0.6), rgba(245,158,11,0.35), rgba(255,255,255,0.15)'
+        : phase === 'idle'
+        ? 'rgba(0,113,227,0.38), rgba(121,40,202,0.28), rgba(0,242,254,0.22)'
+        : 'rgba(0,242,254,0.5), rgba(0,113,227,0.4), rgba(121,40,202,0.3)';
+
+    const level = Math.min(1, audioLevel / 100);
+    const captionOnLeft = bubblePos.x > (typeof window !== 'undefined' ? window.innerWidth / 2 : 400);
+    const caption =
+      phase === 'speaking' || phase === 'listening'
+        ? lastTranscript || userTranscript || (forced ? (ar ? 'تم تسجيل الاجتماع في التقويم، المهندس محمد.' : 'The meeting has been scheduled, Eng. Mohamed.') : '')
+        : '';
 
     return (
       <div
-        style={{
-          left: `${bubblePos.x}px`,
-          top: `${bubblePos.y}px`,
-          touchAction: 'none',
-        }}
+        style={{ left: `${bubblePos.x}px`, top: `${bubblePos.y}px`, touchAction: 'none' }}
         onPointerDown={handleBubblePointerDown}
         onPointerMove={handleBubblePointerMove}
         onPointerUp={handleBubblePointerUp}
-        onMouseEnter={() => setIsHovered(true)}
-        onMouseLeave={() => setIsHovered(false)}
-        className="fixed z-50 select-none flex items-center group cursor-grab active:cursor-grabbing"
+        className="fixed z-50 select-none cursor-grab active:cursor-grabbing"
+        role="group"
+        aria-label={ar ? 'المساعد الصوتي سبيرو' : 'Spero voice assistant'}
       >
-        {/* Real-time Siri Voice Wave aura when speaking or listening in bubble mode */}
-        {isSessionActive && (
-          <>
-            <div
-              className={`absolute -inset-2 rounded-full border border-cyan-400/40 pointer-events-none transition-transform duration-100 ${
-                status === 'speaking'
-                  ? 'border-fuchsia-400/50 animate-ping'
-                  : 'border-cyan-400/40 animate-pulse'
-              }`}
-              style={{
-                transform: `scale(${1 + (audioLevel / 100) * 0.35})`,
-              }}
-            />
-            <div
-              className="absolute -inset-1 rounded-full bg-gradient-to-tr from-[#ff007f] via-[#7928ca] to-[#00f2fe] blur-md opacity-70 animate-pulse pointer-events-none"
-            />
-          </>
-        )}
-
-        {/* Speech Bubble Pill (Shows what Siri is saying while window is closed!) */}
-        {isSessionActive && (lastTranscript || status === 'speaking' || status === 'connecting') && (
+        <div className="relative w-16 h-16">
+          {/* Breathing aura (reacts to your voice while listening) */}
           <div
-            className={`absolute right-16 bottom-1 flex items-center gap-2 max-w-[280px] bg-[#0e0f14]/95 backdrop-blur-2xl text-white px-3.5 py-2 rounded-2xl border border-white/20 shadow-[0_12px_40px_rgba(0,0,0,0.6)] text-xs font-medium animate-in fade-in zoom-in-95 pointer-events-none ${
-              locale === 'ar' ? 'text-right' : 'text-left'
-            }`}
-            dir={locale === 'ar' ? 'rtl' : 'ltr'}
-          >
-            <span className="w-2 h-2 rounded-full bg-cyan-400 animate-ping shrink-0" />
-            <p className="line-clamp-2 leading-relaxed text-[11px] text-white/90">
-              {status === 'connecting'
-                ? locale === 'ar' ? 'جاري الاتصال بـ Siri...' : 'Connecting to Siri...'
-                : lastTranscript || (locale === 'ar' ? 'أستمع إليك...' : 'Listening to you...')}
-            </p>
-          </div>
-        )}
+            className="absolute -inset-4 rounded-full pointer-events-none spero-breathe"
+            style={{
+              background: `radial-gradient(circle, ${glow.split(', rgba')[0]} 0%, transparent 68%)`,
+              transform: `scale(${1 + (phase === 'listening' ? level * 0.5 : 0)})`,
+              transition: 'transform 120ms ease-out',
+              filter: 'blur(6px)',
+            }}
+          />
 
-        {/* Tooltip on Hover when idle */}
-        {!isSessionActive && isHovered && !isDragging && (
-          <div className="absolute right-16 bottom-1 hidden group-hover:flex flex-col gap-0.5 bg-[#0e0f14]/90 backdrop-blur-xl text-white px-3 py-1.5 rounded-2xl border border-white/20 shadow-2xl text-[11px] font-medium whitespace-nowrap animate-in fade-in duration-150 pointer-events-none">
-            <span className="font-bold text-cyan-300">Siri AI</span>
-            <span className="text-white/70">
-              {locale === 'ar'
-                ? 'نقرة: تحدث بالخلفية · نقرتان: فتح النافذة · سحب: تحريك'
-                : 'Click: Talk in background · 2-Clicks: Open window · Drag: Move'}
-            </span>
-          </div>
-        )}
-
-        {/* The Siri Bubble Orb Button */}
-        <div
-          className={`w-14 h-14 rounded-full flex items-center justify-center text-white transition-all duration-300 relative border-2 ${
-            isSessionActive
-              ? status === 'speaking'
-                ? 'bg-gradient-to-tr from-[#ff007f] via-[#7928ca] to-[#00f2fe] shadow-[0_0_25px_rgba(255,0,127,0.7),0_0_35px_rgba(0,113,227,0.8)] border-white/60 scale-105'
-                : 'bg-gradient-to-tr from-[#0071e3] via-[#7928ca] to-[#00f2fe] shadow-[0_0_20px_rgba(0,242,254,0.7)] border-white/50 scale-105'
-              : 'bg-gradient-to-tr from-[#ff007f] via-[#7928ca] via-[#0071e3] to-[#00f2fe] hover:scale-110 active:scale-95 shadow-[0_10px_35px_rgba(0,113,227,0.5)] border-white/30'
-          }`}
-          title={
-            locale === 'ar'
-              ? 'المساعد الصوتي Siri AI (اسحب للتحريك، نقرة للتحدث، نقرتان للفتح)'
-              : 'Siri AI Voice Assistant (Drag to move, click to talk in background, double click to open)'
-          }
-        >
-          {isSessionActive ? (
-            status === 'speaking' ? (
-              <Volume2 className="w-6 h-6 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)] animate-pulse" />
-            ) : micActive ? (
-              nearVoiceDetected ? (
-                <UserCheck className="w-6 h-6 text-emerald-200 drop-shadow-[0_0_8px_rgba(52,211,153,0.9)]" />
-              ) : (
-                <Mic className="w-6 h-6 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)] animate-pulse" />
-              )
-            ) : (
-              <Sparkles className="w-6 h-6 text-white" />
-            )
-          ) : (
-            <Sparkles className="w-6 h-6 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.8)]" />
+          {/* Expanding ripples while Spero speaks */}
+          {phase === 'speaking' && (
+            <>
+              <span className="absolute inset-0 rounded-full border-2 border-fuchsia-300/60 spero-ripple pointer-events-none" />
+              <span className="absolute inset-0 rounded-full border-2 border-cyan-300/60 spero-ripple pointer-events-none" style={{ animationDelay: '0.9s' }} />
+            </>
           )}
 
-          {/* Drag Handle Indicator Pill */}
-          <div className="absolute -top-1.5 left-1/2 -translate-x-1/2 bg-black/40 backdrop-blur-md px-1 py-0.5 rounded-full border border-white/20 opacity-0 group-hover:opacity-100 transition-opacity">
-            <GripHorizontal className="w-2.5 h-2.5 text-white/80" />
-          </div>
+          {/* Rotating gradient ring */}
+          <div
+            className={`absolute -inset-[3px] rounded-full pointer-events-none ${phase === 'speaking' ? 'spero-spin-fast' : 'spero-spin'}`}
+            style={{
+              background:
+                phase === 'reconnecting'
+                  ? 'conic-gradient(from 0deg, #f59e0b, #fde68a, #f59e0b, #b45309, #f59e0b)'
+                  : 'conic-gradient(from 0deg, #00f2fe, #0071e3, #7928ca, #ff007f, #00f2fe)',
+              WebkitMask: 'radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px))',
+              mask: 'radial-gradient(farthest-side, transparent calc(100% - 3px), #000 calc(100% - 2px))',
+              opacity: phase === 'idle' ? 0.75 : 1,
+            }}
+          />
 
-          {/* Quick Action Overlay Buttons on Hover when Session Active */}
-          {isSessionActive && isHovered && !isDragging && (
-            <div
-              className="absolute -top-3 -right-2 flex items-center gap-1 z-20"
-              onClick={(e) => e.stopPropagation()}
-            >
+          {/* Glass orb */}
+          <div
+            className={`absolute inset-0 rounded-full flex items-center justify-center text-white overflow-hidden transition-transform duration-200 ${
+              isDragging ? 'scale-95' : 'active:scale-95'
+            }`}
+            style={{
+              background:
+                phase === 'reconnecting'
+                  ? 'radial-gradient(circle at 30% 25%, #fcd34d 0%, #d97706 55%, #78350f 100%)'
+                  : phase === 'speaking'
+                  ? 'radial-gradient(circle at 30% 25%, #ff7ac2 0%, #7928ca 55%, #1e1b4b 100%)'
+                  : 'radial-gradient(circle at 30% 25%, #7dd3fc 0%, #0071e3 52%, #1e1b4b 100%)',
+              boxShadow: `0 10px 30px -6px ${glow.split(', rgba')[0]}, inset 0 1px 2px rgba(255,255,255,0.55), inset 0 -8px 14px rgba(0,0,0,0.25)`,
+            }}
+          >
+            <span className="absolute top-1 left-2 right-2 h-4 rounded-full bg-gradient-to-b from-white/45 to-transparent pointer-events-none" />
+
+            {phase === 'connecting' || phase === 'reconnecting' ? (
+              <span className="w-6 h-6 rounded-full border-[3px] border-white/30 border-t-white animate-spin" />
+            ) : phase === 'speaking' ? (
+              <span className="flex items-end gap-[3px] h-6" aria-hidden="true">
+                {[0, 1, 2, 3, 4].map((i) => (
+                  <span key={i} className="w-[3px] rounded-full bg-white spero-eq" style={{ animationDelay: `${i * 0.12}s` }} />
+                ))}
+              </span>
+            ) : phase === 'listening' ? (
+              <Mic
+                className="w-6 h-6 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]"
+                style={{ transform: `scale(${1 + level * 0.25})`, transition: 'transform 100ms' }}
+              />
+            ) : (
+              <Sparkles className="w-6 h-6 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.85)]" />
+            )}
+          </div>
+        </div>
+
+        {/* Status chip with always-visible controls (touch friendly; no hover needed) */}
+        <div
+          className={`absolute ${captionOnLeft ? 'right-0' : 'left-0'} top-[72px] flex items-center gap-1 rounded-full bg-[#0e0f14]/92 backdrop-blur-xl text-white pl-3 pr-1 py-1 border border-white/15 shadow-lg whitespace-nowrap`}
+          onPointerDown={(e) => e.stopPropagation()}
+          onPointerUp={(e) => e.stopPropagation()}
+        >
+          <span
+            className={`w-1.5 h-1.5 rounded-full shrink-0 ${
+              phase === 'idle' ? 'bg-sky-300' : phase === 'reconnecting' ? 'bg-amber-400 animate-pulse' : phase === 'speaking' ? 'bg-fuchsia-400 animate-pulse' : 'bg-cyan-300 animate-pulse'
+            }`}
+          />
+          <span className="text-[11px] font-semibold px-1.5">{label}</span>
+          {controlsVisible && (
+            <>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  setIsWindowOpen(true);
-                }}
-                className="w-5 h-5 rounded-full bg-cyan-500 hover:bg-cyan-400 text-white flex items-center justify-center shadow-md transition-transform hover:scale-110"
-                title={locale === 'ar' ? 'فتح النافذة' : 'Expand window'}
+                onClick={() => setIsWindowOpen(true)}
+                className="w-7 h-7 rounded-full bg-white/10 hover:bg-white/20 flex items-center justify-center transition-colors"
+                aria-label={ar ? 'فتح النافذة' : 'Open window'}
+                title={ar ? 'فتح النافذة' : 'Open window'}
               >
-                <Maximize2 className="w-2.5 h-2.5" />
+                <Maximize2 className="w-3.5 h-3.5" />
               </button>
               <button
                 type="button"
-                onClick={(e) => {
-                  e.stopPropagation();
-                  terminateSession();
-                }}
-                className="w-5 h-5 rounded-full bg-red-500 hover:bg-red-400 text-white flex items-center justify-center shadow-md transition-transform hover:scale-110"
-                title={locale === 'ar' ? 'إيقاف الصوت' : 'Stop voice'}
+                onClick={terminateSession}
+                className="w-7 h-7 rounded-full bg-rose-500/90 hover:bg-rose-500 flex items-center justify-center transition-colors"
+                aria-label={ar ? 'إيقاف الصوت' : 'Stop voice'}
+                title={ar ? 'إيقاف الصوت' : 'Stop voice'}
               >
-                <Square className="w-2.5 h-2.5 fill-current" />
+                <Square className="w-3 h-3 fill-current" />
               </button>
-            </div>
+            </>
           )}
         </div>
+
+        {/* Live caption: what Spero is saying (or what you said), placed on the roomier side */}
+        {caption && (
+          <div
+            className={`absolute top-1 ${captionOnLeft ? 'right-[76px]' : 'left-[76px]'} w-[min(280px,60vw)] bg-[#0e0f14]/92 backdrop-blur-xl text-white px-3.5 py-2.5 rounded-2xl border border-white/15 shadow-xl pointer-events-none`}
+            dir={ar ? 'rtl' : 'ltr'}
+          >
+            <p className="line-clamp-3 leading-relaxed text-[12px] text-white/95">{caption}</p>
+          </div>
+        )}
+
+        {reconnectNote && (
+          <div
+            className={`absolute top-[110px] ${captionOnLeft ? 'right-0' : 'left-0'} w-[min(260px,70vw)] text-center text-[11px] text-amber-100 bg-amber-500/20 border border-amber-400/40 rounded-xl px-2.5 py-1.5 backdrop-blur-xl`}
+            role="status"
+          >
+            {reconnectNote}
+          </div>
+        )}
       </div>
     );
   };
