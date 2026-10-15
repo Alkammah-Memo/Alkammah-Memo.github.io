@@ -159,11 +159,11 @@ export default function App() {
             })
           : '';
         return lang === 'ar'
-          ? `صباح الخير بشمهندس محمد. إزاي أقدر أساعدك النهارده؟ بفكرك إن عندك اجتماع "${nextM.title}" ${timeStr ? `الساعة ${timeStr}` : ''}. تحب أجهزلك ملفات الاجتماع أو أراجع معاك نقاط النقاش؟`
+          ? `مرحباً المهندس محمد، أنا في خدمتك. نودّ التذكير بوجود اجتماع "${nextM.title}" ${timeStr ? `في تمام الساعة ${timeStr}` : ''}. هل ترغب في أن أُعدّ ملخصاً للاجتماع أو أراجع بنود جدول الأعمال؟`
           : `Good morning, Eng. Mohamed. How can I assist you today? Just reminding you that you have an upcoming meeting "${nextM.title}" ${timeStr ? `at ${timeStr}` : ''}. Would you like me to prepare briefing notes or review agenda items?`;
       }
       return lang === 'ar'
-        ? 'صباح الخير بشمهندس محمد. إزاي أقدر أساعدك النهارده؟ مفيش أي اجتماعات مسجلة في جدولك للفترة القادمة، تحب أساعدك في مراجعة المهام المعلقة أو التخطيط لمهام جديدة؟'
+        ? 'مرحباً المهندس محمد، أنا في خدمتك. لا توجد اجتماعات مسجلة في جدولك للفترة القادمة. هل ترغب في مراجعة المهام المعلقة أو التخطيط لمهام جديدة؟'
         : 'Good morning, Eng. Mohamed. How can I assist you today? You have no upcoming meetings scheduled right now. Would you like help reviewing pending tasks or planning new work?';
     },
     []
@@ -1000,7 +1000,7 @@ export default function App() {
       const botMsg: AssistantMessage = {
         id: newId('msg'),
         role: 'assistant',
-        content: data.content || (toolInvocations.length > 0 ? 'نفذت لحضرتك الأمر بنجاح يا قماح.' : ''),
+        content: data.content || (toolInvocations.length > 0 ? 'تم تنفيذ الأمر بنجاح، المهندس محمد.' : ''),
         toolInvocations,
         timestamp: new Date().toISOString(),
       };
@@ -1037,7 +1037,7 @@ export default function App() {
             ? 'لازم تضيف مفتاح Gemini واحد على الأقل من صفحة الإعدادات عشان أقدر أرد عليك.'
             : 'Please add at least one Gemini API key in Settings so I can respond.'
           : locale === 'ar'
-          ? 'عذراً يا مشمهندس، كل مفاتيح Gemini مشغولة أو وصلت للحد حالياً. النظام هيفضل يحاول، جرّب تاني بعد لحظات.'
+          ? 'نعتذر، جميع مفاتيح Gemini مشغولة أو بلغت حدّها حالياً. يواصل النظام المحاولة تلقائياً، يُرجى إعادة المحاولة بعد لحظات.'
           : 'Sorry Eng. Mohamed, all Gemini keys are busy or rate-limited right now. The system keeps retrying; please try again in a moment.',
         timestamp: new Date().toISOString(),
       };
@@ -1428,6 +1428,7 @@ export default function App() {
         meetings={meetings}
         tasks={tasks}
         onExecuteToolAction={handleExecuteToolAction}
+        hideBubble={currentTab === 'assistant'}
         onClose={() => setIsLiveVoiceModalOpen(false)}
       />
     </AppShell>
