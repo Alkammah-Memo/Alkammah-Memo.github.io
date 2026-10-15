@@ -194,6 +194,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               type="text"
               required
               value={title}
+              autoFocus={!meeting}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={locale === 'ar' ? 'عنوان الاجتماع أو الجلسة الاستراتيجية...' : 'Meeting title or executive session...'}
               className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-sm focus:outline-none focus:border-[#0071e3] font-medium"

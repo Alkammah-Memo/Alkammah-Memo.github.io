@@ -4,6 +4,7 @@ import { Locale, translations } from '../../lib/translations';
 import { formatCairoDateDisplay, getCairoDateString, cairoDateOf, cairoTimeOf } from '../../lib/cairoTime';
 import { buildIcs } from '../../lib/exporters';
 import { useCairoClock } from '../../lib/useCairoClock';
+import { TimeGrid } from './TimeGrid';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -38,7 +39,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
   const t = translations[locale];
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const ar = locale === 'ar';
-  const { today: todayCairo } = useCairoClock();
+  const { today: todayCairo, time: nowCairoTime } = useCairoClock();
   const cairoTodayAsLocalDate = () => {
     const [y, m, d] = getCairoDateString().split('-').map(Number);
     return new Date(y, m - 1, d);
@@ -345,147 +346,52 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
         </div>
       )}
 
-      {/* Week View */}
+      {/* Week View: time grid, tap an empty slot to add a meeting at that date and time */}
       {viewMode === 'week' && (
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
-          <div className="grid grid-cols-7 border-b border-stone-200 bg-stone-50/80 text-center text-xs font-bold text-stone-700 py-3">
-            {weekDays.map((d, idx) => {
-              const dateStr = formatYYYYMMDD(d);
-              const isToday = dateStr === todayCairo;
-              return (
-                <div key={dateStr} className={`px-1 ${isToday ? 'text-[#0071e3]' : ''}`}>
-                  <div className="uppercase text-[11px] font-mono text-stone-500">
-                    {fmtYmd(d, { weekday: 'short' })}
-                  </div>
-                  <div className={`text-sm font-bold mt-0.5 ${isToday ? 'bg-[#0071e3] text-white w-7 h-7 rounded-full flex items-center justify-center mx-auto' : ''}`}>
-                    {d.getDate()}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
-
-          <div className="grid grid-cols-7 divide-x divide-stone-200 min-h-[500px]">
-            {weekDays.map((d) => {
-              const dateStr = formatYYYYMMDD(d);
-              const dayMeetings = meetingsOn(dateStr);
-
-              return (
-                <div
-                  key={dateStr}
-                  className="p-2 space-y-2 hover:bg-slate-50/50 transition-colors flex flex-col justify-between min-h-[450px]"
-                >
-                  <div className="space-y-1.5">
-                    <div className="flex items-center justify-between pb-1 border-b border-stone-100">
-                      <span className="text-[10px] font-mono text-stone-400 uppercase">
-                        {dayMeetings.length} {ar ? 'اجتماع' : dayMeetings.length === 1 ? 'meeting' : 'meetings'}
-                      </span>
-                      <button
-                        onClick={() => onOpenMeetingModal(null, dateStr)}
-                        className="p-1 bg-stone-100 hover:bg-slate-900 hover:text-white rounded text-[10px] font-bold flex items-center gap-1 transition-colors"
-                        title={ar ? 'إضافة اجتماع' : 'Add meeting'}
-                      >
-                        <Plus className="w-3 h-3" />
-                      </button>
-                    </div>
-
-                    {dayMeetings.map((m) => (
-                      <div
-                        key={m.id}
-                        onClick={() => onOpenMeetingModal(m)}
-                        className="bg-blue-50 hover:bg-blue-100 border border-blue-200 p-2 rounded-xl cursor-pointer text-xs transition-all shadow-2xs"
-                      >
-                        <div className="font-mono text-[10px] font-bold text-blue-700">
-                          {cairoTimeOf(m.start)} - {cairoTimeOf(m.end)}
-                        </div>
-                        <div className="font-bold text-stone-900 mt-0.5 line-clamp-2">{m.title}</div>
-                        {m.location && (
-                          <div className="text-[10px] text-stone-500 mt-1 truncate">{m.location}</div>
-                        )}
-                      </div>
-                    ))}
-                  </div>
-
-                  <button
-                    onClick={() => onOpenMeetingModal(null, dateStr)}
-                    className="w-full py-1.5 border border-dashed border-stone-300 hover:border-[#0071e3] hover:text-[#0071e3] rounded-xl text-[11px] font-medium text-stone-500 transition-colors flex items-center justify-center gap-1"
-                  >
-                    <Plus className="w-3 h-3" />
-                    <span>{ar ? 'إضافة اجتماع' : 'Add Meeting'}</span>
-                  </button>
-                </div>
-              );
-            })}
-          </div>
-        </div>
+        <TimeGrid
+          days={weekDays.map((d) => {
+            const dateStr = formatYYYYMMDD(d);
+            return {
+              dateStr,
+              weekday: fmtYmd(d, { weekday: 'short' }),
+              dayNumber: String(d.getDate()),
+              isToday: dateStr === todayCairo,
+            };
+          })}
+          meetings={meetings}
+          ar={ar}
+          nowTime={nowCairoTime}
+          onCreateAt={(dateStr, time) => onOpenMeetingModal(null, dateStr, time)}
+          onOpenMeeting={(m) => onOpenMeetingModal(m)}
+        />
       )}
 
-      {/* Day View */}
+      {/* Day View: same grid, one column */}
       {viewMode === 'day' && (
-        <div className="bg-white rounded-2xl border border-stone-200 p-6 shadow-xs space-y-4">
-          <div className="flex items-center justify-between pb-4 border-b border-stone-200">
+        <div className="space-y-3">
+          <div className="flex items-center justify-between">
             <div>
               <span className="text-xs font-mono text-stone-500 uppercase">{ar ? 'الجدول الزمني' : 'TIMELINE VIEW'}</span>
               <h3 className="text-lg font-bold text-stone-900">
                 {fmtYmd(currentDate, { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}
               </h3>
             </div>
-            <button
-              onClick={() => onOpenMeetingModal(null, formatYYYYMMDD(currentDate))}
-              className="px-4 py-2 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold flex items-center gap-1.5 shadow-xs"
-            >
-              <Plus className="w-4 h-4" />
-              <span>{t.addMeeting}</span>
-            </button>
           </div>
-
-          {/* Timeline hours */}
-          <div className="space-y-3 divide-y divide-stone-100">
-            {hours.map((hour) => {
-              const hourStr = String(hour).padStart(2, '0');
-              const dateStr = dayStr;
-              const hourMeetings = meetingsOn(dateStr).filter((m) => Number(cairoTimeOf(m.start).slice(0, 2)) === hour);
-
-              return (
-                <div key={hour} className="pt-3 flex items-start gap-4 group">
-                  <div className="w-16 shrink-0 font-mono text-xs font-semibold text-stone-500 pt-1">
-                    {hourStr}:00
-                  </div>
-
-                  <div className="flex-1 min-h-[48px] bg-stone-50/50 group-hover:bg-amber-50/30 rounded-xl p-2 border border-dashed border-stone-200 transition-colors flex items-center flex-wrap gap-2">
-                    {hourMeetings.map((m) => (
-                      <div
-                        key={m.id}
-                        onClick={() => onOpenMeetingModal(m)}
-                        className="bg-white border border-blue-200 p-2.5 rounded-xl shadow-xs hover:border-blue-400 cursor-pointer text-xs flex items-center gap-3 transition-all max-w-md"
-                      >
-                        <div className="w-2 h-8 rounded-full bg-blue-600 shrink-0" />
-                        <div>
-                          <div className="font-bold text-stone-900">{m.title}</div>
-                          <div className="text-[11px] font-mono text-stone-500">
-                            {cairoTimeOf(m.start)} - {cairoTimeOf(m.end)}
-                            {m.location ? ` · ${m.location}` : ''}
-                          </div>
-                        </div>
-                      </div>
-                    ))}
-
-                    {hourMeetings.length === 0 && (
-                      <button
-                        onClick={() => {
-                          onOpenMeetingModal(null, dateStr, `${hourStr}:00`);
-                        }}
-                        className="opacity-0 group-hover:opacity-100 text-xs text-stone-400 hover:text-stone-800 font-medium px-3 py-1 rounded-lg border border-stone-300 bg-white shadow-2xs transition-all flex items-center gap-1"
-                      >
-                        <Plus className="w-3.5 h-3.5" />
-                        <span>{ar ? `جدولة عند ${hourStr}:00` : `Schedule at ${hourStr}:00`}</span>
-                      </button>
-                    )}
-                  </div>
-                </div>
-              );
-            })}
-          </div>
+          <TimeGrid
+            days={[
+              {
+                dateStr: dayStr,
+                weekday: fmtYmd(currentDate, { weekday: 'long' }),
+                dayNumber: String(currentDate.getDate()),
+                isToday: dayStr === todayCairo,
+              },
+            ]}
+            meetings={meetings}
+            ar={ar}
+            nowTime={nowCairoTime}
+            onCreateAt={(dateStr, time) => onOpenMeetingModal(null, dateStr, time)}
+            onOpenMeeting={(m) => onOpenMeetingModal(m)}
+          />
         </div>
       )}
 
