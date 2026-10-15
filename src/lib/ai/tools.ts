@@ -136,9 +136,66 @@ export const EXECUTIVE_TOOLS: any = [
           required: ['newStart'],
         },
       },
+      {
+        name: 'navigateTo',
+        description: 'Open a tab/page of the app. tab: today (daily briefing), notebook (notes & ink), planner (tasks & calendar), tasks, calendar, followup, directory, settings.',
+        parameters: { type: Type.OBJECT, properties: { tab: { type: Type.STRING, enum: ['today', 'notebook', 'planner', 'tasks', 'calendar', 'followup', 'directory', 'settings'] } }, required: ['tab'] },
+      },
+      {
+        name: 'openItem',
+        description: 'Open the edit window of an existing task or meeting on screen.',
+        parameters: { type: Type.OBJECT, properties: { kind: { type: Type.STRING, enum: ['task', 'meeting'] }, id: { type: Type.STRING }, keyword: { type: Type.STRING } }, required: ['kind'] },
+      },
+      {
+        name: 'closeWindows',
+        description: 'Close any open task or meeting window or dialog (the Spero voice window is closed by closeAssistant).',
+        parameters: { type: Type.OBJECT, properties: {} },
+      },
+      {
+        name: 'closeAssistant',
+        description: 'Close the Spero voice window when the user asks to end or close the conversation.',
+        parameters: { type: Type.OBJECT, properties: {} },
+      },
+      {
+        name: 'listMeetings',
+        description: 'Read meetings from the calendar. Filter by date range (YYYY-MM-DD, Cairo) and/or keyword. Use it whenever asked what is scheduled.',
+        parameters: { type: Type.OBJECT, properties: { fromDate: { type: Type.STRING }, toDate: { type: Type.STRING }, keyword: { type: Type.STRING } } },
+      },
+      {
+        name: 'updateMeeting',
+        description: 'Edit the details of an existing meeting (title, location, attendees, agenda, description, project). Use rescheduleMeeting for time changes.',
+        parameters: {
+          type: Type.OBJECT,
+          properties: {
+            meetingId: { type: Type.STRING },
+            meetingTitleKeyword: { type: Type.STRING },
+            title: { type: Type.STRING },
+            location: { type: Type.STRING },
+            attendees: { type: Type.ARRAY, items: { type: Type.STRING } },
+            agenda: { type: Type.STRING },
+            description: { type: Type.STRING },
+            project: { type: Type.STRING },
+          },
+        },
+      },
+      {
+        name: 'getMeetingBriefing',
+        description: 'Get a meeting with its attendees, agenda and the open tasks related to its project/title, so you can give preparation tips and talking points.',
+        parameters: { type: Type.OBJECT, properties: { meetingId: { type: Type.STRING }, meetingTitleKeyword: { type: Type.STRING } } },
+      },
+      {
+        name: 'archiveTask',
+        description: 'Archive (hide without deleting) a task, or restore it with archived=false.',
+        parameters: { type: Type.OBJECT, properties: { taskId: { type: Type.STRING }, taskTitleKeyword: { type: Type.STRING }, archived: { type: Type.BOOLEAN } } },
+      },
     ],
   },
+  { googleSearch: {} },
 ];
+
+/** Function-only declarations for REST calls (chat / fast voice), where mixing in search is not guaranteed. */
+// eslint-disable-next-line @typescript-eslint/no-explicit-any
+export const EXECUTIVE_FUNCTION_TOOLS: any = [EXECUTIVE_TOOLS[0]];
 
 export function cairoNowLabel(): string {
   return new Date().toLocaleString('ar-EG', { timeZone: 'Africa/Cairo' });
@@ -163,7 +220,10 @@ export const SPERO_TOOL_RULES = `قواعد التنفيذ (يجب استدعا�
 4. عند طلب اجتماع: لا تستدعي createMeeting قبل أن تعرفي (أ) مع مَن الاجتماع و(ب) موضوعه، إضافة إلى التاريخ والوقت؛ اسألي عن الناقص منها بسؤال واحد موجز، ثم اكتبي العنوان بصيغة "اجتماع مع [الاسم] - [الموضوع]" وضعي الأسماء في attendees. إضافة اجتماع أو موعد: createMeeting (التوقيت بتوقيت القاهرة وبصيغة YYYY-MM-DDTHH:mm:00).
 5. إلغاء اجتماع: deleteMeeting.
 6. تعديل موعد: rescheduleMeeting على الاجتماع نفسه دون تكرار.
-7. بعد عودة نتيجة الأداة، أكّدي التنفيذ بجملة رسمية موجزة تتضمن العنوان والموعد. إذا لم تُرجع الأداة نتيجة مطابقة، فأبلغيه بوضوح أنه لم يتم العثور على عنصر بهذا الاسم ولم يُنفَّذ أي إجراء.
+7. أنتِ مساعدة شخصية بصلاحيات كاملة على النظام: تقرئين وتضيفين وتعدّلين وتحذفين وتؤرشفين المهام والاجتماعات، وتنتقلين بين الصفحات (navigateTo) وتفتحين العناصر (openItem) وتغلقين النوافذ (closeWindows/closeAssistant). نفّذي أي طلب يخص النظام بالأداة المناسبة دون اعتذار.
+7أ. عند السؤال عن اجتماع أو التحضير له: استدعي getMeetingBriefing ثم قدّمي نصائح عملية موجزة (أهم نقاط النقاش، المهام المفتوحة المرتبطة، أسئلة يجب طرحها، قرارات مطلوبة).
+7ب. لأي سؤال عام أو معلومة خارجية أو أخبار أو أسعار: ابحثي في الإنترنت (البحث متاح لكِ) وأجيبي بإيجاز مع ذكر أن المعلومة من البحث.
+7ج. بعد عودة نتيجة الأداة، أكّدي التنفيذ بجملة رسمية موجزة تتضمن العنوان والموعد. إذا لم تُرجع الأداة نتيجة مطابقة، فأبلغيه بوضوح أنه لم يتم العثور على عنصر بهذا الاسم ولم يُنفَّذ أي إجراء.
 8. قبل حذف أي عنصر، تأكدي من أن الطلب صريح وأن الاسم المطابق واحد؛ وإن تعدد التطابق فاطلبي التحديد.`;
 
 export function chatSystemInstruction(): string {

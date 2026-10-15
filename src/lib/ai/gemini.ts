@@ -7,7 +7,7 @@ import type { GenerateContentParameters, GenerateContentResponse } from '@google
 import { keyManager, runWithFailover, classifyError, DEFAULT_MODELS } from './keyManager';
 import type { ModelSettings } from './keyManager';
 import {
-  EXECUTIVE_TOOLS,
+  EXECUTIVE_FUNCTION_TOOLS,
   WORKSTREAMS,
   chatSystemInstruction,
   SPERO_PERSONA,
@@ -70,7 +70,7 @@ export async function chatWithAssistant(
   const contextSummary = context ? `\n[Current Workspace Summary]: ${JSON.stringify(context)}` : '';
   const res = await generate([m.chat, ...m.chatFallbacks], {
     contents: `${message}${contextSummary}`,
-    config: { systemInstruction: chatSystemInstruction(), tools: EXECUTIVE_TOOLS },
+    config: { systemInstruction: chatSystemInstruction(), tools: EXECUTIVE_FUNCTION_TOOLS },
   });
   return { content: res.text || '', functionCalls: extractCalls(res) };
 }
@@ -111,7 +111,7 @@ ${context ? `سياق النظام والمواعيد الحالية: ${JSON.str
 
   const res = await generate([m.chat, ...m.chatFallbacks], {
     contents: prompt,
-    config: { temperature: 0.3, maxOutputTokens: 400, tools: EXECUTIVE_TOOLS },
+    config: { temperature: 0.3, maxOutputTokens: 400, tools: EXECUTIVE_FUNCTION_TOOLS },
   });
 
   const functionCalls = extractCalls(res);
