@@ -1057,6 +1057,11 @@ export default function App() {
       setTasks(tasksRef.current);
       await localDB.put('tasks', updated);
       syncTaskToCloud(updated).catch(console.warn);
+      triggerUndoToast(locale === 'ar' ? `تم تحديث المهمة: "${updated.title}"` : `Task updated: "${updated.title}"`, async () => {
+        setTasks((prev) => prev.map((t) => (t.id === match.id ? match : t)));
+        await localDB.put('tasks', match);
+        syncTaskToCloud(match).catch(console.warn);
+      });
       return { ok: true, updatedTaskId: match.id, title: updated.title, status: updated.status };
     }
 
