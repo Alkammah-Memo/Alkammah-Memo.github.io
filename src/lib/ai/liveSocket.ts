@@ -393,7 +393,7 @@ export class GeminiLiveSocket {
       if (firstTime) {
         const greeting =
           this.opts.greeting ||
-          'المستخدم مشمهندس محمد القماح بدأ للتو جلسة التحدث الصوتي معكِ يا سبيرو. رحبي به بصوتك بالعامية المصرية بجملة قصيرة، واسأليه إزاي تقدري تساعديه. لو في اجتماعات قريبة في سياق النظام اذكريها بدقة، ولو مفيش لا تختلقي أي اجتماع.';
+          'بدأ المهندس محمد القماح للتو جلسة التحدث الصوتي معكِ يا سبيرو. رحّبي به بجملة رسمية موجزة بالعربية الفصحى المبسّطة (مثل: "مساء الخير المهندس محمد، أنا في خدمتك. كيف يمكنني مساعدتك؟")، وإن وُجدت اجتماعات قريبة في سياق النظام فاذكري أقربها بدقة، وإن لم توجد فلا تختلقي أي اجتماع.';
         act.session.sendClientContent({ turns: [{ role: 'user', parts: [{ text: greeting }] }], turnComplete: true });
       } else if (this.history.length > 0 && !(this.resumptionHandle && this.resumptionHandle.slotId === act.slot.id)) {
         // New key => new session: replay the recent turns so the conversation continues naturally.

@@ -118,10 +118,10 @@ ${context ? `سياق النظام والمواعيد الحالية: ${JSON.str
   const text =
     res.text ||
     (functionCalls.length > 0
-      ? 'تمام يا قماح، نفذت لحضرتك الطلب وسجلته فوراً.'
+      ? 'تم تنفيذ الطلب وتسجيله، المهندس محمد.'
       : locale === 'ar'
-      ? 'أهلاً يا قماح، معاك ومتابعة كل حاجة تمام.'
-      : 'Understood Eng. Mohamed, processing.');
+      ? 'أهلاً بحضرتك، المهندس محمد. أنا في خدمتك.'
+      : 'Understood, Eng. Mohamed. I am processing your request.');
 
   let audio = '';
   try {
