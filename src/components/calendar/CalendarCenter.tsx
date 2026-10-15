@@ -4,7 +4,7 @@ import { Locale, translations } from '../../lib/translations';
 import { formatCairoDateDisplay, getCairoDateString, cairoDateOf, cairoTimeOf } from '../../lib/cairoTime';
 import { buildIcs } from '../../lib/exporters';
 import { useCairoClock } from '../../lib/useCairoClock';
-import { TimeGrid } from './TimeGrid';
+import { TimeGrid, WEEKEND_HATCH } from './TimeGrid';
 import {
   Calendar as CalendarIcon,
   Clock,
@@ -257,7 +257,11 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
           <div className="grid grid-cols-7 divide-x divide-y divide-stone-100 min-h-[550px]">
             {/* Blank cells before 1st of month */}
             {Array.from({ length: firstDayIndex }).map((_, i) => (
-              <div key={`blank-${i}`} className="bg-stone-50/30 p-2 min-h-[100px]" />
+              <div
+                key={`blank-${i}`}
+                className="bg-stone-50/30 p-2 min-h-[100px]"
+                style={i % 7 === 5 || i % 7 === 6 ? { backgroundImage: WEEKEND_HATCH } : undefined}
+              />
             ))}
 
             {/* Days in Month */}
@@ -274,6 +278,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                   key={`day-${dayNum}`}
                   onClick={() => onOpenMeetingModal(null, cellDateStr)}
                   className="p-2 min-h-[100px] hover:bg-blue-50/20 transition-colors flex flex-col justify-between group cursor-pointer relative"
+                  style={(firstDayIndex + i) % 7 >= 5 ? { backgroundImage: WEEKEND_HATCH } : undefined}
                 >
                   <div className="flex items-center justify-between text-xs font-mono">
                     <span

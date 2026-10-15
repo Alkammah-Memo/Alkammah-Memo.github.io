@@ -1,6 +1,11 @@
 import React, { useEffect, useMemo, useRef } from 'react';
 import type { Meeting } from '../../types';
 import { cairoDateOf, cairoTimeOf } from '../../lib/cairoTime';
+import { isWeekend } from '../../lib/planner';
+
+/** Egyptian weekend (Friday + Saturday): subtle diagonal hatch, readable in both text directions */
+export const WEEKEND_HATCH =
+  'repeating-linear-gradient(135deg, rgba(120,113,108,0.10) 0, rgba(120,113,108,0.10) 1px, transparent 1px, transparent 7px)';
 
 /**
  * Time grid for the Week and Day calendar views (Cairo time).
@@ -134,7 +139,11 @@ export const TimeGrid: React.FC<TimeGridProps> = ({ days, meetings, ar, nowTime,
       <div className="grid border-b border-stone-200 bg-stone-50/80 text-center text-xs font-bold text-stone-700 py-2.5" style={cols}>
         <div />
         {days.map((d) => (
-          <div key={d.dateStr} className={`px-1 ${d.isToday ? 'text-[#0071e3]' : ''}`}>
+          <div
+            key={d.dateStr}
+            className={`px-1 ${d.isToday ? 'text-[#0071e3]' : ''}`}
+            style={isWeekend(d.dateStr) ? { backgroundImage: WEEKEND_HATCH } : undefined}
+          >
             <div className="uppercase text-[11px] font-mono text-stone-500">{d.weekday}</div>
             <div
               className={`text-sm font-bold mt-0.5 ${
@@ -176,10 +185,17 @@ export const TimeGrid: React.FC<TimeGridProps> = ({ days, meetings, ar, nowTime,
               className={`relative border-s border-stone-200 cursor-pointer select-none hover:bg-sky-50/40 active:bg-sky-100/50 transition-colors ${
                 d.isToday ? 'bg-sky-50/30' : ''
               }`}
-              style={{
-                backgroundImage: `repeating-linear-gradient(to bottom, #e7e5e4 0, #e7e5e4 1px, transparent 1px, transparent ${ROW_HEIGHT / 2}px)`,
-                backgroundSize: `100% ${ROW_HEIGHT / 2}px`,
-              }}
+              style={
+                isWeekend(d.dateStr)
+                  ? {
+                      backgroundImage: `${WEEKEND_HATCH}, repeating-linear-gradient(to bottom, #e7e5e4 0, #e7e5e4 1px, transparent 1px, transparent ${ROW_HEIGHT / 2}px)`,
+                      backgroundSize: `auto, 100% ${ROW_HEIGHT / 2}px`,
+                    }
+                  : {
+                      backgroundImage: `repeating-linear-gradient(to bottom, #e7e5e4 0, #e7e5e4 1px, transparent 1px, transparent ${ROW_HEIGHT / 2}px)`,
+                      backgroundSize: `100% ${ROW_HEIGHT / 2}px`,
+                    }
+              }
             >
               {d.isToday && (
                 <div className="absolute inset-x-0 z-10 pointer-events-none" style={{ top: nowTop }}>
