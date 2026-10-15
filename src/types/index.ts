@@ -117,6 +117,11 @@ export interface InkStroke {
 }
 
 export type NotebookTemplate =
+  | 'planner_daily' // Sunday-start daily page: timed agenda, main focus, 3 goals, to-do list, notes
+  | 'planner_todo' // workstream to-do list: numbered rows with due date and owner columns
+  | 'planner_monthly' // month grid (Sunday start) with a notes column
+  | 'planner_mom' // minutes of meeting: Task | Owner | Due Date on grid paper
+  | 'planner_archive' // imported page (e.g. from a PDF planner) shown as the background
   | '2026_planner_sunday'
   | 'commercial_new_lands'
   | 'projects_operations'
@@ -167,6 +172,12 @@ export interface NotebookPage {
   orientation?: 'landscape' | 'portrait';
   paperStyle?: PaperStyle;
   paperColor?: PaperColor;
+  /** Imported page image (JPEG data URL) drawn behind the ink, like a GoodNotes PDF page */
+  backgroundImage?: string;
+  /** Logical canvas size; used for imported pages so their aspect ratio is preserved */
+  canvasSize?: { width: number; height: number };
+  /** 'YYYY-MM-DD' for daily pages, 'YYYY-MM' for monthly pages (lets the app jump to a date) */
+  plannerDate?: string;
   transcription?: string;
   createdAt: string;
   updatedAt: string;
@@ -237,6 +248,8 @@ export interface ExtractedCandidate {
   suggestedAttendees?: string[];
   suggestedLocation?: string;
   suggestedNextAction?: string;
+  /** read from the ink: a struck-through line means Done, "ongoing" means In Progress */
+  suggestedStatus?: 'Done' | 'In Progress';
   confidenceScore: number;
   uncertainFields: string[];
   status: 'pending_review' | 'accepted' | 'rejected';
@@ -279,4 +292,14 @@ export interface VoiceCommandRecord {
   executedTools?: string[];
   status: 'executed' | 'failed' | 'pending';
   responseSnippet?: string;
+}
+
+/** One page produced by the planner PDF importer, before it is turned into a NotebookPage. */
+export interface PlannerImportPage {
+  title: string;
+  plannerDate?: string;
+  template: NotebookTemplate;
+  backgroundImage: string;
+  canvasSize: { width: number; height: number };
+  transcription?: string;
 }
