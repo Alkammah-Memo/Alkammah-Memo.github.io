@@ -141,24 +141,27 @@ ${context ? `سياق النظام والمواعيد الحالية: ${JSON.str
   return { text, audio, functionCalls };
 }
 
-const INK_PROMPT = `You are an expert bilingual executive document transcriber and assistant specializing in executive planners, meetings, industrial projects, land concessions, and infrastructure development.
-Examine this handwritten or typed note snippet carefully. It may contain Arabic handwriting, English handwriting, or mixed Arabic/English.
-Key reference contexts include:
-- Ras El Hekma, SCZone Qantara land, New Capital, Minya & Fayoum, Golden Triangle / Xingfa, Libya MOU / visit, SUMEC agreement, Automotive City, Port Said land, Djibouti / AGL, Safaga, Tanzania.
-- Handwritten aliases and initials: SS, YA, MM, MK, AT, HA, MA, IS, Eng. Ahmed Elsewedy.
-- Numbered rows, arrows pointing to next actions, terms like "ongoing" or "on hold", and owner initials at the right.
+const INK_PROMPT = `You are an expert bilingual executive document transcriber for a CEO of an industrial / land-development group in Egypt. The page is a photo or export of his handwritten digital planner (Egyptian Arabic and English mixed on the same line, written in blue ink, with orange ink for status marks).
+
+HOW HE WRITES (read the page the way he writes it):
+- Page types: DAILY page (a time column on the left where he writes clock times like 11:00 or 4:00 beside an entry, a MAIN FOCUS box, three numbered GOALS boxes, a TO-DO LIST, and a notes area), MONTHLY calendar (short notes inside day cells; a long arrow across several days means a multi-day trip or event), TO-DO LIST pages by workstream (numbered rows: topic -> next action, a due date, and owner initials on the right) and MINUTES OF MEETING pages (a Task | owner | Due Date table).
+- One numbered or circled/boxed line is ONE item. "A -> B" or "A <- B" means topic A with next action B (put the topic and action together in the title, keep the action in nextAction).
+- A line STRUCK THROUGH (especially with an orange line) is COMPLETED: set statusHint to "Done". A word written as "ongoing" (often with a green highlight) means "In Progress". An orange arrow means carry-forward / needs follow up (statusHint "Pending" and mention it in nextAction if useful).
+- A colour highlight (yellow or orange) around a date such as "29 sept" or "2 oct" marks the DUE DATE; resolve it to YYYY-MM-DD using the current Cairo date given below (the nearest sensible year).
+- Short capital initials at the end of a row (SS, YA, MM, MK, AT, HA, AZ, MR, IS, MA, M.K., etc.) are the OWNERS: copy them exactly (comma separated when several); never expand initials into invented full names.
+- A clock time next to an entry in the daily agenda belongs to a MEETING or call. Office hours are assumed: 1:00 to 6:00 without AM/PM means PM; 7:00 to 11:59 means AM unless marked.
+- Friday and Saturday are the weekend.
+- Key reference names that may appear: Ras El Hekma, New Capital, Minya & Fayoum, Qantara land (SCZone), Golden Triangle / Xingfa, Nasgoon, Sephora, Libya visit / MOU, SUMEC, Automotive City, Ghorfa deal, Port Said land, Djibouti / AGL, Sofaga, Damietta, ADP, DFS (project charter), Tanzania, OKO plan, 360 concept / sales center, Sadat, OIP, ODP, New Giza, CSEC, CMA / Logistics, OSS, CPC.
 
 CRITICAL DISTINCTION BETWEEN MEETINGS AND TASKS:
-- If the note mentions a meeting, appointment, discussion session, conference, call, interview, or includes a specific clock time (e.g. "Walid meeting CRM 6:00 PM", "meeting tomorrow at 3pm", "اجتماع الساعة العاشرة", "call with X"):
-  -> entryType: "meeting".
-  -> suggestedMeetingDate (YYYY-MM-DD; resolve "today"/"tomorrow"/weekday names against the current Cairo date given below),
-     suggestedStartTime as 24-hour HH:MM (6:00 PM becomes 18:00), suggestedEndTime as 24-hour HH:MM (one hour after start when not written),
-     suggestedAttendees (names/aliases mentioned) and suggestedLocation (only if written).
-- Otherwise, if it is a general to-do, action item, deliverable or milestone without a scheduled time:
-  -> entryType: "task", with suggestedDueDate (YYYY-MM-DD) only if indicated.
+- If the entry mentions a meeting, call, visit, appointment, discussion, signing, or has a specific clock time (e.g. "Walid meeting CRM 6:00 PM", "اجتماع الساعة العاشرة", "4:00 Arabia Group Mtg"):
+  -> entryType: "meeting", suggestedMeetingDate (YYYY-MM-DD; resolve "today"/"tomorrow"/weekday names against the current Cairo date; on a daily page use the date printed at the top of the page), suggestedStartTime as 24-hour HH:MM, suggestedEndTime as 24-hour HH:MM (one hour after start when not written), suggestedAttendees (names/initials mentioned) and suggestedLocation (only if written).
+- Otherwise it is a task/action item -> entryType: "task", with suggestedDueDate only if indicated.
 
-- DO NOT invent facts or expand unverified initials into made-up full names. If something is unclear, list it in uncertainFields.
-- Extract every actionable item or note as a structured candidate.
+RULES:
+- DO NOT invent facts, names or dates. If something is unclear or illegible, list it in uncertainFields and lower confidenceScore.
+- Keep the original language of each item (Arabic stays Arabic). Provide rawTextArabic and/or rawTextEnglish exactly as read.
+- Extract every actionable item or note as its own candidate (do not merge numbered rows). Skip printed template labels (MAIN FOCUS, GOALS, TO-DO LIST, NOTES & IDEAS, WEEK n, etc.).
 
 Return JSON adhering strictly to the schema.`;
 
@@ -182,6 +185,7 @@ const INK_SCHEMA = {
       suggestedAttendees: { type: Type.ARRAY, items: { type: Type.STRING } },
       suggestedLocation: { type: Type.STRING },
       suggestedNextAction: { type: Type.STRING },
+      statusHint: { type: Type.STRING, enum: ['Pending', 'In Progress', 'Done'] },
       confidenceScore: { type: Type.NUMBER },
       uncertainFields: { type: Type.ARRAY, items: { type: Type.STRING } },
     },
@@ -241,6 +245,7 @@ export async function extractInkCandidates(
       suggestedAttendees: Array.isArray(item.suggestedAttendees) ? (item.suggestedAttendees as string[]) : [],
       suggestedLocation: String(item.suggestedLocation || ''),
       suggestedNextAction: String(item.suggestedNextAction || ''),
+      suggestedStatus: item.statusHint === 'Done' ? ('Done' as const) : item.statusHint === 'In Progress' ? ('In Progress' as const) : undefined,
       confidenceScore: typeof item.confidenceScore === 'number' ? item.confidenceScore : 0.7,
       uncertainFields: uncertain,
       status: 'pending_review' as const,
