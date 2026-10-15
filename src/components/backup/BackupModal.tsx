@@ -1,5 +1,6 @@
 import React, { useState, useEffect, useRef } from 'react';
-import { Task, Meeting, NotebookPage, Person, Project } from '../../types';
+import { Task, Meeting, NotebookPage, Person, Project, PlannerImportPage } from '../../types';
+import { PlannerImport } from './PlannerImport';
 import { Locale, translations } from '../../lib/translations';
 import { localDB, BackupError } from '../../lib/indexedDb';
 import type { WorkspaceState } from '../../lib/indexedDb';
@@ -28,6 +29,8 @@ interface BackupModalProps {
   /** Called after a successful restore with the freshly loaded workspace and the mode used. */
   onRestoreCompleted: (state: WorkspaceState, mode: 'replace' | 'merge') => Promise<void> | void;
   onClearAllData?: () => Promise<void>;
+  /** Imports pages produced from a planner PDF (see PlannerImport) */
+  onImportPlannerPages?: (notebookTitle: string, pages: PlannerImportPage[]) => Promise<void>;
 }
 
 type Status = { type: 'ok' | 'err'; text: string } | null;
@@ -57,6 +60,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   onClose,
   onRestoreCompleted,
   onClearAllData,
+  onImportPlannerPages,
 }) => {
   const t = translations[locale];
   const ar = locale === 'ar';
@@ -366,6 +370,8 @@ export const BackupModal: React.FC<BackupModalProps> = ({
             </div>
             <span className="text-[11px] text-[#86868b] font-normal">{ar ? 'المهام + الحبر + الصفحات' : 'Tasks + Ink + Pages'}</span>
           </button>
+
+          {onImportPlannerPages && <PlannerImport locale={locale} onImport={onImportPlannerPages} />}
 
           {/* Restore JSON Backup */}
           <div className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-200 text-xs space-y-2">
