@@ -14,6 +14,21 @@ import {
 import { Locale, translations } from '../../lib/translations';
 import { NotebookCanvas } from './NotebookCanvas';
 import { INITIAL_WORKSTREAMS } from '../../lib/referenceData';
+import { getCairoDateString } from '../../lib/cairoTime';
+import {
+  addDays,
+  addMonths,
+  dayTitle,
+  findPageForDate,
+  isPlannerDay,
+  isPlannerMonth,
+  monthOf,
+  monthTitle,
+  weekdayName,
+  dayOfWeek,
+} from '../../lib/planner';
+import type { PlannerPageRequest } from '../../lib/planner';
+import { PLANNER_CANVAS } from '../../lib/planner';
 import {
   BookOpen,
   FileText,
@@ -41,6 +56,12 @@ import {
   RefreshCw,
   Loader2,
   Wand2,
+  CalendarDays,
+  CalendarRange,
+  ListChecks,
+  NotebookPen,
+  FileText as FileTextIcon,
+  ChevronDown,
 } from 'lucide-react';
 
 interface NotebookViewProps {
@@ -70,6 +91,8 @@ interface NotebookViewProps {
   onAcceptCandidate: (candidate: ExtractedCandidate) => void;
   onOpenTaskModal: (task: Task) => void;
   onNewPage: (notebookId: string) => void;
+  /** Opens (creating on demand) a planner page: daily / monthly / to-do list / minutes of meeting */
+  onOpenPlanner?: (req: PlannerPageRequest) => void | Promise<void>;
   onDeletePage?: (pageId: string) => void;
 }
 
@@ -89,6 +112,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   onAcceptCandidate,
   onOpenTaskModal,
   onNewPage,
+  onOpenPlanner,
   onDeletePage,
 }) => {
   const t = translations[locale];
@@ -126,6 +150,63 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     .sort((a, b) => (a.pageNumber || 0) - (b.pageNumber || 0));
   const extractionSeq = useRef(0);
   const activePage = pages.find((p) => p.id === activePageId) || notebookPages[0] || pages[0];
+
+  // ---------------------------------------------------------------------------------------------
+  // Planner navigation: Today, day and month steppers, and the "+ Page" menu
+  // ---------------------------------------------------------------------------------------------
+  const ar = locale === 'ar';
+  const [navDay, setNavDay] = useState<string>(() => getCairoDateString());
+  const [addMenuOpen, setAddMenuOpen] = useState(false);
+  const [plannerPrompt, setPlannerPrompt] = useState<null | 'todo' | 'mom'>(null);
+  const [promptText, setPromptText] = useState('');
+  const [promptDate, setPromptDate] = useState('');
+  const plannerBusy = useRef(false);
+
+  useEffect(() => {
+    const d = activePage?.plannerDate;
+    if (isPlannerDay(d)) setNavDay(d);
+    else if (isPlannerMonth(d)) setNavDay((prev) => (monthOf(prev) === d ? prev : `${d}-01`));
+  }, [activePage?.plannerDate]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const openPlanner = async (req: PlannerPageRequest) => {
+    if (!onOpenPlanner || plannerBusy.current) return;
+    plannerBusy.current = true;
+    try {
+      await onOpenPlanner(req);
+    } finally {
+      plannerBusy.current = false;
+    }
+  };
+  const goDay = (date: string) => {
+    setNavDay(date);
+    void openPlanner({ kind: 'daily', date });
+  };
+  const goMonth = (month: string) => {
+    const cur = monthOf(navDay);
+    const nextDay = month === cur ? navDay : `${month}-01`;
+    setNavDay(nextDay);
+    void openPlanner({ kind: 'monthly', month });
+  };
+  const todayStr = getCairoDateString();
+  const dayExists = !!findPageForDate(pages, navDay, 'day');
+  const navDayLabel = `${ar ? weekdayName(dayOfWeek(navDay), 'ar') : weekdayName(dayOfWeek(navDay), 'en').slice(0, 3)} · ${dayTitle(navDay, ar ? 'ar' : 'en')}`;
+
+  const submitPrompt = () => {
+    if (plannerPrompt === 'todo') {
+      const title = promptText.trim();
+      if (!title) return;
+      void openPlanner({ kind: 'todo', title });
+    } else if (plannerPrompt === 'mom') {
+      void openPlanner({ kind: 'mom', date: isPlannerDay(promptDate) ? promptDate : todayStr });
+    }
+    setPlannerPrompt(null);
+  };
+
+  const pageOptionLabel = (p: NotebookPage) => {
+    const title = p.title || (ar ? 'صفحة' : 'Page');
+    // imported pages carry their date; daily/monthly/MoM titles already say it
+    return p.template === 'planner_archive' && p.plannerDate && !title.includes(p.plannerDate) ? `${title} · ${p.plannerDate}` : title;
+  };
 
   // Tasks linked to this page
   const linkedTasks = tasks.filter(
@@ -396,43 +477,46 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             ))}
           </select>
 
-          {/* Page Selector */}
-          <div className="flex items-center gap-1 bg-[#f5f5f7] px-2 py-1 rounded-lg border border-[#d2d2d7] text-xs">
+          {/* Page Selector: title + date, with previous/next */}
+          <div className="flex items-center gap-0.5 bg-[#f5f5f7] px-1 rounded-lg border border-[#d2d2d7] text-xs">
             <button
               onClick={() => {
                 const curIdx = notebookPages.findIndex((p) => p.id === activePage?.id);
                 if (curIdx > 0) onSelectPage(notebookPages[curIdx - 1].id);
               }}
-              className="p-1 hover:text-[#0071e3]"
+              className="w-9 h-9 flex items-center justify-center hover:text-[#0071e3]"
               title={locale === 'ar' ? 'الصفحة السابقة' : 'Previous Page'}
+              aria-label={locale === 'ar' ? 'الصفحة السابقة' : 'Previous Page'}
             >
-              <ChevronLeft className={`w-3.5 h-3.5 ${locale === 'ar' ? 'rotate-180' : ''}`} />
+              <ChevronLeft className={`w-4 h-4 ${locale === 'ar' ? 'rotate-180' : ''}`} />
             </button>
-            <span className="text-[#1d1d1f] font-mono">
-              {locale === 'ar' ? 'صفحة' : 'Page'} {Math.max(1, notebookPages.findIndex((p) => p.id === activePage?.id) + 1)} / {notebookPages.length || 1}
-            </span>
+            <select
+              value={activePage?.id || ''}
+              onChange={(e) => onSelectPage(e.target.value)}
+              aria-label={locale === 'ar' ? 'اختيار الصفحة' : 'Choose page'}
+              className="bg-transparent text-xs font-semibold text-[#1d1d1f] h-9 max-w-[200px] truncate focus:outline-none"
+            >
+              {notebookPages.map((p, idx) => (
+                <option key={p.id} value={p.id}>
+                  {idx + 1}. {pageOptionLabel(p)}
+                </option>
+              ))}
+            </select>
             <button
               onClick={() => {
                 const curIdx = notebookPages.findIndex((p) => p.id === activePage?.id);
                 if (curIdx < notebookPages.length - 1) onSelectPage(notebookPages[curIdx + 1].id);
               }}
-              className="p-1 hover:text-[#0071e3]"
+              className="w-9 h-9 flex items-center justify-center hover:text-[#0071e3]"
               title={locale === 'ar' ? 'الصفحة التالية' : 'Next Page'}
+              aria-label={locale === 'ar' ? 'الصفحة التالية' : 'Next Page'}
             >
-              <ChevronRight className={`w-3.5 h-3.5 ${locale === 'ar' ? 'rotate-180' : ''}`} />
+              <ChevronRight className={`w-4 h-4 ${locale === 'ar' ? 'rotate-180' : ''}`} />
             </button>
           </div>
 
-          <button
-            onClick={() => onNewPage(activeNotebook?.id || '')}
-            className="flex items-center gap-1 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-xs text-[#1d1d1f] px-2.5 py-1.5 rounded-lg border border-[#d2d2d7] transition-colors"
-            title={locale === 'ar' ? 'إضافة صفحة لهذه المفكرة' : 'Add Page to this Notebook'}
-          >
-            <Plus className="w-3.5 h-3.5 text-[#0071e3]" />
-            <span className="hidden sm:inline">{t.newNotePage}</span>
-          </button>
-
           {/* Orientation Toggle in sub-header */}
+          {!(activePage?.canvasSize || (activePage?.template && activePage.template.startsWith('planner_'))) && (
           <button
             onClick={() => {
               if (!activePage) return;
@@ -456,6 +540,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               </>
             )}
           </button>
+          )}
 
           {/* Delete Page Button in sub-header */}
           {onDeletePage && activePage && (
@@ -527,6 +612,164 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         </div>
       </div>
 
+      {/* Planner bar: Today, day/month steppers and the "+ Page" menu (opens or creates pages on demand) */}
+      {onOpenPlanner && (
+        <div className="relative z-40 bg-white/90 backdrop-blur-xl px-4 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-[#d2d2d7] shrink-0">
+          <button
+            type="button"
+            onClick={() => goDay(todayStr)}
+            className="min-h-11 px-4 inline-flex items-center gap-2 rounded-xl bg-[#0071e3] hover:bg-[#0062c4] active:scale-[0.98] text-white text-sm font-bold shadow-xs transition-all"
+            title={ar ? 'صفحة اليوم' : "Open today's page"}
+          >
+            <CalendarDays className="w-4 h-4" />
+            {ar ? 'اليوم' : 'Today'}
+          </button>
+
+          {/* Day stepper */}
+          <div className="flex items-center rounded-xl border border-[#d2d2d7] bg-[#f5f5f7]" role="group" aria-label={ar ? 'التنقل بين الأيام' : 'Day navigation'}>
+            <button
+              type="button"
+              onClick={() => goDay(addDays(navDay, -1))}
+              className="w-11 h-11 flex items-center justify-center hover:text-[#0071e3] rounded-s-xl"
+              title={ar ? 'اليوم السابق' : 'Previous day'}
+              aria-label={ar ? 'اليوم السابق' : 'Previous day'}
+            >
+              <ChevronLeft className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => goDay(navDay)}
+              className={`min-h-11 min-w-[9.5rem] px-2 text-sm font-semibold ${dayExists ? 'text-[#1d1d1f]' : 'text-[#515154]'} hover:text-[#0071e3]`}
+              title={ar ? 'فتح صفحة هذا اليوم' : 'Open this day'}
+            >
+              {navDayLabel}
+            </button>
+            <button
+              type="button"
+              onClick={() => goDay(addDays(navDay, 1))}
+              className="w-11 h-11 flex items-center justify-center hover:text-[#0071e3] rounded-e-xl"
+              title={ar ? 'اليوم التالي' : 'Next day'}
+              aria-label={ar ? 'اليوم التالي' : 'Next day'}
+            >
+              <ChevronRight className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+
+          {/* Month stepper */}
+          <div className="flex items-center rounded-xl border border-[#d2d2d7] bg-[#f5f5f7]" role="group" aria-label={ar ? 'التنقل بين الشهور' : 'Month navigation'}>
+            <button
+              type="button"
+              onClick={() => goMonth(addMonths(monthOf(navDay), -1))}
+              className="w-11 h-11 flex items-center justify-center hover:text-[#0071e3] rounded-s-xl"
+              title={ar ? 'الشهر السابق' : 'Previous month'}
+              aria-label={ar ? 'الشهر السابق' : 'Previous month'}
+            >
+              <ChevronLeft className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
+            </button>
+            <button
+              type="button"
+              onClick={() => goMonth(monthOf(navDay))}
+              className="min-h-11 min-w-[9.5rem] px-2 text-sm font-semibold text-[#1d1d1f] hover:text-[#0071e3] inline-flex items-center justify-center gap-1.5"
+              title={ar ? 'فتح صفحة الشهر' : 'Open this month'}
+            >
+              <CalendarRange className="w-4 h-4 text-[#0071e3]" />
+              {monthTitle(monthOf(navDay), ar ? 'ar' : 'en')}
+            </button>
+            <button
+              type="button"
+              onClick={() => goMonth(addMonths(monthOf(navDay), 1))}
+              className="w-11 h-11 flex items-center justify-center hover:text-[#0071e3] rounded-e-xl"
+              title={ar ? 'الشهر التالي' : 'Next month'}
+              aria-label={ar ? 'الشهر التالي' : 'Next month'}
+            >
+              <ChevronRight className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
+            </button>
+          </div>
+
+          {/* + Page menu */}
+          <div className="relative ms-auto">
+            <button
+              type="button"
+              onClick={() => setAddMenuOpen((v) => !v)}
+              aria-haspopup="menu"
+              aria-expanded={addMenuOpen}
+              className="min-h-11 px-4 inline-flex items-center gap-2 rounded-xl bg-white border border-[#d2d2d7] hover:bg-[#f5f5f7] text-sm font-semibold text-[#1d1d1f] shadow-xs transition-colors"
+            >
+              <Plus className="w-4 h-4 text-[#0071e3]" />
+              {ar ? 'صفحة' : 'Page'}
+              <ChevronDown className="w-3.5 h-3.5 text-[#86868b]" />
+            </button>
+            {addMenuOpen && (
+              <>
+                <div className="fixed inset-0 z-40" onClick={() => setAddMenuOpen(false)} aria-hidden="true" />
+                <div role="menu" className="absolute z-50 end-0 top-full mt-1.5 w-64 rounded-2xl bg-white border border-[#d2d2d7] shadow-2xl p-1.5">
+                  {[
+                    {
+                      key: 'daily',
+                      icon: <CalendarDays className="w-4 h-4 text-[#0071e3]" />,
+                      label: ar ? 'صفحة يومية' : 'Daily page',
+                      sub: dayTitle(navDay, ar ? 'ar' : 'en'),
+                      run: () => goDay(navDay),
+                    },
+                    {
+                      key: 'todo',
+                      icon: <ListChecks className="w-4 h-4 text-[#0071e3]" />,
+                      label: ar ? 'قائمة مهام' : 'To-do list',
+                      sub: ar ? 'باسم مسار العمل' : 'named by workstream',
+                      run: () => {
+                        setPromptText('');
+                        setPlannerPrompt('todo');
+                      },
+                    },
+                    {
+                      key: 'monthly',
+                      icon: <CalendarRange className="w-4 h-4 text-[#0071e3]" />,
+                      label: ar ? 'صفحة شهرية' : 'Monthly page',
+                      sub: monthTitle(monthOf(navDay), ar ? 'ar' : 'en'),
+                      run: () => goMonth(monthOf(navDay)),
+                    },
+                    {
+                      key: 'mom',
+                      icon: <NotebookPen className="w-4 h-4 text-[#0071e3]" />,
+                      label: ar ? 'محضر اجتماع (MoM)' : 'Minutes of meeting (MoM)',
+                      sub: ar ? 'مهمة | مسؤول | تاريخ' : 'Task | Owner | Due Date',
+                      run: () => {
+                        setPromptDate(todayStr);
+                        setPlannerPrompt('mom');
+                      },
+                    },
+                    {
+                      key: 'blank',
+                      icon: <FileTextIcon className="w-4 h-4 text-[#0071e3]" />,
+                      label: ar ? 'صفحة سادة / مسطرة' : 'Blank / ruled',
+                      sub: ar ? 'في هذه المفكرة' : 'in this notebook',
+                      run: () => onNewPage(activeNotebook?.id || ''),
+                    },
+                  ].map((item) => (
+                    <button
+                      key={item.key}
+                      type="button"
+                      role="menuitem"
+                      onClick={() => {
+                        setAddMenuOpen(false);
+                        item.run();
+                      }}
+                      className="w-full min-h-11 px-3 py-1.5 flex items-center gap-3 rounded-xl text-start hover:bg-[#f5f5f7] transition-colors"
+                    >
+                      {item.icon}
+                      <span className="flex flex-col leading-tight">
+                        <span className="text-sm font-semibold text-[#1d1d1f]">{item.label}</span>
+                        <span className="text-[11px] text-[#86868b]">{item.sub}</span>
+                      </span>
+                    </button>
+                  ))}
+                </div>
+              </>
+            )}
+          </div>
+        </div>
+      )}
+
       {/* Main View Area */}
       <div className={`flex-1 flex overflow-hidden relative ${viewMode === 'split' ? 'flex-col lg:flex-row' : ''}`}>
         {/* Left / Primary Ink Canvas */}
@@ -540,6 +783,12 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               <NotebookCanvas
                 pageId={activePage.id}
                 template={activePage.template}
+                plannerDate={activePage.plannerDate}
+                backgroundImage={activePage.backgroundImage}
+                canvasSize={
+                  activePage.canvasSize ||
+                  (activePage.template.startsWith('planner_') && activePage.template !== 'planner_archive' ? PLANNER_CANVAS : undefined)
+                }
                 pageTitle={activePage.title}
                 initialStrokes={activePage.strokes}
                 initialTextNotes={activePage.textNotes || []}
@@ -1151,6 +1400,81 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           </div>
         )}
       </div>
+
+      {/* To-do list name / MoM date prompt */}
+      {plannerPrompt && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setPlannerPrompt(null)}>
+          <form
+            className="w-full max-w-md bg-white rounded-2xl shadow-2xl border border-[#d2d2d7] p-5 space-y-4"
+            onClick={(e) => e.stopPropagation()}
+            onSubmit={(e) => {
+              e.preventDefault();
+              submitPrompt();
+            }}
+          >
+            <h3 className="text-base font-bold text-stone-900">
+              {plannerPrompt === 'todo'
+                ? ar ? 'قائمة مهام جديدة' : 'New to-do list'
+                : ar ? 'محضر اجتماع جديد' : 'New minutes of meeting'}
+            </h3>
+            {plannerPrompt === 'todo' ? (
+              <div className="space-y-2.5">
+                <label className="block text-xs font-semibold text-stone-600" htmlFor="planner-todo-name">
+                  {ar ? 'اسم مسار العمل' : 'Workstream name'}
+                </label>
+                <input
+                  id="planner-todo-name"
+                  autoFocus
+                  value={promptText}
+                  onChange={(e) => setPromptText(e.target.value)}
+                  className="w-full min-h-11 px-3 rounded-xl border border-[#d2d2d7] text-sm text-stone-900 focus:outline-none focus:border-[#0071e3]"
+                />
+                <div className="flex flex-wrap gap-1.5">
+                  {INITIAL_WORKSTREAMS.map((ws) => (
+                    <button
+                      key={ws}
+                      type="button"
+                      onClick={() => setPromptText(ws)}
+                      className="min-h-9 px-3 rounded-full border border-[#d2d2d7] bg-[#f5f5f7] hover:bg-[#e8e8ed] text-xs font-medium text-stone-700"
+                    >
+                      {ws}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : (
+              <div className="space-y-2.5">
+                <label className="block text-xs font-semibold text-stone-600" htmlFor="planner-mom-date">
+                  {ar ? 'تاريخ الاجتماع' : 'Meeting date'}
+                </label>
+                <input
+                  id="planner-mom-date"
+                  type="date"
+                  value={promptDate}
+                  onChange={(e) => setPromptDate(e.target.value)}
+                  className="w-full min-h-11 px-3 rounded-xl border border-[#d2d2d7] text-sm text-stone-900 focus:outline-none focus:border-[#0071e3]"
+                />
+              </div>
+            )}
+            <div className="flex items-center justify-end gap-2 pt-2 border-t border-stone-100">
+              <button
+                type="button"
+                onClick={() => setPlannerPrompt(null)}
+                className="min-h-11 px-4 rounded-xl text-sm font-semibold text-stone-600 hover:bg-stone-100 transition-colors"
+              >
+                {ar ? 'إلغاء' : 'Cancel'}
+              </button>
+              <button
+                type="submit"
+                disabled={plannerPrompt === 'todo' && !promptText.trim()}
+                className="min-h-11 px-5 rounded-xl text-sm font-bold bg-[#0071e3] hover:bg-[#0062c4] disabled:opacity-40 text-white transition-colors"
+              >
+                {ar ? 'إنشاء' : 'Create'}
+              </button>
+            </div>
+          </form>
+        </div>
+      )}
 
       {/* Delete Page Confirmation Modal */}
       {showDeletePageConfirm && activePage && (

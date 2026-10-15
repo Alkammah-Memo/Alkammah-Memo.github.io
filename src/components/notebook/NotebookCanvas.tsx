@@ -10,6 +10,8 @@ import {
 } from '../../types';
 import { Locale, translations } from '../../lib/translations';
 import { formatCairoHeaderDateTime } from '../../lib/cairoTime';
+import { PLANNER_CANVAS } from '../../lib/planner';
+import { drawPlannerTemplate, isPlannerTemplate } from './plannerTemplates';
 import { VersionHistoryModal } from './VersionHistoryModal';
 import {
   Pen,
@@ -150,6 +152,12 @@ export const PAPER_STYLES: { id: PaperStyle; nameEn: string; nameAr: string }[] 
 interface NotebookCanvasProps {
   pageId: string;
   template: NotebookTemplate;
+  /** 'YYYY-MM-DD' (daily) or 'YYYY-MM' (monthly): drives the printed date/month of the planner templates */
+  plannerDate?: string;
+  /** Imported page image (JPEG data URL) drawn as the paper for 'planner_archive' pages */
+  backgroundImage?: string;
+  /** Logical canvas size; planner templates default to 1450x1007 */
+  canvasSize?: { width: number; height: number };
   pageTitle: string;
   initialStrokes: InkStroke[];
   initialTextNotes?: CanvasTextItem[];
@@ -174,16 +182,47 @@ interface NotebookCanvasProps {
 type ToolMode = 'pen' | 'highlighter' | 'eraser' | 'lasso' | 'text';
 type InteractionMode = 'stylus' | 'touch_nav';
 
+const DEFAULT_PEN_COLOR = '#2F6FEA';
+const DEFAULT_HIGHLIGHT_COLOR = '#FDE047';
+
+// Palette follows the planner: blue handwriting, orange status marks, plus the usual dark inks
 const PEN_COLORS = [
+  { name: 'Ink Blue', value: DEFAULT_PEN_COLOR },
   { name: 'Obsidian Black', value: '#1E293B' },
-  { name: 'Royal Navy', value: '#1D4ED8' },
+  { name: 'Status Orange', value: '#E8A13A' },
+  { name: 'Red', value: '#DC2626' },
   { name: 'Emerald Green', value: '#047857' },
+  { name: 'Navy', value: '#1E3A8A' },
   { name: 'Imperial Burgundy', value: '#881337' },
   { name: 'Graphite Slate', value: '#475569' },
-  { name: 'Warm Amber', value: '#B45309' },
   { name: 'Pure White', value: '#FFFFFF' },
-  { name: 'Cairo Gold', value: '#F59E0B' },
 ];
+
+const HIGHLIGHT_COLORS = [
+  { name: 'Yellow (due dates)', nameAr: 'أصفر (تواريخ الاستحقاق)', value: DEFAULT_HIGHLIGHT_COLOR },
+  { name: 'Green (ongoing)', nameAr: 'أخضر (جارٍ)', value: '#86EFAC' },
+  { name: 'Orange', nameAr: 'برتقالي', value: '#FDBA74' },
+  { name: 'Pink', nameAr: 'وردي', value: '#F9A8D4' },
+];
+
+const PEN_COLOR_KEY = 'alkammah_pen_color';
+const HL_COLOR_KEY = 'alkammah_hl_color';
+const readStored = (key: string, fallback: string, allowed: string[]): string => {
+  try {
+    const v = localStorage.getItem(key);
+    if (v && (allowed.includes(v) || /^#[0-9a-fA-F]{6}$/.test(v))) return v;
+  } catch {
+    /* storage unavailable */
+  }
+  return fallback;
+};
+const writeStored = (key: string, value: string) => {
+  try {
+    localStorage.setItem(key, value);
+  } catch {
+    /* storage unavailable */
+  }
+};
 
 const FONT_FAMILIES = [
   { label: 'Serif (Executive)', value: 'Georgia, "Playfair Display", serif' },
@@ -201,9 +240,14 @@ const DEFAULT_PORTRAIT_WIDTH = 1100;
 const DEFAULT_PORTRAIT_HEIGHT = 1450;
 
 const MAX_VERSIONS = 50;
-const HIGHLIGHT_COLOR = '#F59E0B';
 const HIGHLIGHT_WIDTH = 18;
-const highlightAlpha = (theme: { isDark: boolean }) => (theme.isDark ? 0.45 : 0.35);
+const LEGACY_HIGHLIGHT = /^(#f59e0b|rgba?\(\s*245\s*,\s*158\s*,\s*11)/i;
+const highlightAlpha = (theme: { isDark: boolean }, color?: string) =>
+  color && LEGACY_HIGHLIGHT.test(color) ? (theme.isDark ? 0.45 : 0.35) : theme.isDark ? 0.55 : 0.5;
+
+/** Decoded archive page images, keyed by page id (small LRU: a decoded 1450x1007 page is ~6MB) */
+const archiveImages = new Map<string, { src: string; img: HTMLImageElement; ready: boolean }>();
+const ARCHIVE_CACHE_MAX = 4;
 
 const getDpr = () =>
   typeof window === 'undefined' ? 1 : Math.min(3, Math.max(1, window.devicePixelRatio || 1));
@@ -276,7 +320,7 @@ const paintStroke = (
     // legacy strokes stored rgba(); normalise to opaque and apply one alpha constant
     const m = /^rgba?\(\s*(\d+)\s*,\s*(\d+)\s*,\s*(\d+)/.exec(color);
     if (m) color = `rgb(${m[1]},${m[2]},${m[3]})`;
-    ctx.globalAlpha = highlightAlpha(theme);
+    ctx.globalAlpha = highlightAlpha(theme, stroke.color);
   } else if (theme.isDark && (color === '#1E293B' || color === '#000000')) {
     color = '#F8FAFC';
   }
@@ -307,7 +351,10 @@ const paintStroke = (
 
 export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   pageId,
-  template: _template,
+  template,
+  plannerDate,
+  backgroundImage,
+  canvasSize: canvasSizeProp,
   pageTitle,
   initialStrokes,
   initialTextNotes = [],
@@ -359,8 +406,17 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
     }
   }, [initialPaperColor]);
 
-  const canvasWidth = orientation === 'landscape' ? DEFAULT_LANDSCAPE_WIDTH : DEFAULT_PORTRAIT_WIDTH;
-  const canvasHeight = orientation === 'landscape' ? DEFAULT_LANDSCAPE_HEIGHT : DEFAULT_PORTRAIT_HEIGHT;
+  // Planner / imported pages have a fixed logical size (the aspect of the printed planner) and their own printed layout
+  const isArchive = template === 'planner_archive';
+  const isPlanner = isPlannerTemplate(template);
+  const fixedSize = canvasSizeProp ?? (isPlanner ? PLANNER_CANVAS : undefined);
+  const hasFixedPaper = isPlanner || isArchive;
+  const canvasWidth = fixedSize ? fixedSize.width : orientation === 'landscape' ? DEFAULT_LANDSCAPE_WIDTH : DEFAULT_PORTRAIT_WIDTH;
+  const canvasHeight = fixedSize ? fixedSize.height : orientation === 'landscape' ? DEFAULT_LANDSCAPE_HEIGHT : DEFAULT_PORTRAIT_HEIGHT;
+
+  const templateRef = useRef({ template, plannerDate, backgroundImage, pageTitle, locale, pageId });
+  templateRef.current = { template, plannerDate, backgroundImage, pageTitle, locale, pageId };
+  const [imageTick, setImageTick] = useState(0);
 
   const [dpr, setDpr] = useState<number>(getDpr);
   const dprRef = useRef<number>(dpr);
@@ -395,8 +451,13 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   // Tool & Inking Settings
   const [tool, setTool] = useState<ToolMode>('pen');
   const [interactionMode, setInteractionMode] = useState<InteractionMode>('stylus');
-  const [penColor, setPenColor] = useState<string>(PEN_COLORS[0].value);
-  const [customColor, setCustomColor] = useState<string>('#1E293B');
+  const [penColor, setPenColor] = useState<string>(() =>
+    readStored(PEN_COLOR_KEY, DEFAULT_PEN_COLOR, PEN_COLORS.map((c) => c.value))
+  );
+  const [hlColor, setHlColor] = useState<string>(() =>
+    readStored(HL_COLOR_KEY, DEFAULT_HIGHLIGHT_COLOR, HIGHLIGHT_COLORS.map((c) => c.value))
+  );
+  const [customColor, setCustomColor] = useState<string>(DEFAULT_PEN_COLOR);
   const [lineWidth, setLineWidth] = useState<number>(2.5);
 
   // Font Control Settings
@@ -408,6 +469,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   const toolRef = useRef<ToolMode>(tool);
   const interactionModeRef = useRef<InteractionMode>(interactionMode);
   const penColorRef = useRef<string>(penColor);
+  const hlColorRef = useRef<string>(hlColor);
   const lineWidthRef = useRef<number>(lineWidth);
   const fontFamilyRef = useRef<string>(fontFamily);
   const fontSizeRef = useRef<number>(fontSize);
@@ -420,7 +482,12 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   }, [interactionMode]);
   useEffect(() => {
     penColorRef.current = penColor;
+    if (penColor.toUpperCase() !== '#FFFFFF') writeStored(PEN_COLOR_KEY, penColor);
   }, [penColor]);
+  useEffect(() => {
+    hlColorRef.current = hlColor;
+    writeStored(HL_COLOR_KEY, hlColor);
+  }, [hlColor]);
   useEffect(() => {
     lineWidthRef.current = lineWidth;
   }, [lineWidth]);
@@ -572,8 +639,26 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
 
     const topMargin = 120;
     const bottomMargin = 40;
+    const tpl = templateRef.current;
 
-    if (currentStyle === 'ruled') {
+    if (isPlannerTemplate(tpl.template)) {
+      drawPlannerTemplate(ctx, W, H, tpl.template, {
+        isDark: theme.isDark,
+        locale: tpl.locale === 'ar' ? 'ar' : 'en',
+        plannerDate: tpl.plannerDate,
+        title: tpl.pageTitle,
+        textColor: theme.textColor,
+        subtextColor: theme.subtextColor,
+      });
+    } else if (tpl.template === 'planner_archive') {
+      const entry = archiveImages.get(tpl.pageId);
+      if (entry && entry.ready && entry.src === tpl.backgroundImage) {
+        ctx.fillStyle = '#FFFFFF';
+        ctx.fillRect(0, 0, W, H);
+        ctx.imageSmoothingQuality = 'high';
+        ctx.drawImage(entry.img, 0, 0, W, H);
+      }
+    } else if (currentStyle === 'ruled') {
       ctx.save();
       ctx.strokeStyle = theme.ruledLine;
       ctx.lineWidth = 0.8;
@@ -643,7 +728,36 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   // Resize / orientation / paper change: backing store is reset by React, so redraw synchronously (no blank frame)
   useLayoutEffect(() => {
     renderBackgroundCanvas(previewRef.current ? previewRef.current.strokes || [] : strokesRef.current);
-  }, [canvasWidth, canvasHeight, dpr, paperStyle, paperColor, renderBackgroundCanvas]);
+  }, [canvasWidth, canvasHeight, dpr, paperStyle, paperColor, template, plannerDate, backgroundImage, pageTitle, locale, imageTick, renderBackgroundCanvas]);
+
+  // Decode the imported page image once per page (cached), then redraw
+  useEffect(() => {
+    if (template !== 'planner_archive' || !backgroundImage) return;
+    const cached = archiveImages.get(pageId);
+    if (cached && cached.src === backgroundImage) {
+      // refresh LRU position
+      archiveImages.delete(pageId);
+      archiveImages.set(pageId, cached);
+      if (cached.ready) setImageTick((n) => n + 1);
+      return;
+    }
+    const img = new Image();
+    const entry = { src: backgroundImage, img, ready: false };
+    archiveImages.set(pageId, entry);
+    while (archiveImages.size > ARCHIVE_CACHE_MAX) {
+      const oldest = archiveImages.keys().next().value;
+      if (oldest === undefined || oldest === pageId) break;
+      archiveImages.delete(oldest);
+    }
+    img.onload = () => {
+      entry.ready = true;
+      setImageTick((n) => n + 1); // harmless if the page has since changed: it just redraws the current page
+    };
+    img.onerror = () => {
+      archiveImages.delete(pageId);
+    };
+    img.src = backgroundImage;
+  }, [pageId, template, backgroundImage]);
 
   // Sync when pageId changes
   useLayoutEffect(() => {
@@ -1014,7 +1128,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       }
 
       const isHl = tool === 'highlighter';
-      const color = isHl ? HIGHLIGHT_COLOR : penColorRef.current;
+      const color = isHl ? hlColorRef.current : penColorRef.current;
       const width = isHl ? HIGHLIGHT_WIDTH : lineWidthRef.current;
       const s: Session = { ...base, kind: 'draw', tool, color, width, points: [p] };
       session = s;
@@ -1027,7 +1141,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       }
 
       if (isHl) {
-        canvas.style.opacity = String(highlightAlpha(PAPER_THEMES[paperColorRef.current] || PAPER_THEMES.cream));
+        canvas.style.opacity = String(highlightAlpha(PAPER_THEMES[paperColorRef.current] || PAPER_THEMES.cream, color));
       }
       const ctx = activeCtx();
       if (ctx) {
@@ -1456,32 +1570,44 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
 
             {/* Ink Colors & Custom Color */}
             <div className="flex items-center gap-1 bg-stone-100/90 px-1.5 py-1 rounded-xl border border-stone-200/80">
-              {PEN_COLORS.map((c) => (
-                <button
-                  key={c.value}
-                  onClick={() => {
-                    setPenColor(c.value);
-                    if (tool === 'eraser' || tool === 'lasso') setTool('pen');
-                  }}
-                  className="w-4.5 h-4.5 rounded-full border border-black/15 transition-transform active:scale-90 flex items-center justify-center shrink-0"
-                  style={{ backgroundColor: c.value }}
-                  title={c.name}
-                >
-                  {penColor === c.value && <Check className="w-2.5 h-2.5 text-white" />}
-                </button>
-              ))}
+              {(tool === 'highlighter' ? HIGHLIGHT_COLORS : PEN_COLORS).map((c) => {
+                const active = tool === 'highlighter' ? hlColor : penColor;
+                const label = locale === 'ar' && 'nameAr' in c ? (c as { nameAr: string }).nameAr : c.name;
+                return (
+                  <button
+                    key={c.value}
+                    onClick={() => {
+                      if (tool === 'highlighter') setHlColor(c.value);
+                      else {
+                        setPenColor(c.value);
+                        if (tool === 'eraser' || tool === 'lasso') setTool('pen');
+                      }
+                    }}
+                    className="w-8 h-8 rounded-full border border-black/15 transition-transform active:scale-90 flex items-center justify-center shrink-0"
+                    style={{ backgroundColor: c.value }}
+                    title={label}
+                    aria-label={label}
+                    aria-pressed={active === c.value}
+                  >
+                    {active === c.value && (
+                      <Check className={`w-3.5 h-3.5 ${c.value === '#FFFFFF' || tool === 'highlighter' ? 'text-stone-800' : 'text-white'}`} />
+                    )}
+                  </button>
+                );
+              })}
 
               {/* Native color picker */}
               <label
-                className="w-4.5 h-4.5 rounded-full border border-black/15 flex items-center justify-center cursor-pointer relative overflow-hidden shrink-0 bg-gradient-to-tr from-rose-500 via-amber-400 to-indigo-500"
-                title="Custom Ink Color"
+                className="w-8 h-8 rounded-full border border-black/15 flex items-center justify-center cursor-pointer relative overflow-hidden shrink-0 bg-gradient-to-tr from-rose-500 via-amber-400 to-indigo-500"
+                title={locale === 'ar' ? 'لون مخصص' : 'Custom Ink Color'}
               >
                 <input
                   type="color"
                   value={customColor}
                   onChange={(e) => {
                     setCustomColor(e.target.value);
-                    setPenColor(e.target.value);
+                    if (tool === 'highlighter') setHlColor(e.target.value);
+                    else setPenColor(e.target.value);
                   }}
                   className="opacity-0 absolute inset-0 cursor-pointer"
                 />
@@ -1692,6 +1818,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                   <Clock className="w-3.5 h-3.5" />
                   <span className="font-semibold">{liveCairoTime}</span>
                 </div>
+                {!hasFixedPaper && (
                 <button
                   onClick={handleStampCairoTime}
                   className="flex items-center gap-1.5 px-3 py-1 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-lg text-xs font-bold shadow-2xs transition-all active:scale-95"
@@ -1700,10 +1827,12 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                   <Check className="w-3.5 h-3.5" />
                   <span>{locale === 'ar' ? 'ختم الوقت والتاريخ الآن' : 'Stamp Now'}</span>
                 </button>
+                )}
               </div>
               {/* Controls Group: 4 Paper Styles + 4 Paper Colors + Orientation + Version + Trash */}
               <div className="flex items-center gap-2 flex-wrap">
-                {/* 1. 4 Styles of Paper (Ruled Lines, Grid Boxes, Dot Grid, Blank Plain) */}
+                {/* 1. 4 Styles of Paper (Ruled Lines, Grid Boxes, Dot Grid, Blank Plain): hidden on planner pages, which have their own printed layout */}
+                {!hasFixedPaper && (
                 <div
                   className="flex items-center gap-0.5 p-1 rounded-xl border transition-colors"
                   style={{
@@ -1739,6 +1868,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                     );
                   })}
                 </div>
+                )}
 
                 {/* 2. 4 Background Colors of Notes & Ink (Cream, White, Sepia, Midnight Dark) */}
                 <div
@@ -1761,7 +1891,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                           if (cKey === 'dark' && (penColor === '#1E293B' || penColor === '#475569')) {
                             setPenColor('#FFFFFF');
                           } else if (cKey !== 'dark' && penColor === '#FFFFFF') {
-                            setPenColor('#1E293B');
+                            setPenColor(readStored(PEN_COLOR_KEY, DEFAULT_PEN_COLOR, PEN_COLORS.map((c) => c.value)));
                           }
                           if (onPaperColorChange) onPaperColorChange(cKey);
                         }}
@@ -1784,7 +1914,8 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                   })}
                 </div>
 
-                {/* 3. Landscape / Portrait Orientation Toggle */}
+                {/* 3. Landscape / Portrait Orientation Toggle (planner pages keep the size of the printed page) */}
+                {!hasFixedPaper && (
                 <button
                   onClick={() => {
                     const next = orientation === 'landscape' ? 'portrait' : 'landscape';
@@ -1810,6 +1941,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                     </>
                   )}
                 </button>
+                )}
 
                 {/* 4. Small Version Button */}
                 <button
@@ -1867,18 +1999,20 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
         >
           {/* Executive Paper Stationery Header: Live Cairo Date & Time + 4 Styles + 4 Colors + Orientation */}
           <div
-            className="p-4 sm:p-6 pb-3 relative z-10 font-sans select-none transition-colors duration-200"
+            className={`${hasFixedPaper ? 'px-4 py-2 sm:px-6' : 'p-4 sm:p-6 pb-3'} relative z-10 font-sans select-none transition-colors duration-200`}
             style={{
               backgroundColor: currentTheme.headerBg,
               borderBottom: `1px solid ${currentTheme.headerBorder}`,
               color: currentTheme.textColor,
             }}
           >
+            {!hasFixedPaper && (
             <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs mb-2">
               <span className="font-mono text-[10px] tracking-wider uppercase font-bold" style={{ color: currentTheme.isDark ? '#38bdf8' : '#0071e3' }}>
                 EXECUTIVE PLANNER · CAIRO BASELINE
               </span>
             </div>
+            )}
 
             {/* Editable Header Date and Time (Cairo Time) + Stationery Customizer Strip */}
             <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
