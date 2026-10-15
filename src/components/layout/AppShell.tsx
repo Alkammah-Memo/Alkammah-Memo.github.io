@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useEffect, useRef } from 'react';
 import { Locale, translations } from '../../lib/translations';
 import {
   LayoutDashboard,
@@ -43,6 +43,12 @@ export const AppShell: React.FC<AppShellProps> = ({
   onOpenBackupModal,
 }) => {
   const t = translations[locale];
+  const mainRef = useRef<HTMLElement | null>(null);
+
+  // Every page starts at the top (otherwise a page opens scrolled to wherever the previous one was)
+  useEffect(() => {
+    mainRef.current?.scrollTo({ top: 0 });
+  }, [currentTab]);
 
   const navItems = [
     { id: 'today', label: locale === 'ar' ? 'الموجز اليومي' : 'Today & Briefing', icon: LayoutDashboard },
@@ -182,6 +188,7 @@ export const AppShell: React.FC<AppShellProps> = ({
       {/* Workspace Body: Direct single viewport without redundant sidebars */}
       <div className="flex-1 overflow-hidden relative w-full">
         <main
+          ref={mainRef}
           className={`h-full w-full ${
             hideTopBar || currentTab === 'notebook'
               ? 'p-0 overflow-hidden'
