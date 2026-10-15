@@ -17,7 +17,7 @@ import type { LiveServerMessage, Session } from '@google/genai';
 import { clientFor } from './gemini';
 import { keyManager, classifyError, NoKeysConfiguredError } from './keyManager';
 import type { KeySlot } from './keyManager';
-import { EXECUTIVE_TOOLS, liveSystemInstruction } from './tools';
+import { EXECUTIVE_FUNCTION_TOOLS, liveSystemInstruction } from './tools';
 import { arrayBufferToBase64 } from './audioUtils';
 
 export const LIVE_CONNECTING = 0;
@@ -264,7 +264,7 @@ export class GeminiLiveSocket {
         outputAudioTranscription: {},
         inputAudioTranscription: {},
         speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: models.voiceName || 'Zephyr' } } },
-        tools: EXECUTIVE_TOOLS,
+        tools: EXECUTIVE_FUNCTION_TOOLS,
         systemInstruction: this.buildSystemInstruction(),
         sessionResumption: resume ? { handle: resume } : {},
       },
