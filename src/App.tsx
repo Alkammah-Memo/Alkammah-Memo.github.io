@@ -21,7 +21,7 @@ import {
   PaperColor,
 } from './types';
 import { Locale } from './lib/translations';
-import { getCairoDateString, cairoLocalToIso, normalizeToIso, parseTimeTo24h } from './lib/cairoTime';
+import { getCairoDateString, cairoLocalToIso, normalizeToIso, parseTimeTo24h, cairoDateOf, cairoTimeOf } from './lib/cairoTime';
 import { localDB } from './lib/indexedDb';
 import type { WorkspaceState } from './lib/indexedDb';
 import { newId, hasDuplicateName } from './lib/taskLogic';
@@ -1076,8 +1076,8 @@ export default function App() {
         .filter((t) => !args.ownerAlias || norm(t.ownerAlias) === norm(args.ownerAlias))
         .filter((t) => !kw || norm(`${t.title} ${t.description} ${t.project}`).includes(kw))
         .filter((t) => !args.overdueOnly || (!!t.dueDate && t.dueDate < today && t.status !== 'Done' && t.status !== 'Closed'))
-        .slice(0, 15)
-        .map((t) => ({ id: t.id, title: t.title, status: t.status, owner: t.ownerAlias, dueDate: t.dueDate }));
+        .slice(0, 30)
+        .map((t) => ({ id: t.id, title: t.title, status: t.status, owner: t.ownerAlias, dueDate: t.dueDate, project: t.project, nextAction: t.nextAction }));
       return { ok: true, count: found.length, tasks: found };
     }
 
@@ -1105,6 +1105,99 @@ export default function App() {
         syncMeetingToCloud(match).catch(console.warn);
       });
       return { ok: true, meetingId: match.id, title: match.title, start: updated.start, end: updated.end };
+    }
+
+    if (toolName === 'navigateTo') {
+      const tab = String(args.tab || '');
+      if (!['today', 'notebook', 'planner', 'tasks', 'calendar', 'followup', 'directory', 'settings'].includes(tab)) return { ok: false, error: 'Unknown tab.' };
+      setCurrentTab(tab);
+      return { ok: true, openedTab: tab };
+    }
+    if (toolName === 'openItem') {
+      if (args.kind === 'task') {
+        const t = findTask();
+        if (!t) return { ok: false, error: 'No task matched.' };
+        setSelectedTaskForModal(t);
+        return { ok: true, opened: t.title };
+      }
+      const m = findMeeting();
+      if (!m) return { ok: false, error: 'No meeting matched.' };
+      setSelectedMeetingForModal(m);
+      return { ok: true, opened: m.title };
+    }
+    if (toolName === 'closeWindows') {
+      setSelectedTaskForModal(null);
+      setSelectedMeetingForModal(null);
+      setIsBackupModalOpen(false);
+      return { ok: true };
+    }
+    if (toolName === 'closeAssistant') {
+      setTimeout(() => setIsLiveVoiceModalOpen(false), 2500);
+      return { ok: true, note: 'The voice window will close in a moment; say a short farewell.' };
+    }
+    if (toolName === 'listMeetings') {
+      const kw = norm(args.keyword);
+      const from = args.fromDate ? String(args.fromDate) : '';
+      const to = args.toDate ? String(args.toDate) : '';
+      const found = meetingsRef.current
+        .filter((m) => !from || cairoDateOf(m.start) >= from)
+        .filter((m) => !to || cairoDateOf(m.start) <= to)
+        .filter((m) => !kw || norm(`${m.title} ${m.description} ${m.project} ${(m.attendees || []).join(' ')}`).includes(kw))
+        .sort((a, b) => a.start.localeCompare(b.start))
+        .slice(0, 30)
+        .map((m) => ({ id: m.id, title: m.title, date: cairoDateOf(m.start), time: cairoTimeOf(m.start), end: cairoTimeOf(m.end), location: m.location, attendees: m.attendees, agenda: m.agenda }));
+      return { ok: true, count: found.length, meetings: found };
+    }
+    if (toolName === 'updateMeeting') {
+      const match = findMeeting();
+      if (!match) return { ok: false, error: 'No meeting matched that id or keyword.' };
+      const updated: Meeting = {
+        ...match,
+        title: args.title ? String(args.title) : match.title,
+        location: args.location !== undefined ? String(args.location) : match.location,
+        attendees: Array.isArray(args.attendees) ? (args.attendees as string[]) : match.attendees,
+        agenda: args.agenda !== undefined ? String(args.agenda) : match.agenda,
+        description: args.description !== undefined ? String(args.description) : match.description,
+        project: args.project !== undefined ? String(args.project) : match.project,
+        updatedAt: new Date().toISOString(),
+      };
+      meetingsRef.current = meetingsRef.current.map((m) => (m.id === match.id ? updated : m));
+      setMeetings(meetingsRef.current);
+      await localDB.put('meetings', updated);
+      syncMeetingToCloud(updated).catch(console.warn);
+      triggerUndoToast(locale === 'ar' ? `تم تحديث الاجتماع "${updated.title}"` : `Meeting updated: "${updated.title}"`, async () => {
+        setMeetings((prev) => prev.map((m) => (m.id === match.id ? match : m)));
+        await localDB.put('meetings', match);
+        syncMeetingToCloud(match).catch(console.warn);
+      });
+      return { ok: true, meetingId: match.id, title: updated.title };
+    }
+    if (toolName === 'getMeetingBriefing') {
+      const m = findMeeting();
+      if (!m) return { ok: false, error: 'No meeting matched.' };
+      const words = norm(`${m.title} ${m.project} ${(m.attendees || []).join(' ')}`).split(/[\s,-]+/).filter((w) => w.length > 2);
+      const related = tasksRef.current
+        .filter((t) => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed')
+        .filter((t) => { const hay = norm(`${t.title} ${t.project} ${t.ownerAlias} ${t.counterpart}`); return words.some((w) => hay.includes(w)); })
+        .slice(0, 10)
+        .map((t) => ({ title: t.title, status: t.status, owner: t.ownerAlias, dueDate: t.dueDate, nextAction: t.nextAction }));
+      return { ok: true, meeting: { title: m.title, date: cairoDateOf(m.start), time: cairoTimeOf(m.start), location: m.location, attendees: m.attendees, agenda: m.agenda, description: m.description, project: m.project }, relatedOpenTasks: related };
+    }
+    if (toolName === 'archiveTask') {
+      const match = findTask();
+      if (!match) return { ok: false, error: 'No task matched.' };
+      const archived = args.archived !== false;
+      const updated: Task = { ...match, isArchived: archived, version: (match.version || 1) + 1, updatedAt: new Date().toISOString() };
+      tasksRef.current = tasksRef.current.map((t) => (t.id === match.id ? updated : t));
+      setTasks(tasksRef.current);
+      await localDB.put('tasks', updated);
+      syncTaskToCloud(updated).catch(console.warn);
+      triggerUndoToast(locale === 'ar' ? `${archived ? 'تمت أرشفة' : 'تمت استعادة'} المهمة "${match.title}"` : `${archived ? 'Archived' : 'Restored'} task "${match.title}"`, async () => {
+        setTasks((prev) => prev.map((t) => (t.id === match.id ? match : t)));
+        await localDB.put('tasks', match);
+        syncTaskToCloud(match).catch(console.warn);
+      });
+      return { ok: true, title: match.title, archived };
     }
 
     return { ok: false, error: `Unknown action: ${toolName}` };
