@@ -231,8 +231,8 @@ export const AppShell: React.FC<AppShellProps> = ({
 
       {/* Floating Instant Undo Toast */}
       {undoToast && (
-        <div className="fixed bottom-16 sm:bottom-6 right-4 sm:right-6 z-50 bg-white/95 text-[#1d1d1f] px-4 py-2.5 rounded-2xl shadow-xl border border-[#d2d2d7] flex items-center gap-3 animate-in slide-in-from-bottom duration-150 backdrop-blur-xl">
-          <span className="text-xs font-medium text-[#1d1d1f]">{undoToast.message}</span>
+        <div className="fixed bottom-24 sm:bottom-8 left-1/2 -translate-x-1/2 max-w-[92vw] z-[400] bg-white/95 border-s-4 border-s-emerald-500 text-[#1d1d1f] px-4 py-2.5 rounded-2xl shadow-xl border border-[#d2d2d7] flex items-center gap-3 animate-in slide-in-from-bottom duration-150 backdrop-blur-xl">
+          <span className="text-sm font-semibold text-[#1d1d1f]" role="status" aria-live="polite">✓ {undoToast.message}</span>
           <button
             onClick={undoToast.onUndo}
             className="flex items-center gap-1 text-xs font-bold text-[#0071e3] hover:text-[#0062c4] bg-[#f5f5f7] px-2.5 py-1 rounded-xl border border-[#d2d2d7] transition-colors"
