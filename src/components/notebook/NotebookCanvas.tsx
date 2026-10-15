@@ -167,6 +167,8 @@ interface NotebookCanvasProps {
   onTitleChange?: (newTitle: string) => void;
   onStrokesChange: (strokes: InkStroke[], textNotes?: CanvasTextItem[], versions?: PageVersion[]) => void;
   onExtractRegion: (imageBase64: string, boundingBox: { x: number; y: number; width: number; height: number }) => void;
+  /** Hands the parent a function that renders the whole page (ink + typed notes) to a compact JPEG, or null when the page is empty */
+  registerSnapshot?: (fn: (() => { dataUrl: string; box: { x: number; y: number; width: number; height: number } } | null) | null) => void;
 }
 
 type ToolMode = 'pen' | 'highlighter' | 'eraser' | 'lasso' | 'text';
@@ -323,6 +325,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   onTitleChange,
   onStrokesChange,
   onExtractRegion,
+  registerSnapshot,
 }) => {
   const t = translations[locale];
   const [orientation, setOrientation] = useState<'landscape' | 'portrait'>(initialOrientation || 'landscape');
@@ -1141,43 +1144,19 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
     }
   };
 
-  // Convert selection or page to tasks (composites typed notes into the exported image)
-  const handleExtractSelection = () => {
+  // Renders a region of the page (committed ink + typed notes) to an offscreen canvas
+  const compositeRegion = (x0: number, y0: number, x1: number, y1: number): HTMLCanvasElement | null => {
     const bg = bgCanvasRef.current;
-    if (!bg) return;
+    if (!bg) return null;
     const d = dprRef.current;
     const W = logicalRef.current.w;
-    const H = logicalRef.current.h;
-    let x0 = 0;
-    let y0 = 0;
-    let x1 = W;
-    let y1 = H;
-
-    if (lassoBox) {
-      const clamp = (v: number, hi: number) => Math.max(0, Math.min(hi, v));
-      x0 = Math.round(clamp(Math.min(lassoBox.startX, lassoBox.endX), W));
-      x1 = Math.round(clamp(Math.max(lassoBox.startX, lassoBox.endX), W));
-      y0 = Math.round(clamp(Math.min(lassoBox.startY, lassoBox.endY), H));
-      y1 = Math.round(clamp(Math.max(lassoBox.startY, lassoBox.endY), H));
-      if (x1 - x0 < 20 || y1 - y0 < 20) {
-        setLassoBox(null);
-        lassoBoxRef.current = null;
-        showNotice(
-          locale === 'ar'
-            ? 'منطقة التحديد صغيرة جداً. اسحب لتحديد منطقة أكبر.'
-            : 'Selection is too small. Drag a larger area around the writing.'
-        );
-        return;
-      }
-    }
-
     const width = x1 - x0;
     const height = y1 - y0;
     const out = document.createElement('canvas');
     out.width = Math.max(1, Math.round(width * d));
     out.height = Math.max(1, Math.round(height * d));
     const ctx = out.getContext('2d');
-    if (!ctx) return;
+    if (!ctx) return null;
     ctx.drawImage(bg, x0 * d, y0 * d, width * d, height * d, 0, 0, out.width, out.height);
 
     // Typed notes
@@ -1213,6 +1192,70 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       }
     }
     ctx.restore();
+
+    return out;
+  };
+
+
+  useEffect(() => {
+    if (!registerSnapshot) return;
+    registerSnapshot(() => {
+      if (strokesRef.current.length === 0 && !textNotesRef.current.some((n) => n.text.trim())) return null;
+      const W = logicalRef.current.w;
+      const H = logicalRef.current.h;
+      const full = compositeRegion(0, 0, W, H);
+      if (!full) return null;
+      const maxW = 1800;
+      let canvas = full;
+      if (full.width > maxW) {
+        const scaled = document.createElement('canvas');
+        scaled.width = maxW;
+        scaled.height = Math.round((full.height * maxW) / full.width);
+        const sctx = scaled.getContext('2d');
+        if (!sctx) return null;
+        sctx.drawImage(full, 0, 0, scaled.width, scaled.height);
+        canvas = scaled;
+      }
+      return { dataUrl: canvas.toDataURL('image/jpeg', 0.85), box: { x: 0, y: 0, width: W, height: H } };
+    });
+    return () => registerSnapshot(null);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [registerSnapshot]);
+
+  // Convert selection or page to tasks (composites typed notes into the exported image)
+  const handleExtractSelection = () => {
+    const bg = bgCanvasRef.current;
+    if (!bg) return;
+    const d = dprRef.current;
+    const W = logicalRef.current.w;
+    const H = logicalRef.current.h;
+    let x0 = 0;
+    let y0 = 0;
+    let x1 = W;
+    let y1 = H;
+
+    if (lassoBox) {
+      const clamp = (v: number, hi: number) => Math.max(0, Math.min(hi, v));
+      x0 = Math.round(clamp(Math.min(lassoBox.startX, lassoBox.endX), W));
+      x1 = Math.round(clamp(Math.max(lassoBox.startX, lassoBox.endX), W));
+      y0 = Math.round(clamp(Math.min(lassoBox.startY, lassoBox.endY), H));
+      y1 = Math.round(clamp(Math.max(lassoBox.startY, lassoBox.endY), H));
+      if (x1 - x0 < 20 || y1 - y0 < 20) {
+        setLassoBox(null);
+        lassoBoxRef.current = null;
+        showNotice(
+          locale === 'ar'
+            ? 'منطقة التحديد صغيرة جداً. اسحب لتحديد منطقة أكبر.'
+            : 'Selection is too small. Drag a larger area around the writing.'
+        );
+        return;
+      }
+    }
+
+    const width = x1 - x0;
+    const height = y1 - y0;
+    const out = compositeRegion(x0, y0, x1, y1);
+    if (!out) return;
 
     onExtractRegion(out.toDataURL('image/png'), { x: x0, y: y0, width, height });
     if (lassoBox) {
@@ -1293,29 +1336,12 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
 
   return (
     <div className="relative flex-1 flex flex-col h-full bg-[#f5f5f7] overflow-hidden select-none">
-      {/* Small Movable Bar: Apple Frosted Glass Light Inking Toolbar */}
+      {/* Docked inking toolbar: lives in the layout flow so it can never cover the app header or the paper */}
+      <div className="shrink-0 flex justify-center px-2 py-1.5 bg-[#f5f5f7] border-b border-[#e5e5ea] z-20">
       <div
         ref={toolbarRef}
-        style={{
-          left: `${toolbarPos.x}px`,
-          top: `${toolbarPos.y}px`,
-          position: 'fixed',
-          zIndex: 40,
-        }}
-        className={`transition-shadow shadow-2xl rounded-2xl bg-white/92 backdrop-blur-2xl border border-stone-200/90 text-stone-800 flex items-center gap-1.5 p-1.5 ${
-          isDraggingToolbar ? 'cursor-grabbing opacity-90' : 'cursor-default'
-        }`}
+        className="shadow-sm rounded-2xl bg-white border border-stone-200/90 text-stone-800 flex flex-wrap items-center justify-center gap-1.5 p-1.5 max-w-full"
       >
-        {/* Drag Grip Handle */}
-        <div
-          onPointerDown={handleToolbarPointerDown}
-          style={{ touchAction: 'none' }}
-          className="cursor-grab active:cursor-grabbing p-1.5 text-stone-400 hover:text-stone-800 rounded-lg hover:bg-stone-100 flex items-center justify-center"
-          title="Drag toolbar anywhere"
-        >
-          <GripVertical className="w-4 h-4 text-stone-400" />
-        </div>
-
         {/* Minimized Pill Mode */}
         {isToolbarCollapsed ? (
           <div className="flex items-center gap-2 pr-2">
@@ -1582,9 +1608,10 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
           </>
         )}
       </div>
+      </div>
 
-      {/* Floating Hide/Show Bars Toggle Button (Top Right / Left) */}
-      {onToggleFullScreenPaper && (
+      {/* Exit button for Full Paper View only (the normal toggle lives in the notebook sub-header) */}
+      {onToggleFullScreenPaper && isFullScreenPaper && (
         <button
           onClick={onToggleFullScreenPaper}
           className={`fixed z-30 ${
@@ -1634,7 +1661,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       {/* Paper Canvas Viewport */}
       <div
         ref={containerRef}
-        className={`flex-1 overflow-auto p-2 sm:p-6 lg:p-8 flex justify-center items-start select-none transition-colors duration-200 ${
+        className={`flex-1 overflow-auto p-2 sm:p-4 lg:p-5 flex flex-col items-center select-none transition-colors duration-200 ${
           currentTheme.isDark ? 'bg-[#0e0f12]' : 'bg-[#e5e5ea]/80'
         }`}
         style={{
@@ -1651,46 +1678,8 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
           e.preventDefault();
         }}
       >
-        <div
-          className="relative shrink-0"
-          style={{
-            width: (canvasWidth + 2) * scale,
-            height: paperH != null ? paperH * scale : undefined,
-          }}
-        >
-        <div
-          ref={paperRef}
-          className="absolute top-0 left-0 shadow-xl rounded-2xl overflow-hidden select-none transition-colors duration-200"
-          style={{
-            width: canvasWidth + 2,
-            transform: `scale(${scale})`,
-            transformOrigin: 'top left',
-            backgroundColor: currentTheme.headerBg,
-            borderColor: currentTheme.headerBorder,
-            borderWidth: 1,
-            borderStyle: 'solid',
-          }}
-          onDoubleClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-          }}
-          onContextMenu={(e) => {
-            e.preventDefault();
-          }}
-        >
-          {/* Executive Paper Stationery Header: Live Cairo Date & Time + 4 Styles + 4 Colors + Orientation */}
-          <div
-            className="p-4 sm:p-6 pb-3 relative z-10 font-sans select-none transition-colors duration-200"
-            style={{
-              backgroundColor: currentTheme.headerBg,
-              borderBottom: `1px solid ${currentTheme.headerBorder}`,
-              color: currentTheme.textColor,
-            }}
-          >
-            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs mb-2">
-              <span className="font-mono text-[10px] tracking-wider uppercase font-bold" style={{ color: currentTheme.isDark ? '#38bdf8' : '#0071e3' }}>
-                EXECUTIVE PLANNER · CAIRO BASELINE
-              </span>
+        {/* Paper controls: full size (outside the scaled paper) so every control is a comfortable touch target on iPad; scrolls with the page */}
+      <div className="w-full shrink-0 pb-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 [&_button]:min-h-9">
               <div className="flex items-center gap-2 flex-wrap">
                 <div
                   className="flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-lg border shadow-2xs transition-colors"
@@ -1712,37 +1701,6 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                   <span>{locale === 'ar' ? 'ختم الوقت والتاريخ الآن' : 'Stamp Now'}</span>
                 </button>
               </div>
-            </div>
-
-            {/* Editable Header Date and Time (Cairo Time) + Stationery Customizer Strip */}
-            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
-              {isEditingHeader ? (
-                <input
-                  type="text"
-                  value={headerText}
-                  onChange={(e) => {
-                    setHeaderText(e.target.value);
-                  }}
-                  onBlur={commitHeader}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') commitHeader();
-                  }}
-                  autoFocus
-                  style={{ color: currentTheme.textColor }}
-                  className="text-lg sm:text-xl font-bold bg-transparent border-b-2 border-[#0071e3] focus:outline-none w-full tracking-tight font-serif"
-                />
-              ) : (
-                <h1
-                  onClick={() => setIsEditingHeader(true)}
-                  style={{ color: currentTheme.textColor }}
-                  className="text-lg sm:text-xl font-bold tracking-tight cursor-text hover:text-[#0071e3] transition-colors font-serif flex items-center gap-2 shrink-0"
-                  title="Click to edit date and time of today"
-                >
-                  <span>{headerText}</span>
-                  <Edit3 className="w-3.5 h-3.5 opacity-60 hover:opacity-100" style={{ color: currentTheme.subtextColor }} />
-                </h1>
-              )}
-
               {/* Controls Group: 4 Paper Styles + 4 Paper Colors + Orientation + Version + Trash */}
               <div className="flex items-center gap-2 flex-wrap">
                 {/* 1. 4 Styles of Paper (Ruled Lines, Grid Boxes, Dot Grid, Blank Plain) */}
@@ -1878,6 +1836,79 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                   </button>
                 )}
               </div>
+      </div>
+
+        <div
+          className="relative shrink-0"
+          style={{
+            width: (canvasWidth + 2) * scale,
+            height: paperH != null ? paperH * scale : undefined,
+          }}
+        >
+        <div
+          ref={paperRef}
+          className="absolute top-0 left-0 shadow-xl rounded-2xl overflow-hidden select-none transition-colors duration-200"
+          style={{
+            width: canvasWidth + 2,
+            transform: `scale(${scale})`,
+            transformOrigin: 'top left',
+            backgroundColor: currentTheme.headerBg,
+            borderColor: currentTheme.headerBorder,
+            borderWidth: 1,
+            borderStyle: 'solid',
+          }}
+          onDoubleClick={(e) => {
+            e.preventDefault();
+            e.stopPropagation();
+          }}
+          onContextMenu={(e) => {
+            e.preventDefault();
+          }}
+        >
+          {/* Executive Paper Stationery Header: Live Cairo Date & Time + 4 Styles + 4 Colors + Orientation */}
+          <div
+            className="p-4 sm:p-6 pb-3 relative z-10 font-sans select-none transition-colors duration-200"
+            style={{
+              backgroundColor: currentTheme.headerBg,
+              borderBottom: `1px solid ${currentTheme.headerBorder}`,
+              color: currentTheme.textColor,
+            }}
+          >
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 text-xs mb-2">
+              <span className="font-mono text-[10px] tracking-wider uppercase font-bold" style={{ color: currentTheme.isDark ? '#38bdf8' : '#0071e3' }}>
+                EXECUTIVE PLANNER · CAIRO BASELINE
+              </span>
+            </div>
+
+            {/* Editable Header Date and Time (Cairo Time) + Stationery Customizer Strip */}
+            <div className="flex flex-col lg:flex-row lg:items-center justify-between gap-3">
+              {isEditingHeader ? (
+                <input
+                  type="text"
+                  value={headerText}
+                  onChange={(e) => {
+                    setHeaderText(e.target.value);
+                  }}
+                  onBlur={commitHeader}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') commitHeader();
+                  }}
+                  autoFocus
+                  style={{ color: currentTheme.textColor }}
+                  className="text-lg sm:text-xl font-bold bg-transparent border-b-2 border-[#0071e3] focus:outline-none w-full tracking-tight font-serif"
+                />
+              ) : (
+                <h1
+                  onClick={() => setIsEditingHeader(true)}
+                  style={{ color: currentTheme.textColor }}
+                  className="text-lg sm:text-xl font-bold tracking-tight cursor-text hover:text-[#0071e3] transition-colors font-serif flex items-center gap-2 shrink-0"
+                  title="Click to edit date and time of today"
+                >
+                  <span>{headerText}</span>
+                  <Edit3 className="w-3.5 h-3.5 opacity-60 hover:opacity-100" style={{ color: currentTheme.subtextColor }} />
+                </h1>
+              )}
+
             </div>
           </div>
 

@@ -38,6 +38,9 @@ import {
   RectangleVertical,
   MapPin,
   Users,
+  RefreshCw,
+  Loader2,
+  Wand2,
 } from 'lucide-react';
 
 interface NotebookViewProps {
@@ -94,6 +97,20 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   const [extractError, setExtractError] = useState<string>('');
   const [candidates, setCandidates] = useState<ExtractedCandidate[]>([]);
   const [showReviewDrawer, setShowReviewDrawer] = useState<boolean>(false);
+
+  // Development-only visual QA hook: lets layout be inspected without calling the AI (stripped from production builds)
+  useEffect(() => {
+    if (!import.meta.env.DEV) return;
+    try {
+      const raw = localStorage.getItem('qa_candidates');
+      if (raw) {
+        setCandidates(JSON.parse(raw));
+        setShowReviewDrawer(true);
+      }
+    } catch {
+      /* ignore */
+    }
+  }, []);
   const [showDeletePageConfirm, setShowDeletePageConfirm] = useState<boolean>(false);
 
   // When full screen paper is enabled, default to handwritten view
@@ -114,6 +131,150 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   const linkedTasks = tasks.filter(
     (t) => activePage?.linkedTaskIds?.includes(t.id) || t.sourceRef?.pageId === activePage?.id
   );
+
+
+  // ---------------------------------------------------------------------------------------------
+  // Live structuring (split view): after the writer pauses, the page is read by Gemini and the detected
+  // tasks and meetings appear in the structured panel without pressing anything.
+  // ---------------------------------------------------------------------------------------------
+  type LiveStatus = 'idle' | 'waiting' | 'analyzing' | 'done' | 'error';
+  const [autoAnalyze, setAutoAnalyze] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('alkammah_auto_analyze') !== 'off';
+    } catch {
+      return true;
+    }
+  });
+  const [liveItems, setLiveItems] = useState<ExtractedCandidate[]>([]);
+  const [liveStatus, setLiveStatus] = useState<LiveStatus>('idle');
+  const [liveError, setLiveError] = useState<string>('');
+  const [liveUpdatedAt, setLiveUpdatedAt] = useState<string>('');
+  const [handledKeys, setHandledKeys] = useState<Record<string, string[]>>({});
+  const snapshotFnRef = useRef<(() => { dataUrl: string; box: { x: number; y: number; width: number; height: number } } | null) | null>(null);
+  const registerSnapshot = useCallback(
+    (fn: (() => { dataUrl: string; box: { x: number; y: number; width: number; height: number } } | null) | null) => {
+      snapshotFnRef.current = fn;
+    },
+    []
+  );
+  const liveToken = useRef(0);
+  const liveCache = useRef<Record<string, { sig: string; items: ExtractedCandidate[]; at: string }>>({});
+
+  const candidateKey = (c: ExtractedCandidate) =>
+    `${c.entryType === 'meeting' ? 'm' : 't'}|${(c.suggestedTitle || '').toLowerCase().replace(/\s+/g, ' ').trim()}|${
+      c.entryType === 'meeting' ? c.suggestedMeetingDate || '' : c.suggestedDueDate || ''
+    }`;
+
+  const markHandled = (c: ExtractedCandidate) => {
+    const pid = c.pageId;
+    setHandledKeys((prev) => ({ ...prev, [pid]: [...(prev[pid] || []), candidateKey(c)] }));
+  };
+
+  const pageSignature = activePage
+    ? `${activePage.strokes.length}:${activePage.strokes[activePage.strokes.length - 1]?.id || ''}:${(activePage.textNotes || [])
+        .map((n) => n.text)
+        .join('|')}`
+    : '';
+
+  const analyzeLive = useCallback(
+    async (sig: string) => {
+      if (!activePage) return;
+      const pid = activePage.id;
+      const snap = snapshotFnRef.current?.();
+      if (!snap) {
+        liveCache.current[pid] = { sig, items: [], at: '' };
+        setLiveItems([]);
+        setLiveStatus('idle');
+        return;
+      }
+      const token = ++liveToken.current;
+      setLiveStatus('analyzing');
+      setLiveError('');
+      try {
+        const found = await extractInkCandidates(snap.dataUrl, pid, snap.box);
+        if (token !== liveToken.current) return;
+        const at = new Date().toLocaleTimeString(locale === 'ar' ? 'ar-EG' : 'en-GB', {
+          hour: '2-digit',
+          minute: '2-digit',
+          timeZone: 'Africa/Cairo',
+        });
+        liveCache.current[pid] = { sig, items: found, at };
+        setLiveItems(found);
+        setLiveUpdatedAt(at);
+        setLiveStatus('done');
+      } catch (err) {
+        if (token !== liveToken.current) return;
+        const noKeys = (err as Error)?.name === 'NoKeysConfiguredError';
+        setLiveError(
+          noKeys
+            ? locale === 'en'
+              ? 'Add a Gemini key in Settings to read your handwriting automatically.'
+              : 'أضف مفتاح Gemini من الإعدادات لقراءة خطك اليدوي تلقائياً.'
+            : locale === 'en'
+            ? 'All keys are busy right now. Retrying when you write again.'
+            : 'كل المفاتيح مشغولة حالياً. ستُعاد المحاولة عند الكتابة مجدداً.'
+        );
+        setLiveStatus('error');
+      }
+    },
+    [activePage?.id, locale] // eslint-disable-line react-hooks/exhaustive-deps
+  );
+
+  // Show cached results when switching pages; reset otherwise
+  useEffect(() => {
+    liveToken.current++;
+    const cached = activePage ? liveCache.current[activePage.id] : undefined;
+    setLiveItems(cached?.items || []);
+    setLiveUpdatedAt(cached?.at || '');
+    setLiveStatus(cached?.items?.length ? 'done' : 'idle');
+    setLiveError('');
+    // Development-only visual QA hook (stripped from production builds)
+    if (import.meta.env.DEV) {
+      try {
+        const raw = localStorage.getItem('qa_live');
+        if (raw) {
+          const items = JSON.parse(raw);
+          if (activePage) liveCache.current[activePage.id] = { sig: pageSignature, items, at: '14:05' };
+          setLiveItems(items);
+          setLiveStatus('done');
+          setLiveUpdatedAt('14:05');
+        }
+      } catch {
+        /* ignore */
+      }
+    }
+  }, [activePage?.id]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // Debounced auto-analysis (only in split view, only when the content really changed)
+  useEffect(() => {
+    if (viewMode !== 'split' || !autoAnalyze || !activePage) return;
+    if (liveCache.current[activePage.id]?.sig === pageSignature) return;
+    setLiveStatus((s) => (s === 'analyzing' ? s : 'waiting'));
+    const timer = setTimeout(() => void analyzeLive(pageSignature), 4500);
+    return () => clearTimeout(timer);
+  }, [pageSignature, viewMode, autoAnalyze, activePage?.id, analyzeLive]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  const visibleLiveItems = liveItems.filter((c) => {
+    const key = candidateKey(c);
+    if ((handledKeys[c.pageId] || []).includes(key)) return false;
+    const title = (c.suggestedTitle || '').toLowerCase().trim();
+    return !linkedTasks.some((t) => t.title.toLowerCase().trim() === title);
+  });
+
+  const acceptLive = (c: ExtractedCandidate) => {
+    const finalized: ExtractedCandidate =
+      c.entryType === 'meeting'
+        ? { ...c, suggestedStartTime: c.suggestedStartTime || '10:00', suggestedEndTime: c.suggestedEndTime || '11:00' }
+        : c;
+    onAcceptCandidate(finalized);
+    markHandled(c);
+  };
+
+  const editLive = (c: ExtractedCandidate) => {
+    setCandidates([c]);
+    setExtractError('');
+    setShowReviewDrawer(true);
+  };
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
@@ -198,6 +359,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           }
         : candidate;
     onAcceptCandidate(finalized);
+    markHandled(candidate);
     setCandidates((prev) => prev.filter((c) => c.id !== candidate.id));
     if (candidates.length <= 1) {
       setShowReviewDrawer(false);
@@ -366,12 +528,12 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       </div>
 
       {/* Main View Area */}
-      <div className="flex-1 flex overflow-hidden relative">
+      <div className={`flex-1 flex overflow-hidden relative ${viewMode === 'split' ? 'flex-col lg:flex-row' : ''}`}>
         {/* Left / Primary Ink Canvas */}
         {(viewMode === 'handwritten' || viewMode === 'split') && (
           <div
-            className={`h-full overflow-hidden flex flex-col ${
-              viewMode === 'split' ? 'w-full lg:w-1/2 border-r border-stone-300' : 'w-full'
+            className={`overflow-hidden flex flex-col min-w-0 ${
+              viewMode === 'split' ? 'w-full lg:w-1/2 h-1/2 lg:h-full border-b lg:border-b-0 lg:border-r border-stone-300 shrink-0 lg:shrink' : 'h-full w-full flex-1'
             }`}
           >
             {activePage && (
@@ -409,6 +571,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                 onTitleChange={handleTitleChange}
                 onStrokesChange={handleStrokesChange}
                 onExtractRegion={handleExtractRegion}
+                registerSnapshot={registerSnapshot}
               />
             )}
           </div>
@@ -417,8 +580,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         {/* Right / Structured View */}
         {(viewMode === 'structured' || viewMode === 'split') && (
           <div
-            className={`h-full overflow-y-auto p-4 sm:p-6 bg-[#FAF8F5] ${
-              viewMode === 'split' ? 'w-full lg:w-1/2' : 'w-full max-w-5xl mx-auto'
+            className={`overflow-y-auto p-4 sm:p-6 bg-[#FAF8F5] ${
+              viewMode === 'split' ? 'w-full lg:w-1/2 h-1/2 lg:h-full shrink-0 lg:shrink' : 'h-full w-full max-w-5xl mx-auto'
             }`}
           >
             <div className="space-y-4">
@@ -435,6 +598,175 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                 <span className="text-xs text-stone-500 font-mono">
                   {linkedTasks.length} {locale === 'en' ? 'linked tasks' : 'مهام مرتبطة'}
                 </span>
+              </div>
+
+              {/* Live detection: handwriting is read automatically in split view and listed here */}
+              <div className="rounded-2xl border border-[#d2d2d7] bg-white shadow-xs overflow-hidden">
+                <div className="px-4 py-3 flex flex-wrap items-center justify-between gap-2 border-b border-stone-100 bg-gradient-to-r from-[#0071e3]/[0.06] to-[#7928ca]/[0.06]">
+                  <div className="flex items-center gap-2">
+                    <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-[#0071e3] to-[#7928ca] text-white flex items-center justify-center shadow-xs">
+                      {liveStatus === 'analyzing' ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <Wand2 className="w-3.5 h-3.5" />}
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-stone-900">
+                        {locale === 'en' ? 'Detected from your handwriting' : 'تم التعرف عليه من خطك اليدوي'}
+                      </div>
+                      <div className="text-[11px] text-stone-500" aria-live="polite">
+                        {viewMode !== 'split'
+                          ? locale === 'en'
+                            ? 'Switch to Split Screen to see this update as you write.'
+                            : 'انتقل إلى العرض المقسّم لمشاهدة التحديث أثناء الكتابة.'
+                          : !autoAnalyze
+                          ? locale === 'en'
+                            ? 'Automatic reading is off.'
+                            : 'القراءة التلقائية متوقفة.'
+                          : liveStatus === 'waiting'
+                          ? locale === 'en'
+                            ? 'Waiting for you to finish writing…'
+                            : 'بانتظار انتهائك من الكتابة…'
+                          : liveStatus === 'analyzing'
+                          ? locale === 'en'
+                            ? 'Reading your handwriting…'
+                            : 'جارٍ قراءة خطك اليدوي…'
+                          : liveStatus === 'done' && liveUpdatedAt
+                          ? locale === 'en'
+                            ? `Updated ${liveUpdatedAt} (Cairo)`
+                            : `آخر تحديث ${liveUpdatedAt} (القاهرة)`
+                          : locale === 'en'
+                          ? 'Write on the left and tasks appear here automatically.'
+                          : 'اكتب على اليسار وستظهر المهام هنا تلقائياً.'}
+                      </div>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-1.5">
+                    <button
+                      type="button"
+                      onClick={() => activePage && void analyzeLive(pageSignature)}
+                      disabled={liveStatus === 'analyzing'}
+                      className="min-h-9 px-3 inline-flex items-center gap-1.5 rounded-xl bg-white border border-[#d2d2d7] text-xs font-semibold text-stone-800 hover:bg-[#f5f5f7] disabled:opacity-50 transition-colors"
+                    >
+                      <RefreshCw className="w-3.5 h-3.5 text-[#0071e3]" />
+                      {locale === 'en' ? 'Analyze now' : 'حلّل الآن'}
+                    </button>
+                    <button
+                      type="button"
+                      role="switch"
+                      aria-checked={autoAnalyze}
+                      onClick={() => {
+                        const next = !autoAnalyze;
+                        setAutoAnalyze(next);
+                        try {
+                          localStorage.setItem('alkammah_auto_analyze', next ? 'on' : 'off');
+                        } catch {
+                          /* ignore */
+                        }
+                      }}
+                      className={`min-h-9 px-3 inline-flex items-center gap-2 rounded-xl border text-xs font-semibold transition-colors ${
+                        autoAnalyze ? 'bg-[#0071e3] border-[#0071e3] text-white' : 'bg-white border-[#d2d2d7] text-stone-700'
+                      }`}
+                      title={locale === 'en' ? 'Read the page automatically after you stop writing' : 'قراءة الصفحة تلقائياً بعد التوقف عن الكتابة'}
+                    >
+                      <span className={`w-2 h-2 rounded-full ${autoAnalyze ? 'bg-white' : 'bg-stone-400'}`} />
+                      {locale === 'en' ? 'Auto' : 'تلقائي'}
+                    </button>
+                  </div>
+                </div>
+
+                {liveStatus === 'error' && liveError && (
+                  <div className="mx-4 mt-3 text-xs rounded-xl bg-rose-50 border border-rose-200 text-rose-800 p-3">{liveError}</div>
+                )}
+
+                {visibleLiveItems.length === 0 ? (
+                  liveStatus === 'done' && (
+                    <p className="px-4 py-5 text-xs text-stone-500 text-center">
+                      {locale === 'en'
+                        ? 'No new tasks or meetings detected on this page.'
+                        : 'لم يتم العثور على مهام أو اجتماعات جديدة في هذه الصفحة.'}
+                    </p>
+                  )
+                ) : (
+                  <ul className="p-3 space-y-2.5">
+                    {visibleLiveItems.map((c) => {
+                      const isMeeting = c.entryType === 'meeting';
+                      return (
+                        <li
+                          key={c.id}
+                          className={`rounded-xl border p-3 bg-white animate-in fade-in slide-in-from-bottom-1 duration-300 ${
+                            isMeeting ? 'border-sky-200' : 'border-emerald-200'
+                          }`}
+                        >
+                          <div className="flex items-start gap-3">
+                            <div
+                              className={`w-8 h-8 shrink-0 rounded-lg flex items-center justify-center ${
+                                isMeeting ? 'bg-sky-50 text-[#0071e3]' : 'bg-emerald-50 text-emerald-600'
+                              }`}
+                            >
+                              {isMeeting ? <Calendar className="w-4 h-4" /> : <CheckCircle2 className="w-4 h-4" />}
+                            </div>
+                            <div className="min-w-0 flex-1">
+                              <div className="text-[11px] font-semibold text-stone-500">
+                                {isMeeting
+                                  ? locale === 'en'
+                                    ? 'Meeting'
+                                    : 'اجتماع'
+                                  : locale === 'en'
+                                  ? 'Task'
+                                  : 'مهمة'}
+                                {isMeeting && c.suggestedMeetingDate
+                                  ? ` · ${c.suggestedMeetingDate}${c.suggestedStartTime ? ` · ${c.suggestedStartTime}` : ''}`
+                                  : !isMeeting && c.suggestedDueDate
+                                  ? ` · ${locale === 'en' ? 'Due' : 'الاستحقاق'} ${c.suggestedDueDate}`
+                                  : ''}
+                              </div>
+                              <div className="text-sm font-bold text-stone-900 break-words">{c.suggestedTitle}</div>
+                              {c.suggestedOwnerAlias && c.suggestedOwnerAlias !== 'Unassigned' && (
+                                <div className="text-[11px] text-stone-500 mt-0.5">{c.suggestedOwnerAlias}</div>
+                              )}
+                              {c.uncertainFields.length > 0 && (
+                                <div className="text-[11px] text-amber-700 mt-1 flex items-center gap-1">
+                                  <AlertCircle className="w-3 h-3 shrink-0" />
+                                  {locale === 'en' ? 'Please verify: ' : 'يرجى التحقق: '}
+                                  {c.uncertainFields.join(', ')}
+                                </div>
+                              )}
+                            </div>
+                          </div>
+                          <div className="mt-2.5 flex flex-wrap items-center justify-end gap-1.5">
+                            <button
+                              type="button"
+                              onClick={() => markHandled(c)}
+                              className="min-h-9 px-3 rounded-xl text-xs font-semibold text-stone-600 hover:bg-stone-100 transition-colors"
+                            >
+                              {locale === 'en' ? 'Dismiss' : 'تجاهل'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => editLive(c)}
+                              className="min-h-9 px-3 rounded-xl text-xs font-semibold text-stone-800 bg-white border border-[#d2d2d7] hover:bg-[#f5f5f7] transition-colors"
+                            >
+                              {locale === 'en' ? 'Review & edit' : 'مراجعة وتعديل'}
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => acceptLive(c)}
+                              className={`min-h-9 px-3.5 rounded-xl text-xs font-bold text-white shadow-xs transition-colors ${
+                                isMeeting ? 'bg-[#0071e3] hover:bg-[#0062c4]' : 'bg-emerald-600 hover:bg-emerald-700'
+                              }`}
+                            >
+                              {isMeeting
+                                ? locale === 'en'
+                                  ? 'Add to Calendar'
+                                  : 'أضف إلى التقويم'
+                                : locale === 'en'
+                                ? 'Add to Tasks'
+                                : 'أضف إلى المهام'}
+                            </button>
+                          </div>
+                        </li>
+                      );
+                    })}
+                  </ul>
+                )}
               </div>
 
               {/* Linked Tasks List */}
@@ -508,7 +840,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
         {/* AI Extraction Candidate Review Drawer */}
         {showReviewDrawer && (
-          <div className="absolute inset-y-0 right-0 w-full sm:w-[460px] bg-white/95 backdrop-blur-xl shadow-2xl border-l border-[#d2d2d7] z-30 flex flex-col animate-in slide-in-from-right duration-200">
+          <div className="absolute inset-y-0 right-0 z-30 w-full sm:w-[420px] lg:static lg:inset-auto lg:w-[400px] xl:w-[430px] lg:shrink-0 lg:h-full bg-white backdrop-blur-xl shadow-2xl lg:shadow-none border-l border-[#d2d2d7] flex flex-col min-h-0 animate-in slide-in-from-right duration-200">
             <div className="bg-[#f5f5f7] text-[#1d1d1f] px-5 py-3.5 border-b border-[#e5e5ea] flex items-center justify-between">
               <div className="flex items-center gap-2.5">
                 <div className="w-7 h-7 rounded-xl bg-gradient-to-tr from-[#0071e3] to-[#7928ca] flex items-center justify-center text-white shadow-xs">
@@ -625,7 +957,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                     {cand.entryType === 'meeting' ? (
                       /* Meeting Details */
                       <div className="space-y-2.5 bg-blue-50/40 p-2.5 rounded-xl border border-blue-100">
-                        <div className="grid grid-cols-3 gap-2">
+                        <div className="grid grid-cols-2 gap-2 [&>*:first-child]:col-span-2">
                           <div className="col-span-1">
                             <label className="font-semibold text-stone-700 block mb-1">
                               {locale === 'en' ? 'Date' : 'التاريخ'}
