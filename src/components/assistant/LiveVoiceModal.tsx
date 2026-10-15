@@ -486,7 +486,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
           audio: {
             echoCancellation: true,
             noiseSuppression: true,
-            autoGainControl: !nearVoiceFocusRef.current,
+            autoGainControl: false,
             channelCount: 1,
           },
         });
