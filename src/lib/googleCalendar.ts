@@ -101,6 +101,12 @@ export function requestGoogleToken(interactive: boolean): Promise<string> {
       scope: GOOGLE_SCOPE,
       callback: (resp: { access_token?: string; expires_in?: number; error?: string; error_description?: string }) => {
         if (!resp.access_token) return reject(new Error(resp.error_description || resp.error || 'Google did not return access'));
+        // Google lets the person untick permissions on the consent screen: make sure both were really granted
+        const scopes = GOOGLE_SCOPE.split(' ');
+        if (w.google.accounts.oauth2.hasGrantedAllScopes && !w.google.accounts.oauth2.hasGrantedAllScopes(resp, ...scopes)) {
+          setGoogleLink({ token: undefined, expiresAt: undefined, scopeV: undefined });
+          return reject(new Error('GOOGLE_SCOPES_MISSING'));
+        }
         setGoogleLink({ token: resp.access_token, expiresAt: Date.now() + (resp.expires_in || 3600) * 1000, scopeV: SCOPE_VERSION });
         resolve(resp.access_token);
       },
@@ -126,6 +132,15 @@ export interface GoogleEvent {
   extendedProperties?: { private?: Record<string, string> };
 }
 
+/** A 403 about scopes means the permissions were not all granted: forget the token so the next tap asks again. */
+function mapScopeError(status: number, msg: string): string {
+  if (status === 403 && /insufficient (authentication )?scopes?|insufficientPermissions/i.test(msg)) {
+    setGoogleLink({ token: undefined, expiresAt: undefined, scopeV: undefined });
+    return 'GOOGLE_SCOPES_MISSING';
+  }
+  return msg;
+}
+
 async function googleFetch<T>(url: string, token: string): Promise<T> {
   const res = await fetch(url, { headers: { Authorization: `Bearer ${token}` } });
   if (res.status === 401) {
@@ -140,7 +155,7 @@ async function googleFetch<T>(url: string, token: string): Promise<T> {
     } catch {
       /* ignore */
     }
-    throw new Error(msg);
+    throw new Error(mapScopeError(res.status, msg));
   }
   return res.json() as Promise<T>;
 }
@@ -295,7 +310,7 @@ async function googleWrite(method: 'POST' | 'PATCH' | 'DELETE', path: string, to
     } catch {
       /* ignore */
     }
-    throw new Error(msg);
+    throw new Error(mapScopeError(res.status, msg));
   }
   return res.json();
 }
