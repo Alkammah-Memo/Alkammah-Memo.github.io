@@ -63,8 +63,26 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
   const [pending, setPending] = useState<{ kind: 'archive' | 'delete'; task: Task } | null>(null);
-  const ownerOptions = Array.from(new Set(tasks.flatMap((t) => (t.ownerAlias || '').split(/[,،/&]+/).map((o) => o.trim()).filter((o) => o && o !== 'Unassigned')))).sort((a, b) => a.localeCompare(b));
-  const projectOptions = Array.from(new Set(tasks.map((t) => (t.project || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
+  // Names typed in different ways ("yara adel", "Yara ADEL ") are one person/project: group by a normalised key
+  const keyOf = (v: string) => v.trim().replace(/\s+/g, ' ').toLowerCase();
+  const niceName = (variants: string[]) => {
+    const mixed = variants.find((v) => v !== v.toLowerCase() && v !== v.toUpperCase());
+    if (mixed) return mixed.trim().replace(/\s+/g, ' ');
+    const first = variants[0].trim().replace(/\s+/g, ' ');
+    return first.length <= 3 ? first.toUpperCase() : first.replace(/\b\p{L}/gu, (c) => c.toUpperCase()).replace(/(?<=\p{L})\p{L}+/gu, (w) => w.toLowerCase());
+  };
+  const groupNames = (values: string[]) => {
+    const map = new Map<string, string[]>();
+    for (const v of values) {
+      if (!v || !v.trim() || v === 'Unassigned') continue;
+      const k = keyOf(v);
+      map.set(k, [...(map.get(k) || []), v]);
+    }
+    return [...map.entries()].map(([key, vs]) => ({ key, label: niceName(vs) })).sort((a, b) => a.label.localeCompare(b.label));
+  };
+  const splitOwners = (v: string) => (v || '').split(/[,،/&]+/).map((o) => o.trim()).filter(Boolean);
+  const ownerOptions = groupNames(tasks.flatMap((t) => splitOwners(t.ownerAlias || '')));
+  const projectOptions = groupNames(tasks.map((t) => t.project || ''));
 
   // Filter tasks
   const filteredTasks = tasks.filter((task) => {
@@ -86,14 +104,13 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
     }
 
     // Project filter
-    if (selectedProject !== 'all' && (task.project || '').trim() !== selectedProject) {
+    if (selectedProject !== 'all' && keyOf(task.project || '') !== selectedProject) {
       return false;
     }
 
     // Person filter (a task can have several owners, e.g. "YA, MM")
     if (selectedOwner !== 'all') {
-      const owners = (task.ownerAlias || '').split(/[,،/&]+/).map((o) => o.trim());
-      if (!owners.includes(selectedOwner)) return false;
+      if (!splitOwners(task.ownerAlias || '').some((o) => keyOf(o) === selectedOwner)) return false;
     }
 
     // Tab filter
@@ -292,8 +309,8 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
             >
               <option value="all">{locale === 'en' ? 'All Projects' : 'كافة المشاريع'}</option>
               {projectOptions.map((pr) => (
-                <option key={pr} value={pr}>
-                  {pr}
+                <option key={pr.key} value={pr.key}>
+                  {pr.label}
                 </option>
               ))}
             </select>
@@ -308,8 +325,8 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
             >
               <option value="all">{locale === 'en' ? 'All People' : 'كل الأشخاص'}</option>
               {ownerOptions.map((o) => (
-                <option key={o} value={o}>
-                  {o}
+                <option key={o.key} value={o.key}>
+                  {o.label}
                 </option>
               ))}
             </select>
