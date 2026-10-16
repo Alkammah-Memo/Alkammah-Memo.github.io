@@ -561,7 +561,7 @@ export default function App() {
   // Mirror changes made here quickly: a few seconds after the meetings change, sync again (only while the sign-in is valid)
   useEffect(() => {
     const l = getGoogleLink();
-    if (!l.autoSync || !l.clientId || !tokenIsValid(l) || !l.lastSyncAt) return;
+    if (!l.autoSync || !l.clientId || !(l.serverLinked || tokenIsValid(l)) || !l.lastSyncAt) return;
     const t = setTimeout(() => {
       syncGoogleCalendar(false).catch(() => undefined);
     }, 4000);
@@ -573,13 +573,19 @@ export default function App() {
   useEffect(() => {
     const run = () => {
       const l = getGoogleLink();
-      if (l.autoSync && l.clientId && tokenIsValid(l)) syncGoogleCalendar(false).catch(() => undefined);
+      // with the permanent link the token renews by itself; otherwise only while the browser sign-in is still valid
+      if (l.autoSync && l.clientId && l.lastSyncAt && (l.serverLinked || tokenIsValid(l))) syncGoogleCalendar(false).catch(() => undefined);
     };
     const first = setTimeout(run, 4000);
     const t = setInterval(run, 10 * 60_000);
+    const onVisible = () => {
+      if (document.visibilityState === 'visible') run();
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
       clearTimeout(first);
       clearInterval(t);
+      document.removeEventListener('visibilitychange', onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);

@@ -195,3 +195,80 @@ html[data-theme='glass'] [class~='bg-white'][class~='text-[#0071e3]'] {
     --g-blur: none;
   }
 }
+
+/* ------------------------------------------------------------------------------------------------
+ * Dark glass (iOS 18 style night look). Same glass theme, dark wallpaper, dark frosted panels, light text.
+ * ---------------------------------------------------------------------------------------------- */
+html[data-theme='glass'][data-wallpaper='dark'] {
+  color-scheme: dark;
+  --g-surface: rgba(44, 46, 54, 0.56);
+  --g-surface-strong: rgba(34, 36, 44, 0.86);
+  --g-sub: rgba(255, 255, 255, 0.08);
+  --g-edge: rgba(255, 255, 255, 0.14);
+  --g-line: rgba(255, 255, 255, 0.24);
+  --g-shadow: 0 10px 34px rgba(0, 0, 0, 0.45), inset 0 1px 0 rgba(255, 255, 255, 0.09);
+  --g-blur: blur(26px) saturate(1.5);
+  --g-wallpaper:
+    radial-gradient(60% 55% at 12% 8%, #1c3f78 0%, transparent 62%),
+    radial-gradient(55% 50% at 92% 14%, #43266f 0%, transparent 60%),
+    radial-gradient(60% 60% at 80% 92%, #5a2342 0%, transparent 62%),
+    radial-gradient(55% 55% at 8% 88%, #12463f 0%, transparent 60%),
+    linear-gradient(160deg, #080a12, #12101d);
+}
+html[data-theme='glass'][data-wallpaper='dark'] body { color: #f5f5f7; }
+
+/* text: the app writes dark text colours everywhere, so flip them to light ones */
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-[#1d1d1f]'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-stone-900'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-stone-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-slate-900'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-black'] { color: #f5f5f7 !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-stone-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-slate-700'] { color: #e5e5ea !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-[#515154]'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-stone-600'] { color: #c7c7cc !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-[#6e6e73]'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-[#86868b]'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-stone-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-stone-400'] { color: #a1a1a8 !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-[#0071e3]'] { color: #4da3ff !important; }
+
+/* fields */
+html[data-theme='glass'][data-wallpaper='dark'] input:not([type='checkbox']):not([type='radio']):not([type='range']),
+html[data-theme='glass'][data-wallpaper='dark'] select,
+html[data-theme='glass'][data-wallpaper='dark'] textarea {
+  background-color: rgba(255, 255, 255, 0.1) !important;
+  color: #f5f5f7 !important;
+}
+html[data-theme='glass'][data-wallpaper='dark'] input::placeholder,
+html[data-theme='glass'][data-wallpaper='dark'] textarea::placeholder { color: #8e8e95; }
+
+/* small controls and the active tab pill */
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-white'][class~='rounded-xl'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-white'][class~='rounded-lg'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-white/90'][class~='rounded-xl'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-white/90'][class~='rounded-full'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-white'][class~='rounded-full'][class~='border'] {
+  background-color: rgba(255, 255, 255, 0.12) !important;
+}
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-white'][class~='text-[#0071e3]'] {
+  background-color: rgba(255, 255, 255, 0.2) !important;
+}
+html[data-theme='glass'][data-wallpaper='dark'] .fixed [class~='bg-white'],
+html[data-theme='glass'][data-wallpaper='dark'] .fixed [class~='bg-white/95'] {
+  background-color: rgba(30, 32, 40, 0.88) !important;
+}
+html[data-theme='glass'][data-wallpaper='dark'] .fixed [class~='sticky'][class~='bg-white'] {
+  background-color: rgba(30, 32, 40, 0.94) !important;
+}
+/* solid dark buttons would disappear on dark glass: use the iOS blue */
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-slate-900'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-[#1d1d1f]'] {
+  background-color: #0a84ff !important;
+  border-color: #0a84ff !important;
+  color: #fff !important;
+}
+/* white round knobs (switches) stay white */
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-white'][class~='rounded-full']:not([class~='border']) {
+  background-color: #fff !important;
+}
