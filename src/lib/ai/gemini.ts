@@ -141,6 +141,65 @@ ${context ? `سياق النظام والمواعيد الحالية: ${JSON.str
   return { text, audio, functionCalls };
 }
 
+
+export interface VoiceTurn {
+  role: 'user' | 'spero';
+  text: string;
+}
+
+/** Cheapest capable model first: voice turns are short, so flash-lite is plenty and has the roomiest free limits. */
+const ECONOMY_VOICE_MODEL = 'gemini-3.1-flash-lite';
+
+/**
+ * Economy voice turn. The phone does the listening and the speaking for free; this is ONE small text request
+ * (two only when a tool ran and its result must be read back). Returns the sentence Spero should say.
+ */
+export async function economyVoiceTurn(
+  query: string,
+  locale: 'en' | 'ar',
+  context: unknown,
+  history: VoiceTurn[],
+  execute: (name: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>
+): Promise<string> {
+  const m = models();
+  const order = [ECONOMY_VOICE_MODEL, ...m.chatFallbacks, m.chat];
+  const systemInstruction = `${SPERO_PERSONA}
+التوقيت الحالي في القاهرة: ${cairoNowLabel()} (ISO محلي: ${cairoNowIsoLabel()}).
+${SPERO_TOOL_RULES}
+قواعد المحادثة الصوتية: ردّي بجملة أو جملتين كحد أقصى، بلا قوائم ولا رموز، وبنبرة طبيعية مهذبة تُقرأ بصوت عالٍ. إذا طُلب اجتماع ولم يُذكر مع من أو موضوعه فاسألي عنه أولاً.
+سياق النظام الحالي: ${JSON.stringify(context)}`;
+
+  const contents: { role: string; parts: Record<string, unknown>[] }[] = [
+    ...history.slice(-8).map((h) => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] })),
+    { role: 'user', parts: [{ text: query }] },
+  ];
+  const config = { systemInstruction, temperature: 0.3, maxOutputTokens: 350, tools: EXECUTIVE_FUNCTION_TOOLS };
+
+  const first = await generate(order, { contents: contents as never, config });
+  const calls = extractCalls(first);
+  if (calls.length === 0) {
+    return first.text || (locale === 'ar' ? 'تفضّل، المهندس محمد.' : 'Yes, Eng. Mohamed.');
+  }
+
+  const results: { name: string; response: Record<string, unknown> }[] = [];
+  for (const call of calls) {
+    try {
+      results.push({ name: call.name, response: await execute(call.name, call.args) });
+    } catch (err) {
+      results.push({ name: call.name, response: { ok: false, error: (err as Error)?.message || String(err) } });
+    }
+  }
+
+  const modelContent = first.candidates?.[0]?.content;
+  const followUp = [
+    ...contents,
+    modelContent || { role: 'model', parts: calls.map((c) => ({ functionCall: { name: c.name, args: c.args } })) },
+    { role: 'user', parts: results.map((r) => ({ functionResponse: { name: r.name, response: r.response } })) },
+  ];
+  const second = await generate(order, { contents: followUp as never, config });
+  return second.text || (locale === 'ar' ? 'تم، المهندس محمد.' : 'Done, Eng. Mohamed.');
+}
+
 const INK_PROMPT = `You are an expert bilingual executive document transcriber for a CEO of an industrial / land-development group in Egypt. The page is a photo or export of his handwritten digital planner (Egyptian Arabic and English mixed on the same line, written in blue ink, with orange ink for status marks).
 
 HOW HE WRITES (read the page the way he writes it):
