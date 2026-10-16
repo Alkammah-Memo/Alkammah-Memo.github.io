@@ -113,10 +113,22 @@ html[data-theme='glass'] [class~='border-b'][class~='bg-white'] {
   box-shadow: none;
 }
 
+/* inside a window the header, body and footer are ONE sheet of glass: no second tint or blur on each part (that made the body look grey) */
+html[data-theme='glass'] .fixed [class~='bg-white'][class~='overflow-hidden'] [class~='bg-white']:not([class*='rounded']) {
+  background-color: transparent !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: none;
+}
+/* ...except a sticky footer, which must stay readable over the scrolling form */
+html[data-theme='glass'] .fixed [class~='sticky'][class~='bg-white'] {
+  background-color: rgba(255, 255, 255, 0.9) !important;
+}
+
 /* windows over a dimmed backdrop are more opaque so text stays easy to read */
 html[data-theme='glass'] .fixed [class~='bg-white'],
 html[data-theme='glass'] .fixed [class~='bg-white/95'] {
-  background-color: var(--g-surface-strong) !important;
+  background-color: rgba(255, 255, 255, 0.86) !important;
 }
 
 html[data-theme='glass'] [class~='border-[#d2d2d7]'],

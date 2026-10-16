@@ -58,7 +58,7 @@ import { mergeRemote } from './lib/merge';
 import { keyManager } from './lib/ai/keyManager';
 import { usage } from './lib/ai/modelQueue';
 import { NotificationCenter } from './components/notifications/NotificationCenter';
-import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planSync, pushMeeting, deleteGoogleEvent, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid } from './lib/googleCalendar';
+import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planSync, pushMeeting, deleteGoogleEvent, syncTasksToGoogle, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid } from './lib/googleCalendar';
 import { chatWithAssistant } from './lib/ai/gemini';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { SettingsView } from './components/settings/SettingsView';
@@ -541,6 +541,9 @@ export default function App() {
           deleteMeetingFromCloud(m.id).catch(console.warn);
         }
       }
+      // 4) open tasks with a due date show up in Google Calendar too
+      await syncTasksToGoogle(token, tasksRef.current, from.slice(0, 10), to.slice(0, 10));
+
       // remember what is mirrored now, so a later deletion here can be recognised
       const known = meetingsRef.current.map((m) => m.googleEventId).filter((x): x is string => !!x);
       setGoogleLink({ email, lastSyncAt: new Date().toISOString(), lastCount: remote.length, known });
@@ -564,7 +567,7 @@ export default function App() {
     }, 4000);
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [meetings]);
+  }, [meetings, tasks]);
 
   // Quietly refresh from Google when the app opens and every 10 minutes, as long as the sign-in is still valid
   useEffect(() => {
