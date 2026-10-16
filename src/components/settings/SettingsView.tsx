@@ -21,7 +21,8 @@ import {
 import type { Locale } from '../../lib/translations';
 import { keyManager, DEFAULT_MODELS, KEY_SLOT_COUNT } from '../../lib/ai/keyManager';
 import type { GeminiSettings, KeySlot, ModelSettings } from '../../lib/ai/keyManager';
-import { testGeminiKey, economyVoiceTurn } from '../../lib/ai/gemini';
+import { testGeminiKey, economyVoiceTurn, speedTestModels } from '../../lib/ai/gemini';
+import type { SpeedRow } from '../../lib/ai/gemini';
 import { getVoiceEngine, setVoiceEngine } from '../../lib/ai/voiceEngine';
 import type { VoiceEngine } from '../../lib/ai/voiceEngine';
 import type { KeyTestResult } from '../../lib/ai/gemini';
@@ -66,6 +67,17 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [saveMessage, setSaveMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [showModels, setShowModels] = useState(false);
   const [engine, setEngine] = useState<VoiceEngine>(() => getVoiceEngine());
+  const [speedRows, setSpeedRows] = useState<SpeedRow[] | null>(null);
+  const [speedBusy, setSpeedBusy] = useState(false);
+  const runSpeedTest = async () => {
+    setSpeedBusy(true);
+    setSpeedRows(null);
+    try {
+      setSpeedRows(await speedTestModels(['gemini-3.1-flash-lite', 'gemini-3.8-flash', 'gemini-flash-latest', saved.models.transcribe]));
+    } finally {
+      setSpeedBusy(false);
+    }
+  };
   const [voiceTestText, setVoiceTestText] = useState('');
   const [voiceTestState, setVoiceTestState] = useState<{ busy: boolean; reply?: string; error?: string; secs?: number }>({ busy: false });
   const runVoiceTest = async () => {
@@ -316,6 +328,24 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
           {voiceTestState.reply && <p className="mt-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 break-words">{voiceTestState.reply} <span className="font-mono text-[11px] opacity-70">({voiceTestState.secs}s)</span></p>}
           {voiceTestState.error && <p className="mt-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 break-words">{voiceTestState.error}</p>}
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#ececf0]">
+          <div className="flex items-center justify-between gap-2">
+            <span className="text-xs font-semibold text-[#515154]">{ar ? 'اختبار سرعة النماذج (نص وصوت)' : 'Model speed test (text and audio)'}</span>
+            <button type="button" onClick={() => void runSpeedTest()} disabled={speedBusy} className="min-h-10 px-4 rounded-xl bg-[#f5f5f7] border border-[#d2d2d7] text-xs font-bold disabled:opacity-40">
+              {speedBusy ? (ar ? 'جارٍ القياس...' : 'Measuring…') : ar ? 'ابدأ' : 'Run'}
+            </button>
+          </div>
+          {speedRows && (
+            <ul className="mt-2 space-y-1 text-xs font-mono">
+              {speedRows.map((r) => (
+                <li key={r.model} className="flex justify-between gap-2 bg-[#f5f5f7] rounded-lg px-3 py-1.5">
+                  <span className="truncate">{r.model}</span>
+                  <span className="shrink-0">{r.error ? `✗ ${r.error}` : `text ${r.textSecs}s · audio ${r.audioSecs}s`}</span>
+                </li>
+              ))}
+            </ul>
+          )}
         </div>
       </section>
 
