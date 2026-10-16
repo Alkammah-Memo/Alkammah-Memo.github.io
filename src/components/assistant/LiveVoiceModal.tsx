@@ -2,7 +2,9 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Locale } from '../../lib/translations';
 import { VoiceDebugMonitor, SpeechEvent } from './VoiceDebugMonitor';
 import { GeminiLiveSocket, LIVE_OPEN, LIVE_CONNECTING } from '../../lib/ai/liveSocket';
-import { voiceFastQuery } from '../../lib/ai/gemini';
+import { voiceFastQuery, economyVoiceTurn } from '../../lib/ai/gemini';
+import type { VoiceTurn } from '../../lib/ai/gemini';
+import { getVoiceEngine, getSpeechRecognitionCtor } from '../../lib/ai/voiceEngine';
 import { getCairoDateString } from '../../lib/cairoTime';
 import {
   X,
@@ -171,6 +173,10 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
   const lastNearVoiceTimeRef = useRef<number>(0);
 
   const wsRef = useRef<GeminiLiveSocket | null>(null);
+  // Economy engine (device speech in and out, one small text request per turn) and idle auto-stop
+  const economyHistoryRef = useRef<VoiceTurn[]>([]);
+  const economyBusyRef = useRef<boolean>(false);
+  const lastActivityRef = useRef<number>(Date.now());
   const meetingsRef = useRef<any[]>([]);
   const tasksRef = useRef<any[]>([]);
   meetingsRef.current = meetings;
@@ -352,6 +358,20 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     setIsSessionActive(false);
     setStatus('idle');
   }, [stopMicrophone, stopAiPlayback]);
+
+  // Stop automatically when nobody has spoken for a while, so an idle microphone never burns quota
+  useEffect(() => {
+    if (!isSessionActive) return;
+    lastActivityRef.current = Date.now();
+    const timer = setInterval(() => {
+      if (!activeRef.current || nearVoiceFocusRef.current) return;
+      if (Date.now() - lastActivityRef.current > 150_000) {
+        setReconnectNote(locale === 'ar' ? 'تم إيقاف الجلسة تلقائياً لعدم وجود حديث. اضغط للتحدث مجدداً.' : 'Session stopped automatically after a quiet spell. Tap to talk again.');
+        terminateSession();
+      }
+    }, 10_000);
+    return () => clearInterval(timer);
+  }, [isSessionActive, terminateSession, locale]);
 
   // Dynamic Siri Animated Waveform Visualizer Loop (runs in background and updates audioLevel at 60fps)
   const startWaveformVisualizer = (analyser: AnalyserNode) => {
@@ -779,7 +799,146 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     }
   };
 
+  // ---------------------------------------------------------------------------------------------
+  // Economy voice: the phone listens and speaks (free); Gemini only sees short text. Lasts for hours.
+  // ---------------------------------------------------------------------------------------------
+  const speakEconomy = (text: string) => {
+    const resume = () => {
+      isAiSpeakingRef.current = false;
+      lastAiSpeechTimeRef.current = Date.now();
+      economyBusyRef.current = false;
+      if (activeRef.current) {
+        setStatus('listening');
+        listenOnce();
+      }
+    };
+    if (!('speechSynthesis' in window)) {
+      setTimeout(resume, 1500);
+      return;
+    }
+    try {
+      window.speechSynthesis.cancel();
+      const utterance = new SpeechSynthesisUtterance(text);
+      utterance.lang = locale === 'ar' ? 'ar-EG' : 'en-US';
+      const voices = window.speechSynthesis.getVoices();
+      const wanted = locale === 'ar' ? 'ar' : 'en';
+      utterance.voice =
+        voices.find((v) => v.lang.replace('_', '-').toLowerCase() === utterance.lang.toLowerCase()) ||
+        voices.find((v) => v.lang.toLowerCase().startsWith(wanted)) ||
+        null;
+      utterance.rate = 1;
+      utterance.onend = resume;
+      utterance.onerror = resume;
+      isAiSpeakingRef.current = true;
+      setStatus('speaking');
+      window.speechSynthesis.speak(utterance);
+    } catch {
+      resume();
+    }
+  };
+
+  const economyTurn = async (text: string) => {
+    economyBusyRef.current = true;
+    lastActivityRef.current = Date.now();
+    setStatus('connecting');
+    setLastTranscript('');
+    addDebugLog('INFO', 'SpeechTTS', `User said: "${text}"`);
+    try {
+      const reply = await economyVoiceTurn(
+        text,
+        locale,
+        { meetings: buildMeetingContext(), tasks: buildTaskContext() },
+        economyHistoryRef.current,
+        async (name, args) => ((await executeToolSafely(name, args)) ?? { ok: false, error: 'No result' }) as Record<string, unknown>
+      );
+      economyHistoryRef.current = [...economyHistoryRef.current, { role: 'user' as const, text }, { role: 'spero' as const, text: reply }].slice(-12);
+      lastActivityRef.current = Date.now();
+      setLastTranscript(reply);
+      speakEconomy(reply);
+    } catch (err) {
+      addDebugLog('ERROR', 'SpeechTTS', 'Voice turn failed', err instanceof Error ? err.message : String(err));
+      const msg = locale === 'ar' ? 'تعذّر تنفيذ الطلب الآن، المهندس محمد. يرجى المحاولة مرة أخرى.' : 'I could not complete that request just now, Eng. Mohamed. Please try again.';
+      setLastTranscript(msg);
+      speakEconomy(msg);
+    }
+  };
+
+  const listenOnce = () => {
+    if (!activeRef.current || economyBusyRef.current) return;
+    const SR = getSpeechRecognitionCtor();
+    if (!SR) return;
+    let finalText = '';
+    let lastInterim = '';
+    try {
+      const rec = new SR();
+      rec.lang = locale === 'ar' ? 'ar-EG' : 'en-US';
+      rec.interimResults = true;
+      rec.continuous = false;
+      rec.maxAlternatives = 1;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rec.onresult = (event: any) => {
+        let interim = '';
+        for (let i = event.resultIndex; i < event.results.length; i++) {
+          const r = event.results[i];
+          if (r.isFinal) finalText += r[0].transcript;
+          else interim += r[0].transcript;
+        }
+        lastInterim = interim;
+        lastActivityRef.current = Date.now();
+        setUserTranscript((finalText + interim).trim());
+      };
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      rec.onerror = (e: any) => {
+        if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') {
+          setReconnectNote(locale === 'ar' ? 'الميكروفون غير مسموح به. فعّل الإذن من إعدادات المتصفح.' : 'Microphone or speech permission is blocked. Allow it in the browser settings.');
+          terminateSession();
+        }
+      };
+      rec.onend = () => {
+        recognitionRef.current = null;
+        if (!activeRef.current || economyBusyRef.current) return;
+        const said = (finalText || lastInterim).trim();
+        if (said) void economyTurn(said);
+        else setTimeout(listenOnce, 250);
+      };
+      rec.start();
+      recognitionRef.current = rec;
+      setStatus('listening');
+    } catch {
+      setTimeout(listenOnce, 600);
+    }
+  };
+
+  const initEconomySession = () => {
+    activeRef.current = true;
+    setIsSessionActive(true);
+    setLastTranscript('');
+    setUserTranscript('');
+    setReconnectNote('');
+    economyHistoryRef.current = [];
+    economyBusyRef.current = false;
+    lastActivityRef.current = Date.now();
+    setMicActive(true);
+    setStatus('listening');
+    addDebugLog('INFO', 'SpeechTTS', 'Economy voice session started (device speech, flash-lite text)');
+    // iOS only allows speech output after a tap: speak a silent utterance now so later replies are allowed
+    try {
+      if ('speechSynthesis' in window) {
+        const unlock = new SpeechSynthesisUtterance(' ');
+        unlock.volume = 0;
+        window.speechSynthesis.speak(unlock);
+      }
+    } catch {
+      /* ignore */
+    }
+    listenOnce();
+  };
+
   const initLiveSession = async () => {
+    if (getVoiceEngine() === 'economy' && getSpeechRecognitionCtor()) {
+      initEconomySession();
+      return;
+    }
     activeRef.current = true;
     setIsSessionActive(true);
     setStatus('connecting');
@@ -819,6 +978,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
 
       ws.onmessage = async (event) => {
         if (!activeRef.current) return;
+        lastActivityRef.current = Date.now();
         try {
           const data = JSON.parse(event.data);
 
@@ -1467,7 +1627,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
 
     const label = {
       idle: ar ? 'اضغط للتحدث' : 'Tap to talk',
-      connecting: ar ? 'جارٍ الاتصال' : 'Connecting',
+      connecting: economyBusyRef.current ? (ar ? 'تفكّر...' : 'Thinking…') : ar ? 'جارٍ الاتصال' : 'Connecting',
       reconnecting: ar ? 'إعادة الاتصال' : 'Reconnecting',
       speaking: ar ? 'سبيرو تتحدث' : 'Spero is speaking',
       listening: nearVoiceDetected ? (ar ? 'أسمعك' : 'Hearing you') : ar ? 'أستمع إليك' : 'Listening',
