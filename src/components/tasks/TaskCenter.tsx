@@ -56,6 +56,8 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkstream, setSelectedWorkstream] = useState<string>('all');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
+  const [selectedProject, setSelectedProject] = useState<string>('all');
+  const projectOptions = Array.from(new Set(tasks.map((t) => (t.project || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
   // Filter tasks
   const filteredTasks = tasks.filter((task) => {
@@ -73,6 +75,11 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
 
     // Department filter
     if (selectedDepartment !== 'all' && task.department !== selectedDepartment) {
+      return false;
+    }
+
+    // Project filter
+    if (selectedProject !== 'all' && (task.project || '').trim() !== selectedProject) {
       return false;
     }
 
@@ -221,7 +228,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
         </div>
 
         {/* Search & Dropdown Selectors */}
-        <div className="grid grid-cols-1 sm:grid-cols-3 gap-2.5 pt-2 border-t border-stone-100">
+        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2 border-t border-stone-100">
           <div className="relative">
             <Search className="w-4 h-4 text-stone-400 absolute start-3 top-2.5" />
             <input
@@ -258,6 +265,22 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
               {departments.map((dept) => (
                 <option key={dept} value={dept}>
                   {dept}
+                </option>
+              ))}
+            </select>
+          </div>
+
+          <div>
+            <select
+              value={selectedProject}
+              onChange={(e) => setSelectedProject(e.target.value)}
+              aria-label={locale === 'en' ? 'Filter by project' : 'تصفية حسب المشروع'}
+              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 focus:bg-white focus:outline-none"
+            >
+              <option value="all">{locale === 'en' ? 'All Projects' : 'كافة المشاريع'}</option>
+              {projectOptions.map((pr) => (
+                <option key={pr} value={pr}>
+                  {pr}
                 </option>
               ))}
             </select>

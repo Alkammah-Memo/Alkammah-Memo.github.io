@@ -2,6 +2,7 @@ import React, { useState, useEffect } from 'react';
 import { Task, Workstream, TaskStatus, TaskPriority } from '../../types';
 import { Locale, translations } from '../../lib/translations';
 import { INITIAL_WORKSTREAMS, INITIAL_DEPARTMENTS } from '../../lib/referenceData';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import { X, Calendar, User, Building2, Flag, AlertCircle, FileText, CheckCircle2 } from 'lucide-react';
 
 interface TaskModalProps {
@@ -25,6 +26,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 }) => {
   const t = translations[locale];
   const ar = locale === 'ar';
+  const [confirmDelete, setConfirmDelete] = useState(false);
 
   const [title, setTitle] = useState(task?.title || '');
   const [description, setDescription] = useState(task?.description || '');
@@ -393,17 +395,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             {task && onDelete ? (
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm(ar ? 'هل تريد حذف هذه المهمة؟' : 'Delete this task?')) {
-                    onDelete(task.id);
-                    onClose();
-                  }
-                }}
+                onClick={() => setConfirmDelete(true)}
                 className="px-3.5 py-2 text-xs font-medium text-red-600 hover:text-red-700 hover:bg-red-50 rounded-xl transition-colors"
               >
                 {t.delete}
               </button>
             ) : <div />}
+            {task && onDelete && (
+              <ConfirmDialog
+                open={confirmDelete}
+                ar={ar}
+                title={ar ? 'هل تريد حذف هذه المهمة؟' : 'Delete this task?'}
+                detail={task.title}
+                onCancel={() => setConfirmDelete(false)}
+                onConfirm={() => {
+                  setConfirmDelete(false);
+                  onDelete(task.id);
+                  onClose();
+                }}
+              />
+            )}
 
             <div className="flex items-center gap-2">
               <button
