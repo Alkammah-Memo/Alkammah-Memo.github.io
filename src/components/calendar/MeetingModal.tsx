@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Meeting } from '../../types';
 import { Locale, translations } from '../../lib/translations';
 import { checkMeetingConflicts, cairoDateOf, cairoTimeOf, cairoLocalToIso, getCairoDateString } from '../../lib/cairoTime';
@@ -30,6 +31,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
   const t = translations[locale];
   const ar = locale === 'ar';
   const [formError, setFormError] = useState<string>('');
+  const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
 
   const toMinutes = (hhmm: string) => {
     const [h, m] = hhmm.split(':').map(Number);
@@ -306,17 +308,26 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
             {meeting?.id && onDelete ? (
               <button
                 type="button"
-                onClick={() => {
-                  if (window.confirm(ar ? 'هل تريد حذف هذا الاجتماع؟' : 'Delete this meeting?')) {
-                    onDelete(meeting.id);
-                    onClose();
-                  }
-                }}
+                onClick={() => setConfirmDelete(true)}
                 className="px-3 py-1.5 text-xs text-red-600 hover:bg-red-50 rounded-xl"
               >
                 {t.delete}
               </button>
             ) : <div />}
+            {meeting?.id && onDelete && (
+              <ConfirmDialog
+                open={confirmDelete}
+                ar={ar}
+                title={ar ? 'هل تريد حذف هذا الاجتماع؟' : 'Delete this meeting?'}
+                detail={meeting.title}
+                onCancel={() => setConfirmDelete(false)}
+                onConfirm={() => {
+                  setConfirmDelete(false);
+                  onDelete(meeting.id);
+                  onClose();
+                }}
+              />
+            )}
 
             <div className="flex items-center gap-2">
               <button
