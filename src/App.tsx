@@ -358,7 +358,7 @@ export default function App() {
 
     setTimeout(() => {
       setUndoToast((prev) => (prev?.message === message ? null : prev));
-    }, 6000);
+    }, 5000);
   };
 
   // 1. Task Operations
@@ -453,7 +453,7 @@ export default function App() {
     await localDB.delete('tasks', taskId);
     deleteTaskFromCloud(taskId).catch(console.warn);
 
-    triggerUndoToast(`Deleted "${task.title}"`, async () => {
+    triggerUndoToast(locale === 'ar' ? `تم حذف المهمة "${task.title}"` : `Task deleted: "${task.title}"`, async () => {
       setTasks((prev) => [task, ...prev]);
       await localDB.put('tasks', task);
       syncTaskToCloud(task).catch(console.warn);
@@ -533,7 +533,7 @@ export default function App() {
     await localDB.delete('meetings', meetingId);
     deleteMeetingFromCloud(meetingId).catch(console.warn);
 
-    triggerUndoToast(`Deleted "${m.title}"`, async () => {
+    triggerUndoToast(locale === 'ar' ? `تم حذف الاجتماع "${m.title}"` : `Meeting deleted: "${m.title}"`, async () => {
       setMeetings((prev) => [m, ...prev]);
       await localDB.put('meetings', m);
       syncMeetingToCloud(m).catch(console.warn);
