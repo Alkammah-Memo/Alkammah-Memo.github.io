@@ -31,7 +31,7 @@ export function clientFor(apiKey: string): GoogleGenAI {
 type GenParams = Omit<GenerateContentParameters, 'model'>;
 
 /** Tries each model on the current key; a rejected key aborts the model loop so the next key can try. */
-async function generate(models: string[], params: GenParams): Promise<GenerateContentResponse> {
+async function generate(models: string[], params: GenParams, opts: { maxRounds?: number } = {}): Promise<GenerateContentResponse> {
   const unique = [...new Set(models.filter(Boolean))];
   return runWithFailover(async (apiKey) => {
     const ai = clientFor(apiKey);
@@ -45,7 +45,7 @@ async function generate(models: string[], params: GenParams): Promise<GenerateCo
       }
     }
     throw lastError;
-  });
+  }, opts);
 }
 
 const models = (): ModelSettings => keyManager.getSettings().models;
@@ -183,7 +183,8 @@ export async function economyVoiceTurn(
   context: unknown,
   history: VoiceTurn[],
   execute: (name: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>,
-  speakLang: 'ar' | 'en' = 'ar'
+  speakLang: 'ar' | 'en' = 'ar',
+  audio?: { data: string; mime: string }
 ): Promise<string> {
   const m = models();
   const order = [ECONOMY_VOICE_MODEL, ...m.chatFallbacks, m.chat];
@@ -196,17 +197,22 @@ ${SPERO_TOOL_RULES}
 
   const contents: { role: string; parts: Record<string, unknown>[] }[] = [
     ...history.slice(-8).map((h) => ({ role: h.role === 'user' ? 'user' : 'model', parts: [{ text: h.text }] })),
-    { role: 'user', parts: [{ text: query }] },
+    {
+      role: 'user',
+      parts: audio
+        ? [{ inlineData: { mimeType: audio.mime.split(';')[0], data: audio.data } }, { text: 'هذا طلب المهندس محمد المنطوق (تسجيل صوتي). افهميه ثم نفّذيه أو أجيبي عليه مباشرة.' }]
+        : [{ text: query }],
+    },
   ];
   const config = { systemInstruction, temperature: 0.3, maxOutputTokens: 350, tools: EXECUTIVE_FUNCTION_TOOLS };
 
   // Voice needs speed: ask for minimal "thinking"; if a model rejects that setting, retry without it
   const gen = async (params: GenParams): Promise<GenerateContentResponse> => {
     try {
-      return await generate(order, { ...params, config: { ...params.config, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } });
+      return await generate(order, { ...params, config: { ...params.config, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } }, { maxRounds: 1 });
     } catch (err) {
       const kind = classifyError(err).kind;
-      if (kind === 'bad_request' || kind === 'model') return generate(order, params);
+      if (kind === 'bad_request' || kind === 'model') return generate(order, params, { maxRounds: 1 });
       throw err;
     }
   };
