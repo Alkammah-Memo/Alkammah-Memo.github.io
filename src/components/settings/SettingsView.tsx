@@ -272,14 +272,14 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </div>
         <p className="text-xs text-[#515154] mb-3">
           {ar
-            ? 'الاقتصادي يستخدم الاستماع والنطق داخل الجهاز مجاناً، ولا يرسل لـ Gemini إلا نصاً قصيراً، فيكفي لساعات من الحديث. المباشر صوته أطبع لكنه يستهلك حصة المفاتيح بسرعة.'
-            : 'Economy listens and speaks on the device for free and only sends short text to Gemini, so it lasts for hours of conversation. Live sounds more natural but uses up key quota quickly.'}
+            ? 'الأساسي هو الصوت المباشر (Gemini Live). عندما تنتهي حصته على كل المفاتيح يتحول سبيرو تلقائياً إلى الصوت الاقتصادي، ثم إلى صوت الجهاز عند انتهاء كل شيء. يمكنك تثبيت الاقتصادي فقط إن أردت.'
+            : 'Live voice (Gemini Live) is the default. When it is used up on every key, Spero switches to Economy by itself, then to the device voice when everything is used up. You can pin Economy only if you prefer.'}
         </p>
         <div className="grid sm:grid-cols-2 gap-3" role="radiogroup" aria-label={ar ? 'محرك الصوت' : 'Voice engine'}>
           {(
             [
-              ['economy', ar ? 'اقتصادي (مجاني)' : 'Economy (free)', ar ? 'يكفي ساعة حديث وأكثر. الصوت من الجهاز.' : 'Lasts an hour of talking and more. Voice comes from the device.'],
-              ['live', ar ? 'مباشر (Gemini Live)' : 'Live (Gemini Live)', ar ? 'صوت طبيعي جداً، لكنه يستهلك حد المفاتيح بسرعة.' : 'Very natural voice, but drains the key limits fast.'],
+              ['live', ar ? 'مباشر (الأساسي)' : 'Live (default)', ar ? 'صوت طبيعي وسريع، ويتحول تلقائياً للاقتصادي عند انتهاء حصته.' : 'Natural and fast. Switches to Economy by itself when its quota is used up.'],
+              ['economy', ar ? 'اقتصادي فقط' : 'Economy only', ar ? 'يبقى على الاقتصادي دائماً. الصوت من الجهاز ويكفي ساعات.' : 'Always stays on Economy. Voice comes from the device and lasts hours.'],
             ] as const
           ).map(([id, title, sub]) => (
             <button
