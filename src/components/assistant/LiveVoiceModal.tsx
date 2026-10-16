@@ -1,4 +1,5 @@
-import { earliestResume, formatWait } from '../../lib/ai/modelQueue';
+import { earliestResume, formatWait, usage } from '../../lib/ai/modelQueue';
+import { keyManager } from '../../lib/ai/keyManager';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Locale } from '../../lib/translations';
 import { VoiceDebugMonitor, SpeechEvent } from './VoiceDebugMonitor';
@@ -1174,9 +1175,26 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     listenNext();
   };
 
+  // Live voice can be used while at least one key still has it available
+  const liveAvailable = () => {
+    const liveModel = keyManager.getSettings().models.live;
+    return keyManager.getSettings().slots.some((s) => s.key && !usage.isBlocked(s.id, liveModel));
+  };
+
+  // Live is used up on every key: Economy takes over (and the device voice after that), and the user is told why
+  const fallBackToEconomy = () => {
+    addDebugLog('WARN', 'GeminiLive', 'Live voice is used up on every key; switching to Economy');
+    initEconomySession();
+    setReconnectNote(locale === 'ar' ? 'انتهت حصة الصوت المباشر، فتم التحويل تلقائياً إلى الصوت الاقتصادي.' : 'Live voice is used up, so Spero switched to Economy voice automatically.');
+  };
+
   const initLiveSession = async () => {
     if (getVoiceEngine() === 'economy') {
       initEconomySession();
+      return;
+    }
+    if (!liveAvailable()) {
+      fallBackToEconomy();
       return;
     }
     activeRef.current = true;
@@ -1242,6 +1260,12 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
               setStatus((prev) => (prev === 'speaking' ? prev : 'listening'));
               addDebugLog('SUCCESS', 'WebSocket', `Live voice connected via ${data.label || 'key'}`);
             }
+          }
+
+          if (data.liveExhausted) {
+            terminateSession();
+            setTimeout(fallBackToEconomy, 60);
+            return;
           }
 
           if (data.error && data.fatal) {
