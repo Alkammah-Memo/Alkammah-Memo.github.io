@@ -51,8 +51,8 @@ export const GoogleCalendarSettings: React.FC<{ ar: boolean; onSync?: SyncFn }> 
     <Fold id="google" icon={<CalendarDays className="w-5 h-5" />} title={ar ? 'تقويم Google' : 'Google Calendar'}>
       <p className="text-xs text-[#515154] mb-3">
         {ar
-          ? 'سجّل الدخول بحساب Google الظاهر في متصفحك (اختيار الحساب بضغطة)، فتُستورد مواعيدك إلى التقويم هنا. الاستيراد للقراءة فقط: لا يُكتب أو يُغيَّر شيء في تقويم Google.'
-          : 'Sign in with the Google account in your browser (one tap to pick it) and your events are imported into the calendar here. Read-only: nothing is ever written or changed in Google Calendar.'}
+          ? 'سجّل الدخول بحساب Google (اختيار الحساب بضغطة) فيصبح التقويم مرآة في الاتجاهين: مواعيد Google تظهر هنا، وأي اجتماع تضيفه أو تعدّله أو تحذفه هنا يُضاف أو يُعدَّل أو يُحذف في تقويم Google (التقويم الرئيسي) خلال ثوانٍ.'
+          : 'Sign in with Google (one tap to pick the account) and the calendar mirrors both ways: Google events appear here, and any meeting you add, change or delete here is added, changed or deleted in your main Google calendar within seconds.'}
       </p>
 
       <label className="block text-xs font-semibold text-[#515154]" htmlFor="gclient">
@@ -116,9 +116,11 @@ export const GoogleCalendarSettings: React.FC<{ ar: boolean; onSync?: SyncFn }> 
             {ar ? 'آخر مزامنة' : 'Last sync'}: {link.lastSyncAt ? new Date(link.lastSyncAt).toLocaleString(ar ? 'ar-EG' : 'en-GB', { timeZone: 'Africa/Cairo' }) : '-'} · {link.lastCount ?? 0} {ar ? 'حدث' : 'events'}
           </div>
           <div>
-            {tokenIsValid(link)
-              ? ar ? 'الدخول ساري، وتتجدد المواعيد تلقائياً كل ١٠ دقائق.' : 'Sign-in active; events refresh automatically every 10 minutes.'
-              : ar ? 'انتهى الدخول (يدوم ساعة). اضغط "مزامنة الآن" لتجديده بضغطة.' : 'Sign-in expired (it lasts an hour). Tap "Sync now" to renew it in one tap.'}
+            {link.scopeV !== 2
+              ? ar ? 'لتفعيل المزامنة في الاتجاهين اضغط "مزامنة الآن" ووافق على الصلاحية الجديدة (تعديل المواعيد).' : 'To turn on two-way sync, tap "Sync now" and approve the new permission (edit events).'
+              : tokenIsValid(link)
+              ? ar ? 'المزامنة في الاتجاهين نشطة: التغييرات هنا تصل Google خلال ثوانٍ، وتتجدد مواعيد Google كل ١٠ دقائق.' : 'Two-way sync is active: changes here reach Google within seconds, and Google events refresh every 10 minutes.'
+              : ar ? 'انتهى الدخول (يدوم ساعة). اضغط "مزامنة الآن" لتجديده بضغطة، وحتى ذلك الحين تُرسل تغييراتك عند التجديد.' : 'Sign-in expired (it lasts an hour). Tap "Sync now" to renew it in one tap; changes made meanwhile are sent then.'}
           </div>
         </div>
       )}
