@@ -1,0 +1,161 @@
+/*
+ * iOS Glass theme. Active when <html data-theme="glass">. It re-skins the whole app (surfaces, borders, fields, bars, modals)
+ * from one place: a soft wallpaper, frosted translucent panels with bright edges, floating rounded bars.
+ * Notebook paper keeps its own colours so handwriting always stays readable.
+ */
+html[data-theme='glass'] {
+  --g-surface: rgba(255, 255, 255, 0.56);
+  --g-surface-strong: rgba(255, 255, 255, 0.8);
+  --g-sub: rgba(255, 255, 255, 0.34);
+  --g-edge: rgba(255, 255, 255, 0.72);
+  --g-line: rgba(60, 60, 67, 0.16);
+  --g-shadow: 0 10px 34px rgba(40, 50, 110, 0.14), inset 0 1px 0 rgba(255, 255, 255, 0.7);
+  --g-blur: blur(24px) saturate(1.7);
+  --g-wallpaper:
+    radial-gradient(60% 55% at 12% 8%, #8ec5ff 0%, transparent 62%),
+    radial-gradient(55% 50% at 92% 14%, #d9a7ff 0%, transparent 60%),
+    radial-gradient(60% 60% at 80% 92%, #ffb3c7 0%, transparent 62%),
+    radial-gradient(55% 55% at 8% 88%, #9be7d6 0%, transparent 60%),
+    linear-gradient(160deg, #dfe9ff, #f3e6ff);
+}
+html[data-theme='glass'][data-wallpaper='sunset'] {
+  --g-wallpaper:
+    radial-gradient(60% 55% at 10% 10%, #ffc38a 0%, transparent 62%),
+    radial-gradient(55% 55% at 90% 12%, #ff9db8 0%, transparent 60%),
+    radial-gradient(65% 60% at 78% 92%, #b79bff 0%, transparent 62%),
+    radial-gradient(55% 55% at 10% 90%, #ffd9a0 0%, transparent 60%),
+    linear-gradient(160deg, #ffe9d6, #ffdce8);
+}
+html[data-theme='glass'][data-wallpaper='ocean'] {
+  --g-wallpaper:
+    radial-gradient(60% 55% at 10% 8%, #7fe0ff 0%, transparent 62%),
+    radial-gradient(55% 55% at 92% 16%, #7fa8ff 0%, transparent 60%),
+    radial-gradient(65% 60% at 82% 92%, #7ff0d4 0%, transparent 62%),
+    radial-gradient(55% 55% at 8% 90%, #a6c8ff 0%, transparent 60%),
+    linear-gradient(160deg, #d9f1ff, #dffaf1);
+}
+html[data-theme='glass'][data-wallpaper='graphite'] {
+  --g-wallpaper:
+    radial-gradient(60% 55% at 12% 8%, #c9d3e6 0%, transparent 62%),
+    radial-gradient(55% 50% at 92% 14%, #d9d2ee 0%, transparent 60%),
+    radial-gradient(60% 60% at 80% 92%, #cfdde0 0%, transparent 62%),
+    linear-gradient(160deg, #eceff5, #e3e6ee);
+}
+
+html[data-theme='glass'],
+html[data-theme='glass'] body {
+  background: var(--g-wallpaper) !important;
+  background-attachment: fixed !important;
+}
+
+/* the app root and page areas become see-through so the wallpaper shows */
+html[data-theme='glass'] [class~='bg-[#f5f5f7]'][class~='h-[100dvh]'] {
+  background: transparent !important;
+}
+
+/* sub-surfaces: pills, inputs' wells, hover fills (light frost, no blur so lists stay fast) */
+html[data-theme='glass'] [class~='bg-[#f5f5f7]'],
+html[data-theme='glass'] [class~='bg-[#f5f5f7]/80'],
+html[data-theme='glass'] [class~='bg-[#f5f5f7]/70'],
+html[data-theme='glass'] [class~='bg-[#f5f5f7]/50'],
+html[data-theme='glass'] [class~='bg-stone-50'],
+html[data-theme='glass'] [class~='bg-stone-50/80'],
+html[data-theme='glass'] [class~='bg-stone-50/60'],
+html[data-theme='glass'] [class~='bg-stone-50/30'],
+html[data-theme='glass'] [class~='bg-stone-100'],
+html[data-theme='glass'] [class~='bg-stone-100/80'],
+html[data-theme='glass'] [class~='bg-stone-100/70'],
+html[data-theme='glass'] [class~='bg-[#e8e8ed]'],
+html[data-theme='glass'] [class~='bg-[#FAF8F5]'],
+html[data-theme='glass'] [class~='bg-[#e5e5ea]/80'] {
+  background-color: var(--g-sub) !important;
+}
+
+/* main surfaces: frosted glass cards, panels, bars, popovers */
+html[data-theme='glass'] [class~='bg-white'],
+html[data-theme='glass'] [class~='bg-white/95'],
+html[data-theme='glass'] [class~='bg-white/90'],
+html[data-theme='glass'] [class~='bg-white/85'],
+html[data-theme='glass'] [class~='bg-white/80'] {
+  background-color: var(--g-surface) !important;
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+  box-shadow: var(--g-shadow);
+}
+/* tiny white things (switch knobs, radio dots) must stay solid and flat */
+html[data-theme='glass'] [class~='bg-white'][class~='rounded-full'] {
+  background-color: #fff !important;
+  -webkit-backdrop-filter: none;
+  backdrop-filter: none;
+  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.25);
+}
+/* windows over a dimmed backdrop are more opaque so text stays easy to read */
+html[data-theme='glass'] .fixed [class~='bg-white'],
+html[data-theme='glass'] .fixed [class~='bg-white/95'] {
+  background-color: var(--g-surface-strong) !important;
+}
+
+html[data-theme='glass'] [class~='border-[#d2d2d7]'],
+html[data-theme='glass'] [class~='border-[#d2d2d7]/60'],
+html[data-theme='glass'] [class~='border-[#d2d2d7]/70'],
+html[data-theme='glass'] [class~='border-[#d2d2d7]/80'],
+html[data-theme='glass'] [class~='border-stone-100'],
+html[data-theme='glass'] [class~='border-stone-200'],
+html[data-theme='glass'] [class~='border-[#ececf0]'] {
+  border-color: var(--g-edge) !important;
+}
+
+/* fields keep a readable edge */
+html[data-theme='glass'] input:not([type='checkbox']):not([type='radio']):not([type='range']),
+html[data-theme='glass'] select,
+html[data-theme='glass'] textarea {
+  background-color: rgba(255, 255, 255, 0.74) !important;
+  border-color: var(--g-line) !important;
+  border-radius: 0.85rem;
+}
+html[data-theme='glass'] [class~='border-stone-300'] {
+  border-color: var(--g-line) !important;
+}
+
+/* generous rounding everywhere, like iOS */
+html[data-theme='glass'] [class~='rounded-2xl'] { border-radius: 1.35rem; }
+html[data-theme='glass'] [class~='rounded-3xl'] { border-radius: 1.75rem; }
+
+/* floating top bar and bottom bar */
+html[data-theme='glass'] [data-shell='header'] {
+  margin: 0.5rem 0.5rem 0;
+  border-radius: 1.4rem;
+  border: 1px solid var(--g-edge);
+  height: 3.5rem;
+}
+html[data-theme='glass'] [data-shell='bottom'] {
+  margin: 0 0.5rem calc(0.4rem + env(safe-area-inset-bottom));
+  border-radius: 1.6rem;
+  border: 1px solid var(--g-edge);
+  padding-bottom: 0.4rem;
+}
+html[data-theme='glass'] [data-shell='restore'] {
+  background: var(--g-surface-strong);
+  -webkit-backdrop-filter: var(--g-blur);
+  backdrop-filter: var(--g-blur);
+  border: 1px solid var(--g-edge);
+}
+
+/* page areas: comfortable breathing room around the floating panels */
+html[data-theme='glass'] main { scrollbar-width: thin; }
+
+/* the notebook workspace: the surround turns to glass, the paper itself is untouched */
+html[data-theme='glass'] [class~='bg-[#e5e5ea]/80'] { background-color: rgba(255, 255, 255, 0.28) !important; }
+
+/* active tab pills read as lifted glass */
+html[data-theme='glass'] [class~='bg-white'][class~='text-[#0071e3]'] {
+  background-color: rgba(255, 255, 255, 0.92) !important;
+}
+
+@media (prefers-reduced-transparency: reduce) {
+  html[data-theme='glass'] {
+    --g-surface: rgba(255, 255, 255, 0.95);
+    --g-sub: rgba(245, 245, 247, 0.95);
+    --g-blur: none;
+  }
+}

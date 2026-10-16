@@ -19,6 +19,26 @@
     }
   }
 
+  /* Native date and time pickers on iOS ignore the width of their box and spill into the next field */
+  input[type='date'],
+  input[type='time'],
+  input[type='datetime-local'],
+  input[type='month'] {
+    -webkit-appearance: none;
+    appearance: none;
+    display: block;
+    width: 100%;
+    max-width: 100%;
+    min-width: 0;
+    min-height: 2.5rem;
+    box-sizing: border-box;
+    text-align: start;
+  }
+  input[type='date']::-webkit-date-and-time-value {
+    text-align: start;
+    min-height: 1.2em;
+  }
+
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     background-color: #f5f5f7;
@@ -144,3 +164,25 @@
 @media (prefers-reduced-motion: reduce) {
   .spero-orbit, .spero-orbit-mid, .spero-orbit-fast, .spero-halo, .spero-ring, .spero-bar { animation: none; }
 }
+
+/* Calendar: the view slides in from the side it was swiped toward */
+@keyframes cal-in-next-kf { from { opacity: 0; transform: translateX(28px); } to { opacity: 1; transform: none; } }
+@keyframes cal-in-prev-kf { from { opacity: 0; transform: translateX(-28px); } to { opacity: 1; transform: none; } }
+.cal-in-next { animation: cal-in-next-kf 0.26s ease-out; }
+.cal-in-prev { animation: cal-in-prev-kf 0.26s ease-out; }
+@media (prefers-reduced-motion: reduce) { .cal-in-next, .cal-in-prev { animation: none; } }
+
+/* Notifications */
+@keyframes notif-ring-kf { 0%, 88%, 100% { transform: rotate(0); } 90% { transform: rotate(14deg); } 93% { transform: rotate(-12deg); } 96% { transform: rotate(8deg); } 98% { transform: rotate(-5deg); } }
+@keyframes notif-pop-kf { 0% { transform: scale(0.4); } 60% { transform: scale(1.25); } 100% { transform: scale(1); } }
+@keyframes notif-item-kf { from { opacity: 0; transform: translateY(-8px); } to { opacity: 1; transform: none; } }
+@keyframes notif-panel-kf { from { opacity: 0; transform: translateY(-10px) scale(0.97); } to { opacity: 1; transform: none; } }
+@keyframes notif-toast-kf { from { opacity: 0; transform: translate(-50%, -140%); } to { opacity: 1; transform: translate(-50%, 0); } }
+@keyframes notif-dot-kf { 0%, 100% { opacity: 1; transform: scale(1); } 50% { opacity: 0.4; transform: scale(1.6); } }
+.notif-bell { animation: notif-ring-kf 4s ease-in-out infinite; transform-origin: 50% 10%; }
+.notif-pop { animation: notif-pop-kf 0.35s ease-out; }
+.notif-item { animation: notif-item-kf 0.28s ease-out backwards; }
+.notif-panel { animation: notif-panel-kf 0.2s ease-out; transform-origin: top right; }
+.notif-toast { animation: notif-toast-kf 0.42s cubic-bezier(0.2, 0.9, 0.3, 1.2); }
+.notif-dot { animation: notif-dot-kf 1.6s ease-in-out infinite; }
+@media (prefers-reduced-motion: reduce) { .notif-bell, .notif-pop, .notif-item, .notif-panel, .notif-toast, .notif-dot { animation: none; } }

@@ -57,6 +57,8 @@ import type { CollectionName } from './lib/cloud';
 import { mergeRemote } from './lib/merge';
 import { keyManager } from './lib/ai/keyManager';
 import { usage } from './lib/ai/modelQueue';
+import { NotificationCenter } from './components/notifications/NotificationCenter';
+import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planImport, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid } from './lib/googleCalendar';
 import { chatWithAssistant } from './lib/ai/gemini';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { SettingsView } from './components/settings/SettingsView';
@@ -491,6 +493,52 @@ export default function App() {
       }
     );
   };
+
+  // Google Calendar: pull events (read-only) and merge them into the meetings
+  const syncGoogleCalendar = async (interactive: boolean): Promise<{ added: number; updated: number; removed: number; email: string }> => {
+    let token = getGoogleLink().token;
+    if (!tokenIsValid()) token = await requestGoogleToken(interactive);
+    if (!token) throw new Error('GOOGLE_TOKEN_EXPIRED');
+    const from = new Date(Date.now() - 30 * 86400_000).toISOString();
+    const to = new Date(Date.now() + 365 * 86400_000).toISOString();
+    const { email } = await fetchPrimaryCalendar(token);
+    const incoming = eventsToMeetings(await fetchGoogleEvents(token, from, to));
+    const current = meetingsRef.current;
+    const plan = planImport(current, incoming, from, to);
+    const knownIds = new Set(current.map((m) => m.id));
+    if (plan.upsert.length || plan.remove.length) {
+      const removeIds = new Set(plan.remove.map((m) => m.id));
+      const upsertMap = new Map(plan.upsert.map((m) => [m.id, m]));
+      const next = [...plan.upsert.filter((m) => !knownIds.has(m.id)), ...current.filter((m) => !removeIds.has(m.id)).map((m) => upsertMap.get(m.id) || m)];
+      meetingsRef.current = next;
+      setMeetings(next);
+      for (const m of plan.upsert) {
+        await localDB.put('meetings', m);
+        syncMeetingToCloud(m).catch(console.warn);
+      }
+      for (const m of plan.remove) {
+        await localDB.delete('meetings', m.id);
+        deleteMeetingFromCloud(m.id).catch(console.warn);
+      }
+    }
+    setGoogleLink({ email, lastSyncAt: new Date().toISOString(), lastCount: incoming.length });
+    return { added: plan.upsert.filter((m) => !knownIds.has(m.id)).length, updated: plan.upsert.filter((m) => knownIds.has(m.id)).length, removed: plan.remove.length, email };
+  };
+
+  // Quietly refresh from Google when the app opens and every 10 minutes, as long as the sign-in is still valid
+  useEffect(() => {
+    const run = () => {
+      const l = getGoogleLink();
+      if (l.autoSync && l.clientId && tokenIsValid(l)) syncGoogleCalendar(false).catch(() => undefined);
+    };
+    const first = setTimeout(run, 4000);
+    const t = setInterval(run, 10 * 60_000);
+    return () => {
+      clearTimeout(first);
+      clearInterval(t);
+    };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
 
   // 2. Meeting Operations
   const handleSaveMeeting = async (meetingData: Partial<Meeting>) => {
@@ -1440,6 +1488,25 @@ export default function App() {
         setIsMeetingModalOpen(true);
       }}
       onOpenBackupModal={() => setIsBackupModalOpen(true)}
+      headerExtras={
+        <NotificationCenter
+          meetings={meetings}
+          tasks={tasks}
+          locale={locale}
+          onOpenMeeting={(m) => {
+            setCurrentTab('calendar');
+            setSelectedMeetingForModal(m);
+            setSelectedMeetingInitialDate(undefined);
+            setSelectedMeetingInitialTime(undefined);
+            setIsMeetingModalOpen(true);
+          }}
+          onOpenTask={(t) => {
+            setCurrentTab('tasks');
+            setSelectedTaskForModal(t);
+            setIsTaskModalOpen(true);
+          }}
+        />
+      }
     >
       {/* Tab Views */}
       {currentTab === 'today' && (
@@ -1613,6 +1680,7 @@ export default function App() {
           isCloudConfigured={isCloudConfigured}
           userEmail={user?.email}
           onSignOut={() => void signOutUser()}
+          onSyncGoogle={syncGoogleCalendar}
         />
       )}
 
