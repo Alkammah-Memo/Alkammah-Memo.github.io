@@ -118,7 +118,7 @@ export const NotificationCenter: React.FC<Props> = ({ meetings, tasks, locale, o
         createPortal(
           <div className="fixed inset-0 z-[450]" onClick={() => setOpen(false)}>
             <div
-              className={`notif-panel absolute top-14 ${edge} w-[min(94vw,24rem)] max-h-[min(75dvh,34rem)] flex flex-col rounded-3xl border border-white/60 bg-white/90 backdrop-blur-2xl shadow-2xl overflow-hidden`}
+              className={`notif-panel absolute top-[4.4rem] ${edge} w-[min(94vw,24rem)] max-h-[min(75dvh,34rem)] flex flex-col rounded-3xl border border-white/60 bg-white/90 backdrop-blur-2xl shadow-2xl overflow-hidden`}
               onClick={(e) => e.stopPropagation()}
               dir={ar ? 'rtl' : 'ltr'}
               role="dialog"
