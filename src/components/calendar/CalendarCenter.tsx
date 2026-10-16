@@ -142,10 +142,10 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
     .sort((a, b) => new Date(a.start).getTime() - new Date(b.start).getTime());
 
   return (
-    <div className="space-y-4 max-w-7xl mx-auto pb-16">
+    <div className="space-y-3 sm:space-y-4 max-w-7xl mx-auto pb-4 sm:pb-16">
       {/* Header bar */}
-      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-4 sm:p-6 rounded-2xl border border-stone-200 shadow-xs">
-        <div>
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-2 sm:gap-4 bg-white p-3 sm:p-6 rounded-2xl border border-stone-200 shadow-xs">
+        <div className="max-sm:hidden">
           <div className="flex items-center gap-2 text-xs font-mono text-stone-500 uppercase mb-1">
             <Clock className="w-3.5 h-3.5 text-emerald-600" />
             <span>{ar ? 'توقيت القاهرة · بداية الأسبوع الأحد' : 'CAIRO TIME · WEEK STARTS SUNDAY'}</span>
@@ -254,12 +254,12 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
           </div>
 
           {/* Month Day Cells */}
-          <div className="grid grid-cols-7 divide-x divide-y divide-stone-100 min-h-[550px]">
+          <div className="grid grid-cols-7 divide-x divide-y divide-stone-100 sm:min-h-[550px]">
             {/* Blank cells before 1st of month */}
             {Array.from({ length: firstDayIndex }).map((_, i) => (
               <div
                 key={`blank-${i}`}
-                className="bg-stone-50/30 p-2 min-h-[100px]"
+                className="bg-stone-50/30 p-1 sm:p-2 min-h-[56px] sm:min-h-[100px]"
                 style={i % 7 === 5 || i % 7 === 6 ? { backgroundImage: WEEKEND_HATCH } : undefined}
               />
             ))}
@@ -277,7 +277,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                 <div
                   key={`day-${dayNum}`}
                   onClick={() => onOpenMeetingModal(null, cellDateStr)}
-                  className="p-2 min-h-[100px] hover:bg-blue-50/20 transition-colors flex flex-col justify-between group cursor-pointer relative"
+                  className="p-1 sm:p-2 min-h-[56px] sm:min-h-[100px] hover:bg-blue-50/20 transition-colors flex flex-col justify-between group cursor-pointer relative"
                   style={(firstDayIndex + i) % 7 >= 5 ? { backgroundImage: WEEKEND_HATCH } : undefined}
                 >
                   <div className="flex items-center justify-between text-xs font-mono">
@@ -293,7 +293,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                     <div className="flex items-center gap-1">
                       {dayMeetings.length > 0 && (
                         <span className="text-[10px] bg-blue-100 text-blue-800 px-1.5 py-0.2 rounded font-bold">
-                          {dayMeetings.length} {ar ? 'اجتماع' : dayMeetings.length === 1 ? 'meeting' : 'meetings'}
+                          {dayMeetings.length}<span className="max-sm:hidden"> {ar ? 'اجتماع' : dayMeetings.length === 1 ? 'meeting' : 'meetings'}</span>
                         </span>
                       )}
                       <button

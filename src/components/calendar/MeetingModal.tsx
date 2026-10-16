@@ -149,7 +149,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
       <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full border border-stone-200 overflow-hidden my-8">
         <div className="bg-white text-stone-900 px-6 py-4 flex items-center justify-between border-b border-stone-200">
           <div>
