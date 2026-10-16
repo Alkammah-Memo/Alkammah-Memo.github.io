@@ -25,3 +25,21 @@ export function getSpeechRecognitionCtor(): any {
   const w = window as unknown as { SpeechRecognition?: unknown; webkitSpeechRecognition?: unknown };
   return w.SpeechRecognition || w.webkitSpeechRecognition || null;
 }
+
+/** Makes a model reply fit for speaking aloud: no markdown symbols, no lists, and at most ~3 short sentences. */
+export function cleanForSpeech(text: string, maxChars = 320): string {
+  let t = String(text || '')
+    .replace(/```[\s\S]*?```/g, ' ')
+    .replace(/[*_#`>~|]+/g, '')
+    .replace(/^\s*[-•]\s+/gm, '')
+    .replace(/^\s*\d+[.)]\s+/gm, '')
+    .replace(/\s*\n+\s*/g, '. ')
+    .replace(/\.\s*\./g, '.')
+    .replace(/\s{2,}/g, ' ')
+    .trim();
+  if (t.length <= maxChars) return t;
+  const cut = t.slice(0, maxChars);
+  const end = Math.max(cut.lastIndexOf('.'), cut.lastIndexOf('؟'), cut.lastIndexOf('?'), cut.lastIndexOf('!'), cut.lastIndexOf('،'));
+  t = (end > 40 ? cut.slice(0, end + 1) : cut).trim();
+  return t;
+}
