@@ -595,7 +595,7 @@ export default function App() {
       notebookId: targetNb.id,
       workspaceId: 'default-ws',
       pageNumber: newPageNum,
-      title: `${targetNb.title} — Page ${newPageNum}`,
+      title: locale === 'ar' ? `صفحة ${newPageNum}` : `Page ${newPageNum}`,
       template: 'commercial_new_lands',
       strokes: [],
       linkedTaskIds: [],
@@ -752,6 +752,17 @@ export default function App() {
         paperColor: 'white' as const,
       }))
     );
+  };
+
+  /** Creates an empty notebook (unique name) with a first blank page, and opens it in the library */
+  const handleCreateNotebook = async (title: string) => {
+    const base = title.trim();
+    if (!base) return;
+    let name = base;
+    let n = 2;
+    while (notebooksRef.current.some((nb) => nb.title === name)) name = `${base} (${n++})`;
+    const nb = await ensureNotebook(name, 'Corporate / Personal', '');
+    setActiveNotebookId(nb.id);
   };
 
   const handleDeletePage = async (pageId: string) => {
@@ -1467,6 +1478,8 @@ export default function App() {
           onNewPage={handleNewPage}
           onOpenPlanner={handleOpenPlannerPage}
           onDeletePage={handleDeletePage}
+          onCreateNotebook={handleCreateNotebook}
+          onOpenImport={() => setIsBackupModalOpen(true)}
         />
       )}
 
