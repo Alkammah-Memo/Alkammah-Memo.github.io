@@ -282,7 +282,7 @@ export const ExecutiveAssistant: React.FC<ExecutiveAssistantProps> = ({
   const samplePromptsList = SAMPLE_PROMPTS[locale] || SAMPLE_PROMPTS.en;
 
   return (
-    <div className="flex flex-col h-[calc(100vh-4.25rem)] max-w-5xl mx-auto bg-white/90 backdrop-blur-2xl rounded-3xl border border-[#d2d2d7] shadow-xl overflow-hidden pb-4">
+    <div className="flex flex-col h-full max-w-5xl mx-auto bg-white/90 backdrop-blur-2xl rounded-3xl border border-[#d2d2d7] shadow-xl overflow-hidden pb-4">
       {/* Assistant Header with Live Voice Trigger */}
       <div className="bg-[#fbfbfd] text-[#1d1d1f] px-6 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#d2d2d7]/60">
         <div className="flex items-center gap-3">
