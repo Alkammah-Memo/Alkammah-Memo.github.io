@@ -89,8 +89,8 @@ export async function transcribeAudio(audioBase64: string, mimeType?: string): P
   };
   const textOf = (res: GenerateContentResponse) =>
     (res.text || (res.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join(' ')).trim();
-  // Try the transcription model first, then the general models; the first one that returns words wins
-  const order = [...new Set([m.transcribe, 'gemini-3.1-flash-lite', m.chat, ...m.chatFallbacks].filter(Boolean))];
+  // Flash-lite is fast and reliable for short clips; the others are only fallbacks. The first model that returns words wins
+  const order = [...new Set(['gemini-3.1-flash-lite', m.transcribe, m.chat, ...m.chatFallbacks].filter(Boolean))];
   let lastErr: unknown = null;
   for (const model of order) {
     for (const withThinking of [true, false]) {
