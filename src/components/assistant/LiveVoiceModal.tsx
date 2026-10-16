@@ -4,7 +4,7 @@ import { VoiceDebugMonitor, SpeechEvent } from './VoiceDebugMonitor';
 import { GeminiLiveSocket, LIVE_OPEN, LIVE_CONNECTING } from '../../lib/ai/liveSocket';
 import { voiceFastQuery, economyVoiceTurn } from '../../lib/ai/gemini';
 import type { VoiceTurn } from '../../lib/ai/gemini';
-import { getVoiceEngine, getSpeechRecognitionCtor } from '../../lib/ai/voiceEngine';
+import { getVoiceEngine, getSpeechRecognitionCtor, cleanForSpeech } from '../../lib/ai/voiceEngine';
 import { getCairoDateString } from '../../lib/cairoTime';
 import {
   X,
@@ -846,13 +846,13 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     setLastTranscript('');
     addDebugLog('INFO', 'SpeechTTS', `User said: "${text}"`);
     try {
-      const reply = await economyVoiceTurn(
+      const reply = cleanForSpeech(await economyVoiceTurn(
         text,
         locale,
         { meetings: buildMeetingContext(), tasks: buildTaskContext() },
         economyHistoryRef.current,
         async (name, args) => ((await executeToolSafely(name, args)) ?? { ok: false, error: 'No result' }) as Record<string, unknown>
-      );
+      ));
       economyHistoryRef.current = [...economyHistoryRef.current, { role: 'user' as const, text }, { role: 'spero' as const, text: reply }].slice(-12);
       lastActivityRef.current = Date.now();
       setLastTranscript(reply);
