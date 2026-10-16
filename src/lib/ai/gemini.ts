@@ -77,11 +77,12 @@ export async function chatWithAssistant(
 
 export async function transcribeAudio(audioBase64: string, mimeType?: string): Promise<string> {
   const m = models();
-  const clean = audioBase64.replace(/^data:audio\/[\w.+-]+;base64,/, '');
+  const clean = audioBase64.split('base64,').pop() || '';
+  const baseMime = (mimeType || 'audio/webm').split(';')[0];
   const res = await generate([m.transcribe, m.chat, ...m.chatFallbacks], {
     contents: {
       parts: [
-        { inlineData: { mimeType: mimeType || 'audio/webm', data: clean } },
+        { inlineData: { mimeType: baseMime, data: clean } },
         {
           text: 'Transcribe this executive audio accurately. The speaker may speak Arabic (Egyptian or Modern Standard), English, or mixed English and Arabic. Return only the verbatim transcription text.',
         },
