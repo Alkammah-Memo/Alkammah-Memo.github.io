@@ -355,7 +355,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
           </div>
 
           {/* Month Day Cells */}
-          <div className="grid grid-cols-7 divide-x divide-y divide-stone-100 sm:min-h-[550px]">
+          <div className="grid grid-cols-7 auto-rows-auto divide-x divide-y divide-stone-100 sm:min-h-[550px]">
             {/* Blank cells before 1st of month */}
             {Array.from({ length: firstDayIndex }).map((_, i) => (
               <div
@@ -378,7 +378,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                 <div
                   key={`day-${dayNum}`}
                   onClick={() => openDay(cellDateStr)}
-                  className="p-1 sm:p-2 min-h-[56px] sm:min-h-[100px] hover:bg-blue-50/20 transition-colors flex flex-col justify-between group cursor-pointer relative"
+                  className="p-0.5 sm:p-2 min-h-[72px] sm:min-h-[100px] hover:bg-blue-50/20 transition-colors flex flex-col justify-between group cursor-pointer relative"
                   style={(firstDayIndex + i) % 7 >= 5 ? { backgroundImage: WEEKEND_HATCH } : undefined}
                 >
                   <div className="flex items-center justify-between text-xs font-mono">
@@ -411,58 +411,36 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                     </div>
                   </div>
 
-                  {/* Badges in cell: a few chips on larger screens, dots on phones; tapping the day opens it with everything in full */}
-                  <div className="my-1 space-y-1 min-w-0">
-                    <div className="hidden sm:block space-y-1">
-                      {dayMeetings.slice(0, 2).map((m) => (
-                        <div
-                          key={m.id}
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            onOpenMeetingModal(m);
-                          }}
-                          className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 text-[10px] p-1 rounded font-medium truncate cursor-pointer transition-colors shadow-2xs"
-                          title={`${cairoTimeOf(m.start)} - ${cairoTimeOf(m.end)}: ${m.title}`}
-                        >
-                          <span className="font-mono text-blue-700 font-bold me-1">{cairoTimeOf(m.start)}</span>
-                          {m.title}
-                        </div>
-                      ))}
-                      {dayMeetings.length < 2 &&
-                        dayTasks.slice(0, 2 - dayMeetings.length).map((t) => (
-                          <div
-                            key={t.id}
-                            onClick={(e) => {
-                              e.stopPropagation();
-                              onOpenTaskModal(t);
-                            }}
-                            className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-[10px] p-1 rounded font-medium truncate cursor-pointer transition-colors"
-                            title={t.title}
-                          >
-                            {ar ? 'مهمة' : 'Task'}: {t.title}
-                          </div>
-                        ))}
-                      {dayMeetings.length + dayTasks.length > 2 && (
-                        <button
-                          type="button"
-                          onClick={(e) => {
-                            e.stopPropagation();
-                            openDay(cellDateStr);
-                          }}
-                          className="w-full text-start text-[10px] font-bold text-[#0071e3] hover:underline"
-                        >
-                          {ar ? `+${dayMeetings.length + dayTasks.length - Math.min(2, dayMeetings.length + Math.min(dayTasks.length, Math.max(0, 2 - dayMeetings.length)))} أخرى` : `+${dayMeetings.length + dayTasks.length - Math.min(2, dayMeetings.length + Math.min(dayTasks.length, Math.max(0, 2 - dayMeetings.length)))} more`}
-                        </button>
-                      )}
-                    </div>
-                    <div className="sm:hidden flex flex-wrap gap-0.5">
-                      {dayMeetings.slice(0, 4).map((m) => (
-                        <span key={m.id} className="w-1.5 h-1.5 rounded-full bg-blue-500" />
-                      ))}
-                      {dayTasks.slice(0, 3).map((t) => (
-                        <span key={t.id} className="w-1.5 h-1.5 rounded-full bg-amber-500" />
-                      ))}
-                    </div>
+                  {/* Every meeting and task of the day is listed by name (the cell grows to fit); tapping an item opens it, tapping the day opens the day view */}
+                  <div className="my-1 space-y-0.5 sm:space-y-1 min-w-0">
+                    {dayMeetings.map((m) => (
+                      <div
+                        key={m.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenMeetingModal(m);
+                        }}
+                        className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 text-[9px] sm:text-[10px] leading-tight px-1 py-0.5 sm:p-1 rounded font-medium cursor-pointer transition-colors shadow-2xs break-words line-clamp-2 sm:line-clamp-none sm:truncate"
+                        title={`${cairoTimeOf(m.start)} - ${cairoTimeOf(m.end)}: ${m.title}`}
+                      >
+                        <span className="font-mono text-blue-700 font-bold me-0.5 max-sm:hidden">{cairoTimeOf(m.start)}</span>
+                        {m.title}
+                      </div>
+                    ))}
+                    {dayTasks.map((t) => (
+                      <div
+                        key={t.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          onOpenTaskModal(t);
+                        }}
+                        className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-[9px] sm:text-[10px] leading-tight px-1 py-0.5 sm:p-1 rounded font-medium cursor-pointer transition-colors break-words line-clamp-2 sm:line-clamp-none sm:truncate"
+                        title={t.title}
+                      >
+                        <span className="max-sm:hidden">{ar ? 'مهمة' : 'Task'}: </span>
+                        {t.title}
+                      </div>
+                    ))}
                   </div>
 
                   <div />
