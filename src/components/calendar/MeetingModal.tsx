@@ -203,7 +203,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
             />
           </div>
 
-          <div className="grid grid-cols-2 md:grid-cols-3 landscape:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-1 min-[520px]:grid-cols-3 gap-2.5">
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {locale === 'en' ? 'Date (Cairo)' : 'التاريخ'}

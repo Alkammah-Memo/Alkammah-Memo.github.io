@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useMemo, useRef, useState } from 'react';
 import { Meeting, Task } from '../../types';
 import { Locale, translations } from '../../lib/translations';
 import { formatCairoDateDisplay, getCairoDateString, cairoDateOf, cairoTimeOf } from '../../lib/cairoTime';
@@ -27,7 +27,7 @@ interface CalendarCenterProps {
   onOpenTaskModal: (task: Task) => void;
 }
 
-type CalendarViewMode = 'month' | 'week' | 'day' | 'agenda';
+type CalendarViewMode = 'year' | 'month' | 'week' | 'day' | 'agenda';
 
 export const CalendarCenter: React.FC<CalendarCenterProps> = ({
   meetings,
@@ -53,34 +53,57 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
       new Date(Date.UTC(d.getFullYear(), d.getMonth(), d.getDate(), 12))
     );
 
-  // Date navigation
-  const prevDate = () => {
-    if (viewMode === 'month') {
-      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() - 1, 1));
-    } else if (viewMode === 'week') {
-      const d = new Date(currentDate);
-      d.setDate(d.getDate() - 7);
-      setCurrentDate(d);
-    } else if (viewMode === 'day') {
-      const d = new Date(currentDate);
-      d.setDate(d.getDate() - 1);
-      setCurrentDate(d);
-    }
+  // Date navigation: one step is a day, week, month or year depending on the view; swiping the calendar does the same
+  const [slide, setSlide] = useState<{ dir: 'next' | 'prev'; n: number }>({ dir: 'next', n: 0 });
+  const shift = (dir: 1 | -1) => {
+    const d = new Date(currentDate);
+    if (viewMode === 'year') return goTo(new Date(d.getFullYear() + dir, d.getMonth(), 1), dir);
+    if (viewMode === 'month') return goTo(new Date(d.getFullYear(), d.getMonth() + dir, 1), dir);
+    if (viewMode === 'week') d.setDate(d.getDate() + 7 * dir);
+    else if (viewMode === 'day') d.setDate(d.getDate() + dir);
+    else return;
+    goTo(d, dir);
+  };
+  const goTo = (d: Date, dir: 1 | -1) => {
+    setCurrentDate(d);
+    setSlide((s) => ({ dir: dir === 1 ? 'next' : 'prev', n: s.n + 1 }));
+  };
+  const prevDate = () => shift(-1);
+  const nextDate = () => shift(1);
+  const openDay = (dateStr: string) => {
+    const [y, m, d] = dateStr.split('-').map(Number);
+    setCurrentDate(new Date(y, m - 1, d));
+    setViewMode('day');
   };
 
-  const nextDate = () => {
-    if (viewMode === 'month') {
-      setCurrentDate(new Date(currentDate.getFullYear(), currentDate.getMonth() + 1, 1));
-    } else if (viewMode === 'week') {
-      const d = new Date(currentDate);
-      d.setDate(d.getDate() + 7);
-      setCurrentDate(d);
-    } else if (viewMode === 'day') {
-      const d = new Date(currentDate);
-      d.setDate(d.getDate() + 1);
-      setCurrentDate(d);
-    }
+  // Swipe (finger or mouse drag) left/right moves the calendar; vertical scrolling is left alone
+  const swipe = useRef<{ x: number; y: number; at: number } | null>(null);
+  const justSwiped = useRef(false);
+  const onSwipeDown = (e: React.PointerEvent) => {
+    if (viewMode === 'agenda') return;
+    swipe.current = { x: e.clientX, y: e.clientY, at: Date.now() };
   };
+  const onSwipeUp = (e: React.PointerEvent) => {
+    const st = swipe.current;
+    swipe.current = null;
+    if (!st) return;
+    const dx = e.clientX - st.x;
+    const dy = e.clientY - st.y;
+    if (Math.abs(dx) < 60 || Math.abs(dx) < Math.abs(dy) * 1.5 || Date.now() - st.at > 900) return;
+    justSwiped.current = true;
+    setTimeout(() => (justSwiped.current = false), 350);
+    shift(((dx < 0 ? 1 : -1) * (ar ? -1 : 1)) as 1 | -1);
+  };
+
+  // Meetings per day for the year overview
+  const countsByDay = useMemo(() => {
+    const m = new Map<string, number>();
+    for (const mt of meetings) {
+      const k = cairoDateOf(mt.start);
+      m.set(k, (m.get(k) || 0) + 1);
+    }
+    return m;
+  }, [meetings]);
 
   // Generate calendar grid for current month (Sunday start)
   const year = currentDate.getFullYear();
@@ -159,6 +182,14 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
           {/* View mode toggle */}
           <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl text-xs">
             <button
+              onClick={() => setViewMode('year')}
+              className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
+                viewMode === 'year' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-900'
+              }`}
+            >
+              {ar ? 'سنوي' : 'Year'}
+            </button>
+            <button
               onClick={() => setViewMode('month')}
               className={`px-3 py-1.5 rounded-lg font-medium transition-all ${
                 viewMode === 'month' ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-900'
@@ -218,15 +249,17 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
       </div>
 
       {/* Month / Week / Day Navigation Strip */}
-      <div className="flex items-center justify-between bg-white px-6 py-3 rounded-2xl border border-stone-200 shadow-xs">
+      <div className="flex items-center justify-between bg-white px-3 sm:px-6 py-2 sm:py-3 rounded-2xl border border-stone-200 shadow-xs">
         <button
           onClick={prevDate}
-          className="p-1.5 text-stone-500 hover:text-stone-900 rounded-lg hover:bg-stone-100"
+          aria-label={ar ? 'السابق' : 'Previous'}
+          className="min-h-10 min-w-10 inline-flex items-center justify-center text-stone-500 hover:text-stone-900 rounded-lg hover:bg-stone-100"
         >
           <ChevronLeft className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
         </button>
         <div className="text-center">
           <h2 className="text-base font-bold text-stone-800 font-mono">
+            {viewMode === 'year' && fmtYmd(currentDate, { year: 'numeric' })}
             {viewMode === 'month' && fmtYmd(currentDate, { month: 'long', year: 'numeric' })}
             {viewMode === 'week' &&
               `${fmtYmd(weekDays[0], { month: 'short', day: 'numeric' })} - ${fmtYmd(weekDays[6], { month: 'short', day: 'numeric', year: 'numeric' })}`}
@@ -235,13 +268,81 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
         </div>
         <button
           onClick={nextDate}
-          className="p-1.5 text-stone-500 hover:text-stone-900 rounded-lg hover:bg-stone-100"
+          aria-label={ar ? 'التالي' : 'Next'}
+          className="min-h-10 min-w-10 inline-flex items-center justify-center text-stone-500 hover:text-stone-900 rounded-lg hover:bg-stone-100"
         >
           <ChevronRight className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
         </button>
       </div>
 
-      {/* Main Calendar Views */}
+      {/* Main Calendar Views (swipe left or right to move; the animation follows the direction) */}
+      <div
+        key={`${viewMode}-${slide.n}`}
+        onPointerDown={onSwipeDown}
+        onPointerUp={onSwipeUp}
+        onPointerCancel={() => (swipe.current = null)}
+        onClickCapture={(e) => {
+          if (justSwiped.current) {
+            e.stopPropagation();
+            e.preventDefault();
+          }
+        }}
+        className={`${slide.n > 0 ? (slide.dir === 'next' ? 'cal-in-next' : 'cal-in-prev') : ''} space-y-3`}
+        style={{ touchAction: 'pan-y' }}
+      >
+      {viewMode === 'year' && (
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-4 gap-2 sm:gap-3">
+          {Array.from({ length: 12 }).map((_, mi) => {
+            const first = new Date(year, mi, 1).getDay();
+            const dim = new Date(year, mi + 1, 0).getDate();
+            const monthKey = `${year}-${String(mi + 1).padStart(2, '0')}`;
+            const monthCount = Array.from({ length: dim }).reduce<number>((n, _, di) => n + (countsByDay.get(`${monthKey}-${String(di + 1).padStart(2, '0')}`) || 0), 0);
+            return (
+              <div key={mi} className="bg-white rounded-2xl border border-stone-200 shadow-xs p-2 sm:p-3">
+                <button
+                  type="button"
+                  onClick={() => {
+                    setCurrentDate(new Date(year, mi, 1));
+                    setViewMode('month');
+                  }}
+                  className="w-full flex items-center justify-between mb-1.5 min-h-8 text-start"
+                >
+                  <span className="text-xs sm:text-sm font-bold text-stone-900">{fmtYmd(new Date(year, mi, 1), { month: 'long' })}</span>
+                  {monthCount > 0 && <span className="text-[10px] font-bold bg-blue-100 text-blue-800 px-1.5 rounded">{monthCount}</span>}
+                </button>
+                <div className="grid grid-cols-7 text-center text-[9px] sm:text-[10px] text-stone-400 mb-0.5">
+                  {weekdayNames.map((n) => (
+                    <span key={n}>{n.slice(0, ar ? 1 : 1)}</span>
+                  ))}
+                </div>
+                <div className="grid grid-cols-7 text-center text-[10px] sm:text-xs">
+                  {Array.from({ length: first }).map((_, i) => (
+                    <span key={`b${i}`} />
+                  ))}
+                  {Array.from({ length: dim }).map((_, di) => {
+                    const ds = `${monthKey}-${String(di + 1).padStart(2, '0')}`;
+                    const c = countsByDay.get(ds) || 0;
+                    return (
+                      <button
+                        key={ds}
+                        type="button"
+                        onClick={() => openDay(ds)}
+                        className={`relative aspect-square flex items-center justify-center rounded-full ${
+                          ds === todayCairo ? 'bg-[#0071e3] text-white font-bold' : c > 0 ? 'bg-blue-100 text-blue-900 font-semibold' : 'text-stone-700 hover:bg-stone-100'
+                        }`}
+                        aria-label={`${ds}${c ? `, ${c}` : ''}`}
+                      >
+                        {di + 1}
+                      </button>
+                    );
+                  })}
+                </div>
+              </div>
+            );
+          })}
+        </div>
+      )}
+
       {viewMode === 'month' && (
         <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
           {/* Day Headers (Sunday Start) */}
@@ -276,7 +377,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
               return (
                 <div
                   key={`day-${dayNum}`}
-                  onClick={() => onOpenMeetingModal(null, cellDateStr)}
+                  onClick={() => openDay(cellDateStr)}
                   className="p-1 sm:p-2 min-h-[56px] sm:min-h-[100px] hover:bg-blue-50/20 transition-colors flex flex-col justify-between group cursor-pointer relative"
                   style={(firstDayIndex + i) % 7 >= 5 ? { backgroundImage: WEEKEND_HATCH } : undefined}
                 >
@@ -310,37 +411,58 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                     </div>
                   </div>
 
-                  {/* Badges in cell */}
-                  <div className="space-y-1 my-1 overflow-y-auto max-h-[80px]">
-                    {dayMeetings.map((m) => (
-                      <div
-                        key={m.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenMeetingModal(m);
-                        }}
-                        className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 text-[10px] p-1 rounded font-medium truncate cursor-pointer transition-colors shadow-2xs"
-                        title={`${cairoTimeOf(m.start)} - ${cairoTimeOf(m.end)}: ${m.title}`}
-                      >
-                        <span className="font-mono text-blue-700 font-bold me-1">
-                          {cairoTimeOf(m.start)}
-                        </span>
-                        {m.title}
-                      </div>
-                    ))}
-                    {dayTasks.map((t) => (
-                      <div
-                        key={t.id}
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          onOpenTaskModal(t);
-                        }}
-                        className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-[10px] p-1 rounded font-medium truncate cursor-pointer transition-colors"
-                        title={t.title}
-                      >
-                        {ar ? 'مهمة' : 'Task'}: {t.title}
-                      </div>
-                    ))}
+                  {/* Badges in cell: a few chips on larger screens, dots on phones; tapping the day opens it with everything in full */}
+                  <div className="my-1 space-y-1 min-w-0">
+                    <div className="hidden sm:block space-y-1">
+                      {dayMeetings.slice(0, 2).map((m) => (
+                        <div
+                          key={m.id}
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            onOpenMeetingModal(m);
+                          }}
+                          className="bg-blue-50 hover:bg-blue-100 border border-blue-200 text-blue-900 text-[10px] p-1 rounded font-medium truncate cursor-pointer transition-colors shadow-2xs"
+                          title={`${cairoTimeOf(m.start)} - ${cairoTimeOf(m.end)}: ${m.title}`}
+                        >
+                          <span className="font-mono text-blue-700 font-bold me-1">{cairoTimeOf(m.start)}</span>
+                          {m.title}
+                        </div>
+                      ))}
+                      {dayMeetings.length < 2 &&
+                        dayTasks.slice(0, 2 - dayMeetings.length).map((t) => (
+                          <div
+                            key={t.id}
+                            onClick={(e) => {
+                              e.stopPropagation();
+                              onOpenTaskModal(t);
+                            }}
+                            className="bg-amber-50 hover:bg-amber-100 border border-amber-200 text-amber-900 text-[10px] p-1 rounded font-medium truncate cursor-pointer transition-colors"
+                            title={t.title}
+                          >
+                            {ar ? 'مهمة' : 'Task'}: {t.title}
+                          </div>
+                        ))}
+                      {dayMeetings.length + dayTasks.length > 2 && (
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            openDay(cellDateStr);
+                          }}
+                          className="w-full text-start text-[10px] font-bold text-[#0071e3] hover:underline"
+                        >
+                          {ar ? `+${dayMeetings.length + dayTasks.length - Math.min(2, dayMeetings.length + Math.min(dayTasks.length, Math.max(0, 2 - dayMeetings.length)))} أخرى` : `+${dayMeetings.length + dayTasks.length - Math.min(2, dayMeetings.length + Math.min(dayTasks.length, Math.max(0, 2 - dayMeetings.length)))} more`}
+                        </button>
+                      )}
+                    </div>
+                    <div className="sm:hidden flex flex-wrap gap-0.5">
+                      {dayMeetings.slice(0, 4).map((m) => (
+                        <span key={m.id} className="w-1.5 h-1.5 rounded-full bg-blue-500" />
+                      ))}
+                      {dayTasks.slice(0, 3).map((t) => (
+                        <span key={t.id} className="w-1.5 h-1.5 rounded-full bg-amber-500" />
+                      ))}
+                    </div>
                   </div>
 
                   <div />
@@ -399,6 +521,8 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
           />
         </div>
       )}
+
+      </div>
 
       {/* Agenda View */}
       {viewMode === 'agenda' && (
