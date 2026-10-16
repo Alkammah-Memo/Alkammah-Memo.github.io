@@ -902,7 +902,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
   const blobToBase64 = (blob: Blob) =>
     new Promise<string>((resolve, reject) => {
       const r = new FileReader();
-      r.onloadend = () => resolve(String(r.result || ''));
+      r.onloadend = () => resolve(String(r.result || '').split('base64,').pop() || '');
       r.onerror = () => reject(r.error);
       r.readAsDataURL(blob);
     });
@@ -940,7 +940,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       terminateSession();
       return;
     }
-    const actualMime = rec.mimeType || mime || 'audio/webm';
+    const actualMime = (rec.mimeType || mime || 'audio/webm').split(';')[0];
     const chunks: Blob[] = [];
     let voiceStart = 0;
     let lastVoice = 0;
@@ -948,6 +948,8 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     let raf = 0;
     const began = Date.now();
     let lastLevelPaint = 0;
+    let floorSum = 0;
+    let floorN = 0;
 
     rec.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
@@ -975,6 +977,8 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         await economyTurn(heard);
       } catch (err) {
         addDebugLog('ERROR', 'SpeechTTS', 'Transcription failed', err instanceof Error ? err.message : String(err));
+        const em = err instanceof Error ? err.message : String(err);
+        setLastTranscript(locale === 'ar' ? `تعذّر فهم التسجيل: ${em.slice(0, 120)}` : `Could not process the recording: ${em.slice(0, 120)}`);
         economyBusyRef.current = false;
         setStatus('listening');
         setTimeout(() => void listenByRecording(), 800);
@@ -993,7 +997,13 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         lastLevelPaint = now;
         setAudioLevel(Math.min(100, Math.round(rms * 500)));
       }
-      if (rms > 0.02) {
+      // the first moments set the room's noise floor; speech is anything clearly above it
+      if (now - began < 500) {
+        floorSum += rms;
+        floorN += 1;
+      }
+      const floor = floorN ? floorSum / floorN : 0.005;
+      if (now - began >= 500 && rms > Math.max(0.012, floor * 3)) {
         if (!voiceStart) voiceStart = now;
         lastVoice = now;
         lastActivityRef.current = now;
