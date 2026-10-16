@@ -62,6 +62,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     navItems[0],
     navItems[1],
     navItems[2],
+    navItems[3],
     { id: 'assistant', label: locale === 'ar' ? 'سبيرو' : 'Spero', icon: Sparkles },
     { id: 'settings', label: locale === 'ar' ? 'الإعدادات' : 'Settings', icon: SettingsIcon },
   ];
@@ -163,8 +164,9 @@ export const AppShell: React.FC<AppShellProps> = ({
             {/* Backup / Export */}
             <button
               onClick={onOpenBackupModal}
-              className="p-2 text-[#515154] hover:text-[#1d1d1f] rounded-xl hover:bg-black/5 transition-colors hidden sm:flex"
+              className="p-2.5 sm:p-2 text-[#515154] hover:text-[#1d1d1f] rounded-xl hover:bg-black/5 transition-colors flex"
               title={t.export}
+              aria-label={t.export}
             >
               <Database className="w-4 h-4" />
             </button>
@@ -192,7 +194,9 @@ export const AppShell: React.FC<AppShellProps> = ({
           className={`h-full w-full ${
             hideTopBar || currentTab === 'notebook'
               ? 'p-0 overflow-hidden'
-              : 'overflow-y-auto overflow-x-hidden p-4 sm:p-6 lg:p-8 pb-16 sm:pb-8'
+              : currentTab === 'assistant'
+              ? 'overflow-hidden p-2 sm:p-6 lg:p-8'
+              : 'overflow-y-auto overflow-x-hidden p-3 sm:p-6 lg:p-8 pb-24 sm:pb-8'
           }`}
         >
           {children}
