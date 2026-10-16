@@ -913,10 +913,14 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       if (!mediaStreamRef.current) {
         const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
         mediaStreamRef.current = stream;
-        const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
-        const ctx = new AC();
-        if (ctx.state === 'suspended') await ctx.resume();
-        audioContextInRef.current = ctx;
+        // The audio context is normally created at the tap (see initEconomySession); never wait on resume(), it can hang without a gesture
+        let ctx = audioContextInRef.current;
+        if (!ctx) {
+          const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+          ctx = new AC();
+          audioContextInRef.current = ctx;
+        }
+        void ctx.resume().catch(() => undefined);
         const an = ctx.createAnalyser();
         an.fftSize = 1024;
         ctx.createMediaStreamSource(stream).connect(an);
@@ -954,8 +958,10 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     rec.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
     };
+    addDebugLog('INFO', 'AudioStream', `Listening cycle started (${actualMime})`);
     rec.onstop = async () => {
       cancelAnimationFrame(raf);
+      addDebugLog('INFO', 'AudioStream', `Cycle ended: spoke ${lastVoice - voiceStart}ms, active=${activeRef.current}, chunks=${chunks.length}`);
       if (!activeRef.current) return;
       const spokeMs = lastVoice - voiceStart;
       if (!voiceStart || spokeMs < 350) {
@@ -965,6 +971,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       economyBusyRef.current = true;
       setStatus('connecting');
       try {
+        addDebugLog('INFO', 'AudioStream', 'Sending the recording to be transcribed');
         const b64 = await blobToBase64(new Blob(chunks, { type: actualMime }));
         const heard = (await transcribeAudio(b64, actualMime)).trim();
         if (!heard) {
@@ -973,6 +980,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
           void listenByRecording();
           return;
         }
+        addDebugLog('SUCCESS', 'AudioStream', `Heard: ${heard}`);
         setUserTranscript(heard);
         await economyTurn(heard);
       } catch (err) {
@@ -1089,6 +1097,14 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     economyHistoryRef.current = [];
     economyBusyRef.current = false;
     lastActivityRef.current = Date.now();
+    // create and start the audio context right now, while the tap still counts as a user gesture
+    try {
+      const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+      if (!audioContextInRef.current) audioContextInRef.current = new AC();
+      void audioContextInRef.current.resume().catch(() => undefined);
+    } catch {
+      /* ignore */
+    }
     setMicActive(true);
     setStatus('listening');
     addDebugLog('INFO', 'SpeechTTS', 'Economy voice session started (device speech, flash-lite text)');
