@@ -792,6 +792,19 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       ctx.restore();
     }
 
+    // Date column: a vertical rule near the right edge on every ordinary page, so the text goes on the left and the date on the right
+    if (!isPlannerTemplate(tpl.template) && tpl.template !== 'planner_archive') {
+      ctx.save();
+      ctx.strokeStyle = theme.marginLine;
+      ctx.lineWidth = 1.4;
+      const dateX = Math.round(W * 0.74);
+      ctx.beginPath();
+      ctx.moveTo(dateX, topMargin - 20);
+      ctx.lineTo(dateX, H - 30);
+      ctx.stroke();
+      ctx.restore();
+    }
+
     for (const stroke of strokesToRender) paintStroke(ctx, stroke, theme);
   }, []);
 
