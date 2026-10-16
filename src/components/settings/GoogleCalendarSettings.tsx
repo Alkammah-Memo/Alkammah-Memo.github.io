@@ -36,6 +36,8 @@ export const GoogleCalendarSettings: React.FC<{ ar: boolean; onSync?: SyncFn }> 
         text:
           m === 'NO_CLIENT_ID'
             ? ar ? 'أدخل معرّف عميل Google (Client ID) أولاً.' : 'Enter the Google Client ID first.'
+            : m === 'GOOGLE_SCOPES_MISSING' || /insufficient authentication scopes/i.test(m)
+            ? ar ? 'لم تُمنح كل الصلاحيات. اضغط "مزامنة الآن" مجدداً وعلّم المربعين (عرض/تعديل التقويم والبريد) ثم "متابعة".' : 'Not every permission was granted. Tap "Sync now" again and tick BOTH boxes (see/edit calendar events, and your email), then Continue.'
             : m === 'GOOGLE_TOKEN_EXPIRED'
             ? ar ? 'انتهت صلاحية الدخول. اضغط "الدخول بحساب Google" مجدداً.' : 'The sign-in expired. Tap "Sign in with Google" again.'
             : m,
