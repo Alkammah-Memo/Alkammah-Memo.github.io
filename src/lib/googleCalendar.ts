@@ -6,6 +6,7 @@
  */
 import type { Meeting, Task } from '../types';
 import { cairoLocalToIso } from './cairoTime';
+import { supabase } from './cloud';
 
 /** read and write events, plus the account's email address (to show which account is linked) */
 export const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email';
@@ -23,6 +24,8 @@ export interface GoogleLink {
   lastCount?: number;
   autoSync: boolean;
   scopeV?: number;
+  /** true once the long-lived (server-side) sign-in is set up, so tokens renew by themselves */
+  serverLinked?: boolean;
   /** task id -> the Google event that shows it, and a signature of what was last sent */
   taskEvents?: Record<string, { eventId: string; sig: string }>;
   /** Google event ids that were mirrored at the last sync (used to notice what was deleted here) */
@@ -91,31 +94,134 @@ export function loadGoogleIdentity(): Promise<Gis> {
   return gisPromise;
 }
 
-/** Opens the Google account chooser (or refreshes silently) and stores the token. Must start from a tap when interactive. */
+// ----- permanent sign-in: the Edge Function keeps Google's refresh token and hands out fresh access tokens on request
+export type ServerState = 'unknown' | 'ready' | 'unavailable';
+let serverState: ServerState = 'unknown';
+export const getServerState = () => serverState;
+
+async function callAuth(body: Record<string, unknown>): Promise<{ data: Record<string, unknown> | null; error: string }> {
+  if (!supabase) return { data: null, error: 'no_cloud' };
+  const { data, error } = await supabase.functions.invoke('google-calendar-auth', { body });
+  if (!error) return { data: data as Record<string, unknown>, error: '' };
+  let code = error.message || 'failed';
+  try {
+    const ctx = (error as { context?: Response }).context;
+    if (ctx) code = String((await ctx.json())?.error || code);
+  } catch {
+    /* keep message */
+  }
+  return { data: null, error: code };
+}
+
+/** Finds out (once per visit) whether the server side is set up. Call it early: a later tap must start Google's popup without waiting. */
+export async function probeServer(): Promise<ServerState> {
+  const r = await callAuth({ action: 'status' });
+  serverState = r.data && r.data.configured ? 'ready' : 'unavailable';
+  if (r.data && r.data.linked === false && getGoogleLink().serverLinked) setGoogleLink({ serverLinked: false });
+  return serverState;
+}
+
+function applyToken(access: string, expiresIn: number, scope: string) {
+  const ok = GOOGLE_SCOPE.split(' ').every((sc) => scope.includes(sc));
+  if (!ok) {
+    setGoogleLink({ token: undefined, expiresAt: undefined, scopeV: undefined });
+    throw new Error('GOOGLE_SCOPES_MISSING');
+  }
+  setGoogleLink({ token: access, expiresAt: Date.now() + (expiresIn || 3600) * 1000, scopeV: SCOPE_VERSION });
+  return access;
+}
+
+async function refreshFromServer(): Promise<string> {
+  const r = await callAuth({ action: 'refresh' });
+  if (!r.data) {
+    if (r.error === 'reauth' || r.error === 'no_link') setGoogleLink({ serverLinked: false });
+    throw new Error(r.error === 'reauth' || r.error === 'no_link' ? 'GOOGLE_TOKEN_EXPIRED' : r.error);
+  }
+  return applyToken(String(r.data.access_token), Number(r.data.expires_in), String(r.data.scope || ''));
+}
+
+/** Starts Google's popup synchronously (must be inside a tap) and swaps the returned code for a permanent link. */
+function connectViaServer(): Promise<string> {
+  const l = getGoogleLink();
+  const w = window as unknown as { google?: Gis };
+  return new Promise((resolve, reject) => {
+    const client = w.google.accounts.oauth2.initCodeClient({
+      client_id: l.clientId.trim(),
+      scope: GOOGLE_SCOPE,
+      ux_mode: 'popup',
+      callback: async (resp: { code?: string; error?: string }) => {
+        if (!resp.code) return reject(new Error(resp.error || 'Google did not return access'));
+        const r = await callAuth({ action: 'exchange', code: resp.code });
+        if (!r.data) return reject(new Error(r.error));
+        try {
+          const token = applyToken(String(r.data.access_token), Number(r.data.expires_in), String(r.data.scope || ''));
+          setGoogleLink({ serverLinked: true });
+          resolve(token);
+        } catch (e) {
+          await callAuth({ action: 'disconnect' });
+          reject(e);
+        }
+      },
+      error_callback: (err: { type?: string; message?: string }) => reject(new Error(err?.message || err?.type || 'Google sign-in was closed')),
+    });
+    client.requestCode();
+  });
+}
+
+/** Browser-only one-hour token (used when the server side is not set up). */
+function requestBrowserToken(prompt: 'select_account' | 'consent' | 'none'): Promise<string> {
+  const l = getGoogleLink();
+  const w = window as unknown as { google?: Gis };
+  return new Promise((resolve, reject) => {
+    const timer = prompt === 'none' ? setTimeout(() => reject(new Error('GOOGLE_TOKEN_EXPIRED')), 8000) : undefined;
+    const client = w.google.accounts.oauth2.initTokenClient({
+      client_id: l.clientId.trim(),
+      scope: GOOGLE_SCOPE,
+      callback: (resp: { access_token?: string; expires_in?: number; error?: string; error_description?: string; scope?: string }) => {
+        clearTimeout(timer);
+        if (!resp.access_token) return reject(new Error(prompt === 'none' ? 'GOOGLE_TOKEN_EXPIRED' : resp.error_description || resp.error || 'Google did not return access'));
+        try {
+          resolve(applyToken(resp.access_token, resp.expires_in || 3600, resp.scope || ''));
+        } catch (e) {
+          reject(e);
+        }
+      },
+      error_callback: (err: { type?: string; message?: string }) => {
+        clearTimeout(timer);
+        reject(new Error(prompt === 'none' ? 'GOOGLE_TOKEN_EXPIRED' : err?.message || err?.type || 'Google sign-in was closed'));
+      },
+    });
+    client.requestAccessToken({ prompt });
+  });
+}
+
+/**
+ * Gets a working access token. With the permanent (server) link it renews by itself, no tap needed. Otherwise an interactive call opens
+ * the account chooser, and a silent call tries to renew quietly with the browser's own Google session.
+ */
 export function requestGoogleToken(interactive: boolean): Promise<string> {
   const l = getGoogleLink();
   if (!l.clientId.trim()) return Promise.reject(new Error('NO_CLIENT_ID'));
   const w = window as unknown as { google?: Gis };
-  if (!w.google?.accounts?.oauth2) return Promise.reject(new Error('Google sign-in is still loading, try again in a moment.'));
-  return new Promise((resolve, reject) => {
-    const client = w.google.accounts.oauth2.initTokenClient({
-      client_id: l.clientId.trim(),
-      scope: GOOGLE_SCOPE,
-      callback: (resp: { access_token?: string; expires_in?: number; error?: string; error_description?: string }) => {
-        if (!resp.access_token) return reject(new Error(resp.error_description || resp.error || 'Google did not return access'));
-        // Google lets the person untick permissions on the consent screen: make sure both were really granted
-        const scopes = GOOGLE_SCOPE.split(' ');
-        if (w.google.accounts.oauth2.hasGrantedAllScopes && !w.google.accounts.oauth2.hasGrantedAllScopes(resp, ...scopes)) {
-          setGoogleLink({ token: undefined, expiresAt: undefined, scopeV: undefined });
-          return reject(new Error('GOOGLE_SCOPES_MISSING'));
-        }
-        setGoogleLink({ token: resp.access_token, expiresAt: Date.now() + (resp.expires_in || 3600) * 1000, scopeV: SCOPE_VERSION });
-        resolve(resp.access_token);
-      },
-      error_callback: (err: { type?: string; message?: string }) => reject(new Error(err?.message || err?.type || 'Google sign-in was closed')),
+  const gisReady = !!w.google?.accounts?.oauth2;
+  if (l.serverLinked) {
+    return refreshFromServer().catch((e) => {
+      if (!interactive || !gisReady || serverState !== 'ready') throw e;
+      return connectViaServer();
     });
-    client.requestAccessToken({ prompt: interactive ? (getGoogleLink().scopeV === SCOPE_VERSION ? 'select_account' : 'consent') : '' });
-  });
+  }
+  if (!gisReady) return Promise.reject(new Error('Google sign-in is still loading, try again in a moment.'));
+  if (interactive) {
+    if (serverState === 'ready') return connectViaServer();
+    return requestBrowserToken(l.scopeV === SCOPE_VERSION ? 'select_account' : 'consent');
+  }
+  return requestBrowserToken('none');
+}
+
+/** Forget the permanent link (also revokes it at Google). */
+export async function disconnectGoogle(): Promise<void> {
+  if (getGoogleLink().serverLinked) await callAuth({ action: 'disconnect' });
+  setGoogleLink({ token: undefined, expiresAt: undefined, email: undefined, lastSyncAt: undefined, lastCount: undefined, serverLinked: false, known: undefined, taskEvents: undefined });
 }
 
 export interface GoogleEvent {

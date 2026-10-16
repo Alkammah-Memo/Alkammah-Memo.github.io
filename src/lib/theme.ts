@@ -1,6 +1,6 @@
 /** Look of the app. "classic" is the original flat style; "glass" re-skins everything with the iOS glass theme (see glass.css). */
 export type ThemeId = 'classic' | 'glass';
-export type Wallpaper = 'aurora' | 'sunset' | 'ocean' | 'graphite';
+export type Wallpaper = 'aurora' | 'sunset' | 'ocean' | 'graphite' | 'dark';
 
 export interface ThemeState {
   theme: ThemeId;
@@ -19,7 +19,7 @@ function load(): ThemeState {
       const p = JSON.parse(raw) as Partial<ThemeState>;
       return {
         theme: p.theme === 'glass' ? 'glass' : 'classic',
-        wallpaper: (['aurora', 'sunset', 'ocean', 'graphite'] as const).includes(p.wallpaper as Wallpaper) ? (p.wallpaper as Wallpaper) : 'aurora',
+        wallpaper: (['aurora', 'sunset', 'ocean', 'graphite', 'dark'] as const).includes(p.wallpaper as Wallpaper) ? (p.wallpaper as Wallpaper) : 'aurora',
       };
     }
   } catch {
@@ -39,7 +39,7 @@ export function applyTheme(): void {
   root.dataset.theme = s.theme;
   root.dataset.wallpaper = s.wallpaper;
   const meta = document.querySelector('meta[name="theme-color"]');
-  meta?.setAttribute('content', s.theme === 'glass' ? '#dfe9ff' : '#11161F');
+  meta?.setAttribute('content', s.theme === 'glass' ? (s.wallpaper === 'dark' ? '#0b0d14' : '#dfe9ff') : '#11161F');
 }
 
 export function setTheme(patch: Partial<ThemeState>): void {
