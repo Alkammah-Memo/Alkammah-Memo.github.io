@@ -2,7 +2,7 @@
  * Browser-side Gemini client. Replaces the old Express endpoints (/api/ai/*) so the app can be
  * hosted as a static site. Every call is wrapped in key failover (see keyManager.ts).
  */
-import { GoogleGenAI, Type, Modality } from '@google/genai';
+import { GoogleGenAI, Type, Modality, ThinkingLevel } from '@google/genai';
 import type { GenerateContentParameters, GenerateContentResponse } from '@google/genai';
 import { keyManager, runWithFailover, classifyError, DEFAULT_MODELS } from './keyManager';
 import type { ModelSettings } from './keyManager';
@@ -166,7 +166,7 @@ export async function economyVoiceTurn(
   const systemInstruction = `${SPERO_PERSONA}
 التوقيت الحالي في القاهرة: ${cairoNowLabel()} (ISO محلي: ${cairoNowIsoLabel()}).
 ${SPERO_TOOL_RULES}
-قواعد المحادثة الصوتية: ردّي بجملة أو جملتين كحد أقصى، بلا قوائم ولا رموز، وبنبرة طبيعية مهذبة تُقرأ بصوت عالٍ. إذا طُلب اجتماع ولم يُذكر مع من أو موضوعه فاسألي عنه أولاً.
+قواعد المحادثة الصوتية: ردّي بجملة أو جملتين كحد أقصى، بلا قوائم ولا رموز، وبنبرة طبيعية مهذبة تُقرأ بصوت عالٍ. خاطبيه دائماً بـ "المهندس محمد" أو "حضرتك" فقط، ولا تقولي "بشمهندس" أو "يا". إذا طُلب اجتماع ولم يُذكر مع من أو موضوعه فاسألي عنه أولاً.
 سياق النظام الحالي: ${JSON.stringify(context)}`;
 
   const contents: { role: string; parts: Record<string, unknown>[] }[] = [
@@ -175,7 +175,18 @@ ${SPERO_TOOL_RULES}
   ];
   const config = { systemInstruction, temperature: 0.3, maxOutputTokens: 350, tools: EXECUTIVE_FUNCTION_TOOLS };
 
-  const first = await generate(order, { contents: contents as never, config });
+  // Voice needs speed: ask for minimal "thinking"; if a model rejects that setting, retry without it
+  const gen = async (params: GenParams): Promise<GenerateContentResponse> => {
+    try {
+      return await generate(order, { ...params, config: { ...params.config, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } });
+    } catch (err) {
+      const kind = classifyError(err).kind;
+      if (kind === 'bad_request' || kind === 'model') return generate(order, params);
+      throw err;
+    }
+  };
+
+  const first = await gen({ contents: contents as never, config });
   const calls = extractCalls(first);
   if (calls.length === 0) {
     return first.text || (locale === 'ar' ? 'تفضّل، المهندس محمد.' : 'Yes, Eng. Mohamed.');
@@ -196,7 +207,7 @@ ${SPERO_TOOL_RULES}
     modelContent || { role: 'model', parts: calls.map((c) => ({ functionCall: { name: c.name, args: c.args } })) },
     { role: 'user', parts: results.map((r) => ({ functionResponse: { name: r.name, response: r.response } })) },
   ];
-  const second = await generate(order, { contents: followUp as never, config });
+  const second = await gen({ contents: followUp as never, config });
   return second.text || (locale === 'ar' ? 'تم، المهندس محمد.' : 'Done, Eng. Mohamed.');
 }
 
