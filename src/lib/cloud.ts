@@ -9,6 +9,8 @@ import { createClient } from '@supabase/supabase-js';
 import type { RealtimeChannel, Session, SupabaseClient, User } from '@supabase/supabase-js';
 import { Task, Meeting, Notebook, NotebookPage, Person, Project } from '../types';
 import type { GeminiSettings } from './ai/keyManager';
+import { usage } from './ai/modelQueue';
+import type { SharedQuota } from './ai/modelQueue';
 
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
@@ -240,12 +242,30 @@ export async function loadRemoteGeminiSettings(): Promise<Partial<GeminiSettings
   return (data?.gemini as Partial<GeminiSettings> | undefined) ?? null;
 }
 
+/**
+ * Keeps quota status the same on every device: pulls what the other devices learned (blocks and limits Google reported, per-device
+ * counters), merges it, and writes the merged view back next to the keys. Never touches the keys themselves.
+ */
+export async function syncSharedQuota(): Promise<void> {
+  if (!supabase || !currentUser) return;
+  const { data, error } = await supabase.from('user_settings').select('gemini').eq('user_id', currentUser.id).maybeSingle();
+  if (error || !data) return;
+  const gemini = (data.gemini || {}) as Record<string, unknown>;
+  usage.mergeShared(gemini.quota as Partial<SharedQuota> | undefined);
+  const { error: writeError } = await supabase
+    .from('user_settings')
+    .update({ gemini: { ...gemini, quota: usage.exportShared() } })
+    .eq('user_id', currentUser.id);
+  if (writeError) console.warn('Could not share quota status:', writeError.message);
+}
+
 export async function saveRemoteGeminiSettings(settings: GeminiSettings): Promise<void> {
   if (!supabase || !currentUser) return;
   // never persist transient health state (cooldowns); only keys, labels and models
-  const sanitized: GeminiSettings = {
+  const sanitized = {
     ...settings,
     slots: settings.slots.map((s) => ({ ...s, cooldownUntil: undefined })),
+    quota: usage.exportShared(),
   };
   const { error } = await supabase.from('user_settings').upsert(
     { user_id: currentUser.id, gemini: sanitized, updated_at: new Date().toISOString() },
