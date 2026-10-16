@@ -266,8 +266,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             </div>
           </div>
 
-          {/* Due Date & Follow-Up Date */}
-          <div className="grid grid-cols-2 md:grid-cols-3 landscape:grid-cols-4 gap-2.5">
+          {/* Due Date & Follow-Up Date: one per row on a phone so the native pickers never touch each other */}
+          <div className="grid grid-cols-1 min-[520px]:grid-cols-3 gap-2.5">
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.dueDate}
