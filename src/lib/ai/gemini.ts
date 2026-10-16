@@ -4,7 +4,8 @@
  */
 import { GoogleGenAI, Type, Modality, ThinkingLevel } from '@google/genai';
 import type { GenerateContentParameters, GenerateContentResponse } from '@google/genai';
-import { keyManager, runWithFailover, classifyError, DEFAULT_MODELS } from './keyManager';
+import { keyManager, runWithFailover, classifyError, DEFAULT_MODELS, AllKeysFailedError, NoKeysConfiguredError } from './keyManager';
+import type { KeySlot } from './keyManager';
 import type { ModelSettings } from './keyManager';
 import {
   EXECUTIVE_FUNCTION_TOOLS,
@@ -46,6 +47,75 @@ async function generate(models: string[], params: GenParams, opts: { maxRounds?:
     }
     throw lastError;
   }, opts);
+}
+
+
+/**
+ * Speed-first request for voice. Google's fast models sometimes stall for 30 seconds or answer "high demand" on one key
+ * while the next key answers in a second. So: start on the best key; if there is no answer within `hedgeMs` (or it fails),
+ * start the same request on the next key/model WITHOUT cancelling the first. The first good answer wins, the rest are aborted.
+ */
+async function generateHedged(models: string[], params: GenParams, hedgeMs = 2500): Promise<GenerateContentResponse> {
+  const unique = [...new Set(models.filter(Boolean))].slice(0, 3);
+  if (!keyManager.hasAnyKey()) throw new NoKeysConfiguredError();
+  const slots = keyManager.getCandidateSlots();
+  const plan: { slot: KeySlot; model: string }[] = [];
+  for (const model of unique) for (const slot of slots) plan.push({ slot, model });
+
+  return new Promise<GenerateContentResponse>((resolve, reject) => {
+    let next = 0;
+    let pending = 0;
+    let done = false;
+    let lastError: unknown = new Error('No attempt made');
+    let hedgeTimer: ReturnType<typeof setTimeout> | undefined;
+    const controllers: AbortController[] = [];
+
+    const stopAll = (except?: AbortController) => {
+      clearTimeout(hedgeTimer);
+      controllers.forEach((c) => c !== except && c.abort());
+    };
+
+    const launch = (): boolean => {
+      if (done || next >= plan.length) return false;
+      const { slot, model } = plan[next++];
+      const ac = new AbortController();
+      controllers.push(ac);
+      pending++;
+      const giveUp = setTimeout(() => ac.abort(), 20_000);
+      clientFor(slot.key)
+        .models.generateContent({ ...params, model, config: { ...params.config, abortSignal: ac.signal } })
+        .then((res) => {
+          if (done) return;
+          done = true;
+          stopAll(ac);
+          keyManager.reportSuccess(slot.id);
+          resolve(res);
+        })
+        .catch((err) => {
+          if (done) return;
+          lastError = err;
+          const classified = classifyError(err);
+          if (!classified.retryable) {
+            done = true;
+            stopAll();
+            reject(err);
+            return;
+          }
+          if (!ac.signal.aborted) keyManager.reportFailure(slot.id, classified);
+          pending--;
+          if (!launch() && pending === 0) {
+            done = true;
+            stopAll();
+            reject(new AllKeysFailedError('All Gemini keys failed. Check Settings → Gemini keys to test each key.', lastError));
+          }
+        })
+        .finally(() => clearTimeout(giveUp));
+      clearTimeout(hedgeTimer);
+      hedgeTimer = setTimeout(launch, hedgeMs);
+      return true;
+    };
+    launch();
+  });
 }
 
 const models = (): ModelSettings => keyManager.getSettings().models;
@@ -209,10 +279,10 @@ ${SPERO_TOOL_RULES}
   // Voice needs speed: ask for minimal "thinking"; if a model rejects that setting, retry without it
   const gen = async (params: GenParams): Promise<GenerateContentResponse> => {
     try {
-      return await generate(order, { ...params, config: { ...params.config, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } }, { maxRounds: 1 });
+      return await generateHedged(order, { ...params, config: { ...params.config, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } });
     } catch (err) {
       const kind = classifyError(err).kind;
-      if (kind === 'bad_request' || kind === 'model') return generate(order, params, { maxRounds: 1 });
+      if (kind === 'bad_request' || kind === 'model') return generateHedged(order, params);
       throw err;
     }
   };
