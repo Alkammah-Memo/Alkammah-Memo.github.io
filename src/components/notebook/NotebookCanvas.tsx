@@ -167,6 +167,7 @@ interface NotebookCanvasProps {
   paperStyle?: PaperStyle;
   paperColor?: PaperColor;
   isFullScreenPaper?: boolean;
+  hideTools?: boolean;
   onToggleFullScreenPaper?: () => void;
   onOrientationChange?: (orientation: 'landscape' | 'portrait') => void;
   onPaperStyleChange?: (style: PaperStyle) => void;
@@ -364,6 +365,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   paperStyle: initialPaperStyle = 'ruled',
   paperColor: initialPaperColor = 'cream',
   isFullScreenPaper = false,
+  hideTools = false,
   onToggleFullScreenPaper,
   onOrientationChange,
   onPaperStyleChange,
@@ -502,6 +504,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number }>({ x: 24, y: 16 });
   const [isDraggingToolbar, setIsDraggingToolbar] = useState<boolean>(false);
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState<boolean>(false);
+  const [showPageOptions, setShowPageOptions] = useState<boolean>(false); // phones: paper style/colour row folded away by default
   const [showFontMenu, setShowFontMenu] = useState<boolean>(false);
 
   // Lasso & Selection State
@@ -1451,7 +1454,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   return (
     <div className="relative flex-1 flex flex-col h-full bg-[#f5f5f7] overflow-hidden select-none">
       {/* Docked inking toolbar: lives in the layout flow so it can never cover the app header or the paper */}
-      <div className="shrink-0 flex justify-center px-2 py-1.5 bg-[#f5f5f7] border-b border-[#e5e5ea] z-20">
+      <div className={`${hideTools ? 'hidden' : ''} shrink-0 flex justify-center px-2 py-1.5 bg-[#f5f5f7] border-b border-[#e5e5ea] z-20`}>
       <div
         ref={toolbarRef}
         className="shadow-sm rounded-2xl bg-white border border-stone-200/90 text-stone-800 flex flex-wrap items-center justify-center gap-1.5 p-1.5 max-w-full"
@@ -1804,8 +1807,16 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
           e.preventDefault();
         }}
       >
+        <button
+          type="button"
+          onClick={() => setShowPageOptions((v) => !v)}
+          aria-expanded={showPageOptions}
+          className={`${hideTools ? 'hidden' : ''} sm:hidden self-start mb-2 min-h-9 px-3 rounded-full border border-stone-300 bg-white/90 text-[11px] font-semibold text-stone-700`}
+        >
+          {locale === 'ar' ? (showPageOptions ? 'إخفاء خيارات الصفحة' : 'خيارات الصفحة') : showPageOptions ? 'Hide page options' : 'Page options'}
+        </button>
         {/* Paper controls: full size (outside the scaled paper) so every control is a comfortable touch target on iPad; scrolls with the page */}
-      <div className="w-full shrink-0 pb-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 [&_button]:min-h-9">
+      <div className={`${hideTools ? 'hidden' : ''} ${showPageOptions ? '' : 'max-sm:hidden'} w-full shrink-0 pb-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 [&_button]:min-h-9`}>
               <div className="flex items-center gap-2 flex-wrap">
                 <div
                   className="flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-lg border shadow-2xs transition-colors"

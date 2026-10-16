@@ -47,6 +47,8 @@ import {
   Clock,
   Maximize2,
   Minimize2,
+  EyeOff,
+  PenLine,
   Calendar,
   Trash2,
   RectangleHorizontal,
@@ -136,6 +138,24 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     }
   }, []);
   const [showDeletePageConfirm, setShowDeletePageConfirm] = useState<boolean>(false);
+  // "Hide tools": removes every bar above the paper so there is room to write (remembered on this device)
+  const [toolsHidden, setToolsHidden] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('alkammah_tools_hidden') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleTools = () =>
+    setToolsHidden((prev) => {
+      const next = !prev;
+      try {
+        localStorage.setItem('alkammah_tools_hidden', next ? '1' : '0');
+      } catch {
+        /* ignore */
+      }
+      return next;
+    });
 
   // When full screen paper is enabled, default to handwritten view
   useEffect(() => {
@@ -455,11 +475,11 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   };
 
   return (
-    <div className={`flex flex-col ${isFullScreenPaper ? 'h-[100dvh]' : 'h-[calc(100dvh-3.75rem)]'} overflow-hidden bg-[#f5f5f7]`}>
+    <div className={`flex flex-col ${isFullScreenPaper ? 'h-[100dvh]' : 'h-full'} overflow-hidden bg-[#f5f5f7]`}>
       {/* Top Notebook Sub-header */}
-      <div className="bg-white/90 backdrop-blur-xl text-[#1d1d1f] px-4 py-2 flex flex-wrap items-center justify-between gap-3 border-b border-[#d2d2d7] shrink-0">
+      <div className={`${toolsHidden ? 'hidden' : ''} bg-white/90 backdrop-blur-xl text-[#1d1d1f] px-3 sm:px-4 py-1.5 sm:py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-[#d2d2d7] shrink-0`}>
         {/* Notebook & Page Selector */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 min-w-0 max-w-full">
           <BookOpen className="w-4 h-4 text-[#0071e3]" />
           <select
             value={activeNotebook?.id}
@@ -468,7 +488,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               const firstP = pages.find((p) => p.notebookId === e.target.value);
               if (firstP) onSelectPage(firstP.id);
             }}
-            className="bg-[#f5f5f7] text-xs font-semibold text-[#1d1d1f] px-3 py-1.5 rounded-lg border border-[#d2d2d7] focus:outline-none focus:border-[#0071e3]"
+            className="bg-[#f5f5f7] text-xs font-semibold text-[#1d1d1f] px-3 py-1.5 rounded-lg border border-[#d2d2d7] focus:outline-none focus:border-[#0071e3] min-w-0 max-w-[38vw] sm:max-w-none truncate"
           >
             {notebooks.map((nb) => (
               <option key={nb.id} value={nb.id}>
@@ -478,7 +498,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           </select>
 
           {/* Page Selector: title + date, with previous/next */}
-          <div className="flex items-center gap-0.5 bg-[#f5f5f7] px-1 rounded-lg border border-[#d2d2d7] text-xs">
+          <div className="flex items-center gap-0.5 bg-[#f5f5f7] px-1 rounded-lg border border-[#d2d2d7] text-xs min-w-0">
             <button
               onClick={() => {
                 const curIdx = notebookPages.findIndex((p) => p.id === activePage?.id);
@@ -494,7 +514,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               value={activePage?.id || ''}
               onChange={(e) => onSelectPage(e.target.value)}
               aria-label={locale === 'ar' ? 'اختيار الصفحة' : 'Choose page'}
-              className="bg-transparent text-xs font-semibold text-[#1d1d1f] h-9 max-w-[200px] truncate focus:outline-none"
+              className="bg-transparent text-xs font-semibold text-[#1d1d1f] h-9 max-w-[26vw] sm:max-w-[200px] min-w-0 truncate focus:outline-none"
             >
               {notebookPages.map((p, idx) => (
                 <option key={p.id} value={p.id}>
@@ -613,12 +633,12 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       </div>
 
       {/* Planner bar: Today, day/month steppers and the "+ Page" menu (opens or creates pages on demand) */}
-      {onOpenPlanner && (
-        <div className="relative z-40 bg-white/90 backdrop-blur-xl px-4 py-1.5 flex flex-wrap items-center gap-x-4 gap-y-1.5 border-b border-[#d2d2d7] shrink-0">
+      {onOpenPlanner && !toolsHidden && (
+        <div className="relative z-40 bg-white/90 backdrop-blur-xl px-3 sm:px-4 py-1 sm:py-1.5 flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 border-b border-[#d2d2d7] shrink-0">
           <button
             type="button"
             onClick={() => goDay(todayStr)}
-            className="min-h-11 px-4 inline-flex items-center gap-2 rounded-xl bg-[#0071e3] hover:bg-[#0062c4] active:scale-[0.98] text-white text-sm font-bold shadow-xs transition-all"
+            className="min-h-11 px-3 sm:px-4 inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-[#0071e3] hover:bg-[#0062c4] active:scale-[0.98] text-white text-sm font-bold shadow-xs transition-all"
             title={ar ? 'صفحة اليوم' : "Open today's page"}
           >
             <CalendarDays className="w-4 h-4" />
@@ -626,11 +646,11 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           </button>
 
           {/* Day stepper */}
-          <div className="flex items-center rounded-xl border border-[#d2d2d7] bg-[#f5f5f7]" role="group" aria-label={ar ? 'التنقل بين الأيام' : 'Day navigation'}>
+          <div className="flex items-center rounded-xl border border-[#d2d2d7] bg-[#f5f5f7] min-w-0 flex-1 sm:flex-none" role="group" aria-label={ar ? 'التنقل بين الأيام' : 'Day navigation'}>
             <button
               type="button"
               onClick={() => goDay(addDays(navDay, -1))}
-              className="w-11 h-11 flex items-center justify-center hover:text-[#0071e3] rounded-s-xl"
+              className="w-10 sm:w-11 h-11 shrink-0 flex items-center justify-center hover:text-[#0071e3] rounded-s-xl"
               title={ar ? 'اليوم السابق' : 'Previous day'}
               aria-label={ar ? 'اليوم السابق' : 'Previous day'}
             >
@@ -639,7 +659,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             <button
               type="button"
               onClick={() => goDay(navDay)}
-              className={`min-h-11 min-w-[9.5rem] px-2 text-sm font-semibold ${dayExists ? 'text-[#1d1d1f]' : 'text-[#515154]'} hover:text-[#0071e3]`}
+              className={`min-h-11 min-w-0 flex-1 sm:flex-none sm:min-w-[9.5rem] px-1 sm:px-2 text-sm font-semibold truncate ${dayExists ? 'text-[#1d1d1f]' : 'text-[#515154]'} hover:text-[#0071e3]`}
               title={ar ? 'فتح صفحة هذا اليوم' : 'Open this day'}
             >
               {navDayLabel}
@@ -647,7 +667,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             <button
               type="button"
               onClick={() => goDay(addDays(navDay, 1))}
-              className="w-11 h-11 flex items-center justify-center hover:text-[#0071e3] rounded-e-xl"
+              className="w-10 sm:w-11 h-11 shrink-0 flex items-center justify-center hover:text-[#0071e3] rounded-e-xl"
               title={ar ? 'اليوم التالي' : 'Next day'}
               aria-label={ar ? 'اليوم التالي' : 'Next day'}
             >
@@ -656,7 +676,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           </div>
 
           {/* Month stepper */}
-          <div className="flex items-center rounded-xl border border-[#d2d2d7] bg-[#f5f5f7]" role="group" aria-label={ar ? 'التنقل بين الشهور' : 'Month navigation'}>
+          <div className="max-sm:hidden flex items-center rounded-xl border border-[#d2d2d7] bg-[#f5f5f7]" role="group" aria-label={ar ? 'التنقل بين الشهور' : 'Month navigation'}>
             <button
               type="button"
               onClick={() => goMonth(addMonths(monthOf(navDay), -1))}
@@ -693,10 +713,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
               onClick={() => setAddMenuOpen((v) => !v)}
               aria-haspopup="menu"
               aria-expanded={addMenuOpen}
-              className="min-h-11 px-4 inline-flex items-center gap-2 rounded-xl bg-white border border-[#d2d2d7] hover:bg-[#f5f5f7] text-sm font-semibold text-[#1d1d1f] shadow-xs transition-colors"
+              className="min-h-11 px-3 sm:px-4 inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-white border border-[#d2d2d7] hover:bg-[#f5f5f7] text-sm font-semibold text-[#1d1d1f] shadow-xs transition-colors"
             >
               <Plus className="w-4 h-4 text-[#0071e3]" />
-              {ar ? 'صفحة' : 'Page'}
+              <span className="max-sm:sr-only">{ar ? 'صفحة' : 'Page'}</span>
               <ChevronDown className="w-3.5 h-3.5 text-[#86868b]" />
             </button>
             {addMenuOpen && (
@@ -772,6 +792,23 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
       {/* Main View Area */}
       <div className={`flex-1 flex overflow-hidden relative ${viewMode === 'split' ? 'flex-col lg:flex-row' : ''}`}>
+        {/* Hide / show every tool bar so the paper gets the whole screen */}
+        <button
+          type="button"
+          onClick={toggleTools}
+          aria-pressed={toolsHidden}
+          aria-label={toolsHidden ? (locale === 'ar' ? 'إظهار الأدوات' : 'Show tools') : (locale === 'ar' ? 'إخفاء الأدوات' : 'Hide tools')}
+          title={toolsHidden ? (locale === 'ar' ? 'إظهار الأدوات' : 'Show tools') : (locale === 'ar' ? 'إخفاء الأدوات' : 'Hide tools')}
+          className={`absolute z-30 bottom-3 ${locale === 'ar' ? 'right-3' : 'left-3'} h-11 min-w-11 px-3 inline-flex items-center justify-center gap-1.5 rounded-full shadow-lg border text-xs font-bold active:scale-95 transition ${
+            toolsHidden ? 'bg-[#0071e3] border-[#0071e3] text-white' : 'bg-white/95 border-[#d2d2d7] text-[#1d1d1f]'
+          }`}
+        >
+          {toolsHidden ? <PenLine className="w-4 h-4" /> : <EyeOff className="w-4 h-4" />}
+          <span className={toolsHidden ? '' : 'hidden sm:inline'}>
+            {toolsHidden ? (locale === 'ar' ? 'الأدوات' : 'Tools') : (locale === 'ar' ? 'إخفاء الأدوات' : 'Hide tools')}
+          </span>
+        </button>
+
         {/* Left / Primary Ink Canvas */}
         {(viewMode === 'handwritten' || viewMode === 'split') && (
           <div
@@ -799,6 +836,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                 paperColor={activePage.paperColor || 'cream'}
                 isFullScreenPaper={isFullScreenPaper}
                 onToggleFullScreenPaper={onToggleFullScreenPaper}
+                hideTools={toolsHidden}
                 onOrientationChange={(newOri) => {
                   if (onUpdatePageData) {
                     onUpdatePageData(activePage.id, { orientation: newOri });
