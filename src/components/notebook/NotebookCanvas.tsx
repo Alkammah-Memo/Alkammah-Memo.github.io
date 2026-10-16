@@ -506,23 +506,71 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number }>({ x: 24, y: 16 });
   const [isDraggingToolbar, setIsDraggingToolbar] = useState<boolean>(false);
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState<boolean>(false);
-  // Pen tools live in a side drawer: a small arrow on the screen edge slides it in and out
-  const [drawerOpen, setDrawerOpen] = useState<boolean>(() => {
+  // Pen tools live in a slim, movable rail: drag the grip anywhere on the page, tap the arrow to fold it away
+  const RAIL_KEY = 'alkammah_pen_rail';
+  const [railPos, setRailPos] = useState<{ x: number; y: number }>(() => {
     try {
-      return localStorage.getItem('alkammah_pen_drawer') === '1';
+      const v = JSON.parse(localStorage.getItem(RAIL_KEY) || 'null');
+      if (v && typeof v.x === 'number' && typeof v.y === 'number') return { x: v.x, y: v.y };
     } catch {
-      return false;
+      /* ignore */
     }
+    return { x: 0, y: 48 };
   });
-  const setDrawer = (open: boolean) => {
-    setDrawerOpen(open);
+  const [railCollapsed, setRailCollapsed] = useState<boolean>(() => {
     try {
-      localStorage.setItem('alkammah_pen_drawer', open ? '1' : '0');
+      const v = JSON.parse(localStorage.getItem(RAIL_KEY) || 'null');
+      if (v && typeof v.c === 'boolean') return v.c;
+    } catch {
+      /* ignore */
+    }
+    return true;
+  });
+  const [showColorMenu, setShowColorMenu] = useState<boolean>(false);
+  const canvasRootRef = useRef<HTMLDivElement | null>(null);
+  const railDragRef = useRef<{ sx: number; sy: number; ox: number; oy: number; moved: boolean } | null>(null);
+  const saveRail = (pos: { x: number; y: number }, collapsed: boolean) => {
+    try {
+      localStorage.setItem(RAIL_KEY, JSON.stringify({ x: pos.x, y: pos.y, c: collapsed }));
     } catch {
       /* ignore */
     }
   };
-  const handleDragRef = useRef<{ x: number; moved: boolean } | null>(null);
+  const onRailPointerDown = (e: React.PointerEvent<HTMLButtonElement>) => {
+    railDragRef.current = { sx: e.clientX, sy: e.clientY, ox: railPos.x, oy: railPos.y, moved: false };
+    e.currentTarget.setPointerCapture?.(e.pointerId);
+  };
+  const onRailPointerMove = (e: React.PointerEvent<HTMLButtonElement>) => {
+    const d = railDragRef.current;
+    if (!d) return;
+    const dx = e.clientX - d.sx;
+    const dy = e.clientY - d.sy;
+    if (!d.moved && Math.hypot(dx, dy) < 6) return;
+    d.moved = true;
+    const root = canvasRootRef.current;
+    const w = root?.clientWidth ?? window.innerWidth;
+    const h = root?.clientHeight ?? window.innerHeight;
+    const rw = railCollapsed ? 24 : 36;
+    const rh = toolbarRef.current?.offsetHeight ?? 44;
+    setRailPos({
+      x: Math.max(0, Math.min(Math.max(0, w - rw), d.ox + dx)),
+      y: Math.max(0, Math.min(Math.max(0, h - rh), d.oy + dy)),
+    });
+  };
+  const onRailPointerUp = () => {
+    const d = railDragRef.current;
+    railDragRef.current = null;
+    if (!d) return;
+    if (d.moved) {
+      saveRail(railPos, railCollapsed);
+    } else {
+      const next = !railCollapsed;
+      setRailCollapsed(next);
+      setShowColorMenu(false);
+      setShowFontMenu(false);
+      saveRail(railPos, next);
+    }
+  };
   const [showPageOptions, setShowPageOptions] = useState<boolean>(false); // phones: paper style/colour row folded away by default
   const [showFontMenu, setShowFontMenu] = useState<boolean>(false);
 
@@ -1471,230 +1519,130 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
 
 
   return (
-    <div className="relative flex-1 flex flex-col h-full bg-[#f5f5f7] overflow-hidden select-none">
+    <div ref={canvasRootRef} className="relative flex-1 flex flex-col h-full bg-[#f5f5f7] overflow-hidden select-none">
       {/* Docked inking toolbar: lives in the layout flow so it can never cover the app header or the paper */}
       <div
-        className={`absolute inset-y-0 ${locale === 'ar' ? 'right-0 flex-row-reverse' : 'left-0'} z-40 flex pointer-events-none transition-transform duration-200 ease-out`}
-        style={{ transform: drawerOpen ? 'none' : `translateX(calc(${locale === 'ar' ? '1' : '-1'} * min(288px, 85vw)))` }}
-      >
-      <div
         ref={toolbarRef}
-        aria-hidden={!drawerOpen}
-        className={`pointer-events-auto self-start max-h-full overflow-y-auto overscroll-contain bg-white border-stone-200 text-stone-800 shadow-2xl flex flex-wrap content-start items-center justify-start gap-2 p-3 mt-2 ${locale === 'ar' ? 'border rounded-s-2xl' : 'border rounded-e-2xl'}`}
-        style={{ width: 'min(288px, 85vw)' }}
+        className="absolute z-40 flex flex-col items-start pointer-events-none"
+        style={{ left: railPos.x, top: railPos.y, maxHeight: `calc(100% - ${railPos.y}px)` }}
       >
-        {/* Minimized Pill Mode */}
-        {isToolbarCollapsed ? (
-          <div className="flex items-center gap-2 pr-2">
-            <button
-              onClick={() => setIsToolbarCollapsed(false)}
-              className="flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 bg-[#0071e3] text-white rounded-xl shadow-xs"
-            >
-              <Pen className="w-3.5 h-3.5" />
-              <span>{locale === 'ar' ? 'إظهار الأدوات' : 'Tools'}</span>
-            </button>
-          </div>
-        ) : (
-          <>
-            {/* Mode: Stylus (with Palm Rejection) vs Finger Touch */}
-            <div className="flex items-center bg-stone-100/90 p-0.5 rounded-xl border border-stone-200/80">
-              <button
-                onClick={() => setInteractionMode('stylus')}
-                className={`p-1.5 rounded-lg text-xs transition-colors ${
-                  interactionMode === 'stylus'
-                    ? 'bg-[#0071e3] text-white font-bold shadow-xs'
-                    : 'text-stone-500 hover:text-stone-900'
+        {/* Grip + arrow: drag to move the rail anywhere, tap to fold it away or bring it back */}
+        <button
+          type="button"
+          aria-label={railCollapsed ? (locale === 'ar' ? 'إظهار أدوات القلم' : 'Show pen tools') : (locale === 'ar' ? 'إخفاء أدوات القلم' : 'Hide pen tools')}
+          aria-expanded={!railCollapsed}
+          onPointerDown={onRailPointerDown}
+          onPointerMove={onRailPointerMove}
+          onPointerUp={onRailPointerUp}
+          onPointerCancel={onRailPointerUp}
+          className={`pointer-events-auto bg-[#0071e3] text-white shadow-lg flex items-center justify-center active:bg-[#0062c4] ${
+            railCollapsed ? 'w-6 h-10 rounded-xl' : 'w-9 h-6 rounded-xl mb-0.5'
+          }`}
+          style={{ touchAction: 'none' }}
+        >
+          {railCollapsed ? (
+            locale === 'ar' ? <ChevronLeft className="w-3.5 h-3.5" /> : <ChevronRight className="w-3.5 h-3.5" />
+          ) : (
+            <ChevronDown className="w-3.5 h-3.5 rotate-180" />
+          )}
+        </button>
+
+        {!railCollapsed && (
+          <div className="pointer-events-auto relative min-h-0 flex">
+            {/* Flyouts (colour / font) open toward the middle of the screen */}
+            {(showColorMenu || showFontMenu) && (
+              <div
+                className={`absolute top-0 z-50 bg-white/95 backdrop-blur-2xl border border-stone-200 shadow-2xl rounded-2xl p-2.5 ${
+                  railPos.x + 22 > (canvasRootRef.current?.clientWidth ?? 0) / 2 ? 'right-full mr-2' : 'left-full ml-2'
                 }`}
-                title="Apple Pencil Inking with Native Palm Rejection"
+                style={{ width: 'min(232px, 62vw)' }}
               >
-                <PenTool className="w-3.5 h-3.5" />
-              </button>
-              <button
-                onClick={() => setInteractionMode('touch_nav')}
-                className={`p-1.5 rounded-lg text-xs transition-colors ${
-                  interactionMode === 'touch_nav'
-                    ? 'bg-[#0071e3] text-white font-bold shadow-xs'
-                    : 'text-stone-500 hover:text-stone-900'
-                }`}
-                title="Finger Navigation / Scroll"
-              >
-                <MousePointer className="w-3.5 h-3.5" />
-              </button>
-            </div>
-
-            <div className="w-[1px] h-5 bg-stone-200" />
-
-            {/* Inking Tools: Pen, Highlighter, Eraser, Text, Lasso */}
-            <div className="flex items-center bg-stone-100/90 p-0.5 rounded-xl border border-stone-200/80">
-              <button
-                onClick={() => {
-                  setTool('pen');
-                  setLassoBox(null);
-                  lassoBoxRef.current = null;
-                }}
-                className={`p-1.5 rounded-lg text-xs transition-all ${
-                  tool === 'pen' ? 'bg-white text-[#0071e3] shadow-xs font-bold' : 'text-stone-500 hover:text-stone-900'
-                }`}
-                title={t.pen}
-              >
-                <Pen className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => {
-                  setTool('highlighter');
-                  setLassoBox(null);
-                  lassoBoxRef.current = null;
-                }}
-                className={`p-1.5 rounded-lg text-xs transition-all ${
-                  tool === 'highlighter' ? 'bg-amber-100 text-amber-800 shadow-xs font-bold' : 'text-stone-500 hover:text-stone-900'
-                }`}
-                title={t.highlighter}
-              >
-                <Highlighter className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => {
-                  setTool('eraser');
-                  setLassoBox(null);
-                  lassoBoxRef.current = null;
-                }}
-                className={`p-1.5 rounded-lg text-xs transition-all ${
-                  tool === 'eraser' ? 'bg-white text-[#0071e3] shadow-xs font-bold' : 'text-stone-500 hover:text-stone-900'
-                }`}
-                title={t.eraser}
-              >
-                <Eraser className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => {
-                  setTool('text');
-                  setLassoBox(null);
-                  lassoBoxRef.current = null;
-                }}
-                className={`p-1.5 rounded-lg text-xs transition-all ${
-                  tool === 'text' ? 'bg-white text-[#0071e3] shadow-xs font-bold' : 'text-stone-500 hover:text-stone-900'
-                }`}
-                title="Type Text with Font Control (Click paper to place)"
-              >
-                <Type className="w-4 h-4" />
-              </button>
-
-              <button
-                onClick={() => setTool('lasso')}
-                className={`p-1.5 rounded-lg text-xs transition-all ${
-                  tool === 'lasso' ? 'bg-white text-[#0071e3] shadow-xs font-bold' : 'text-stone-500 hover:text-stone-900'
-                }`}
-                title={t.lasso}
-              >
-                <Scissors className="w-4 h-4" />
-              </button>
-            </div>
-
-            <div className="w-[1px] h-5 bg-stone-200" />
-
-            {/* Ink Colors & Custom Color */}
-            <div className="flex items-center gap-1 bg-stone-100/90 px-1.5 py-1 rounded-xl border border-stone-200/80">
-              {(tool === 'highlighter' ? HIGHLIGHT_COLORS : PEN_COLORS).map((c) => {
-                const active = tool === 'highlighter' ? hlColor : penColor;
-                const label = locale === 'ar' && 'nameAr' in c ? (c as { nameAr: string }).nameAr : c.name;
-                return (
-                  <button
-                    key={c.value}
-                    onClick={() => {
-                      if (tool === 'highlighter') setHlColor(c.value);
-                      else {
-                        setPenColor(c.value);
-                        if (tool === 'eraser' || tool === 'lasso') setTool('pen');
-                      }
-                    }}
-                    className="w-8 h-8 rounded-full border border-black/15 transition-transform active:scale-90 flex items-center justify-center shrink-0"
-                    style={{ backgroundColor: c.value }}
-                    title={label}
-                    aria-label={label}
-                    aria-pressed={active === c.value}
-                  >
-                    {active === c.value && (
-                      <Check className={`w-3.5 h-3.5 ${c.value === '#FFFFFF' || tool === 'highlighter' ? 'text-stone-800' : 'text-white'}`} />
-                    )}
-                  </button>
-                );
-              })}
-
-              {/* Native color picker */}
-              <label
-                className="w-8 h-8 rounded-full border border-black/15 flex items-center justify-center cursor-pointer relative overflow-hidden shrink-0 bg-gradient-to-tr from-rose-500 via-amber-400 to-indigo-500"
-                title={locale === 'ar' ? 'لون مخصص' : 'Custom Ink Color'}
-              >
-                <input
-                  type="color"
-                  value={customColor}
-                  onChange={(e) => {
-                    setCustomColor(e.target.value);
-                    if (tool === 'highlighter') setHlColor(e.target.value);
-                    else setPenColor(e.target.value);
-                  }}
-                  className="opacity-0 absolute inset-0 cursor-pointer"
-                />
-              </label>
-
-              {/* Stroke Width Toggle */}
-              <button
-                onClick={() => setLineWidth((prev) => (prev === 1.8 ? 2.8 : prev === 2.8 ? 4.5 : 1.8))}
-                className="text-[10px] font-mono px-1.5 py-0.5 rounded text-stone-700 hover:bg-stone-200 ml-0.5 font-bold"
-                title="Pen Stroke Thickness"
-              >
-                {lineWidth === 1.8 ? 'Fine' : lineWidth === 2.8 ? 'Med' : 'Bold'}
-              </button>
-            </div>
-
-            {/* Font Control Dropdown & Font Size */}
-            <div className="relative">
-              <button
-                onClick={() => setShowFontMenu(!showFontMenu)}
-                className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-stone-100/90 border border-stone-200/80 text-xs text-stone-700 hover:bg-stone-200"
-                title="Font Family & Typography Control"
-              >
-                <span className="font-serif text-[11px] font-semibold">Aa</span>
-                <ChevronDown className="w-3 h-3 text-stone-500" />
-              </button>
-
-              {showFontMenu && (
-                <div className="absolute top-full mt-1.5 left-0 z-50 bg-white/95 backdrop-blur-2xl border border-stone-200 shadow-2xl rounded-2xl p-2.5 w-60 text-xs space-y-2 text-stone-800">
-                  <div className="text-[10px] font-mono uppercase text-stone-400 pb-1 border-b border-stone-200">
-                    {locale === 'ar' ? 'الخط والطباعة' : 'Font Family & Typography'}
-                  </div>
-                  <div className="space-y-1">
-                    {FONT_FAMILIES.map((f) => (
-                      <button
-                        key={f.value}
-                        onClick={() => {
-                          setFontFamily(f.value);
-                          setShowFontMenu(false);
-                          if (tool !== 'text') setTool('text');
-                        }}
-                        style={{ fontFamily: f.value }}
-                        className={`w-full text-left px-2.5 py-1.5 rounded-lg flex items-center justify-between text-xs transition-colors ${
-                          fontFamily === f.value ? 'bg-[#0071e3] text-white font-bold' : 'text-stone-700 hover:bg-stone-100'
-                        }`}
+                {showColorMenu && (
+                  <div className="space-y-2.5">
+                    <div className="grid grid-cols-5 gap-2 justify-items-center">
+                      {(tool === 'highlighter' ? HIGHLIGHT_COLORS : PEN_COLORS).map((c) => {
+                        const active = tool === 'highlighter' ? hlColor : penColor;
+                        const label = locale === 'ar' && 'nameAr' in c ? (c as { nameAr: string }).nameAr : c.name;
+                        return (
+                          <button
+                            key={c.value}
+                            onClick={() => {
+                              if (tool === 'highlighter') setHlColor(c.value);
+                              else {
+                                setPenColor(c.value);
+                                if (tool === 'eraser' || tool === 'lasso') setTool('pen');
+                              }
+                              setShowColorMenu(false);
+                            }}
+                            className="w-8 h-8 rounded-full border border-black/15 active:scale-90 flex items-center justify-center"
+                            style={{ backgroundColor: c.value }}
+                            title={label}
+                            aria-label={label}
+                            aria-pressed={active === c.value}
+                          >
+                            {active === c.value && (
+                              <Check className={`w-3.5 h-3.5 ${c.value === '#FFFFFF' || tool === 'highlighter' ? 'text-stone-800' : 'text-white'}`} />
+                            )}
+                          </button>
+                        );
+                      })}
+                      <label
+                        className="w-8 h-8 rounded-full border border-black/15 flex items-center justify-center cursor-pointer relative overflow-hidden bg-gradient-to-tr from-amber-400 via-rose-500 to-indigo-500"
+                        title={locale === 'ar' ? 'لون مخصص' : 'Custom Ink Color'}
                       >
-                        <span>{f.label}</span>
-                        {fontFamily === f.value && <Check className="w-3.5 h-3.5" />}
-                      </button>
-                    ))}
+                        <input
+                          type="color"
+                          value={customColor}
+                          onChange={(e) => {
+                            setCustomColor(e.target.value);
+                            if (tool === 'highlighter') setHlColor(e.target.value);
+                            else setPenColor(e.target.value);
+                          }}
+                          className="opacity-0 absolute inset-0 cursor-pointer"
+                        />
+                      </label>
+                    </div>
+                    <div className="flex items-center justify-between gap-1 pt-2 border-t border-stone-200">
+                      {([[1.8, 'Fine', 'رفيع'], [2.8, 'Med', 'وسط'], [4.5, 'Bold', 'عريض']] as const).map(([w, en, arl]) => (
+                        <button
+                          key={w}
+                          onClick={() => setLineWidth(w)}
+                          className={`flex-1 h-8 rounded-lg text-[11px] font-bold ${lineWidth === w ? 'bg-[#0071e3] text-white' : 'bg-stone-100 text-stone-700'}`}
+                        >
+                          {locale === 'ar' ? arl : en}
+                        </button>
+                      ))}
+                    </div>
                   </div>
-
-                  <div className="pt-2 border-t border-stone-200 flex items-center justify-between">
-                    <span className="text-[11px] text-stone-500">{locale === 'ar' ? 'الحجم' : 'Font Size'}:</span>
-                    <div className="flex items-center gap-1">
+                )}
+                {showFontMenu && (
+                  <div className="space-y-2 text-xs">
+                    <div className="space-y-1">
+                      {FONT_FAMILIES.map((f) => (
+                        <button
+                          key={f.value}
+                          onClick={() => {
+                            setFontFamily(f.value);
+                            setShowFontMenu(false);
+                            if (tool !== 'text') setTool('text');
+                          }}
+                          style={{ fontFamily: f.value }}
+                          className={`w-full text-start px-2.5 py-2 rounded-lg flex items-center justify-between text-xs ${
+                            fontFamily === f.value ? 'bg-[#0071e3] text-white font-bold' : 'text-stone-700 hover:bg-stone-100'
+                          }`}
+                        >
+                          <span>{f.label}</span>
+                          {fontFamily === f.value && <Check className="w-3.5 h-3.5" />}
+                        </button>
+                      ))}
+                    </div>
+                    <div className="pt-2 border-t border-stone-200 flex items-center justify-between gap-1">
                       {FONT_SIZES.map((sz) => (
                         <button
                           key={sz}
                           onClick={() => setFontSize(sz)}
-                          className={`w-6 h-6 rounded-md text-[10px] font-mono flex items-center justify-center ${
-                            fontSize === sz ? 'bg-[#0071e3] text-white font-bold' : 'bg-stone-100 text-stone-700 hover:bg-stone-200'
+                          className={`w-7 h-7 rounded-md text-[10px] font-mono flex items-center justify-center ${
+                            fontSize === sz ? 'bg-[#0071e3] text-white font-bold' : 'bg-stone-100 text-stone-700'
                           }`}
                         >
                           {sz}
@@ -1702,91 +1650,120 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                       ))}
                     </div>
                   </div>
-                </div>
-              )}
-            </div>
+                )}
+              </div>
+            )}
 
-            <div className="w-[1px] h-5 bg-stone-200" />
+            <div className="bg-white border border-stone-200 shadow-xl rounded-2xl p-0.5 flex flex-col items-center gap-0.5 overflow-y-auto overscroll-contain min-h-0 w-9 [&_button]:shrink-0">
+              {(
+                [
+                  ['pen', Pen, t.pen],
+                  ['highlighter', Highlighter, t.highlighter],
+                  ['eraser', Eraser, t.eraser],
+                  ['text', Type, locale === 'ar' ? 'نص' : 'Text'],
+                  ['lasso', Scissors, t.lasso],
+                ] as const
+              ).map(([id, Icon, label]) => (
+                <button
+                  key={id}
+                  onClick={() => {
+                    setTool(id);
+                    if (id !== 'lasso') {
+                      setLassoBox(null);
+                      lassoBoxRef.current = null;
+                    }
+                  }}
+                  title={label}
+                  aria-label={label}
+                  aria-pressed={tool === id}
+                  className={`w-8 h-8 rounded-xl flex items-center justify-center ${
+                    tool === id ? (id === 'highlighter' ? 'bg-amber-100 text-amber-800' : 'bg-[#0071e3] text-white') : 'text-stone-600 hover:bg-stone-100'
+                  }`}
+                >
+                  <Icon className="w-4 h-4" />
+                </button>
+              ))}
 
-            {/* Small Version Button */}
-            <button
-              onClick={() => setIsVersionModalOpen(true)}
-              className="flex items-center gap-1 px-2.5 py-1 rounded-xl bg-blue-50/80 hover:bg-blue-100 text-[#0071e3] border border-blue-200 text-xs font-semibold transition-colors"
-              title="View Version & Edit History by Cairo Date and Time"
-            >
-              <Clock className="w-3.5 h-3.5 text-[#0071e3]" />
-              <span>{locale === 'ar' ? 'الإصدارات' : 'Versions'}</span>
-              <span className="text-[10px] bg-blue-200/60 px-1.5 py-0.2 rounded-full font-mono text-[#0071e3] font-bold">
-                {versionsRef.current.length}
-              </span>
-            </button>
+              <div className="w-5 h-px bg-stone-200 my-px" />
 
-            {/* Undo / Redo */}
-            <div className="flex items-center gap-0.5">
+              <button
+                onClick={() => {
+                  setShowColorMenu((v) => !v);
+                  setShowFontMenu(false);
+                }}
+                title={locale === 'ar' ? 'اللون والسماكة' : 'Colour & thickness'}
+                aria-label={locale === 'ar' ? 'اللون والسماكة' : 'Colour & thickness'}
+                className="w-8 h-8 rounded-xl flex items-center justify-center hover:bg-stone-100"
+              >
+                <span className="w-5 h-5 rounded-full border-2 border-white ring-1 ring-black/20" style={{ backgroundColor: tool === 'highlighter' ? hlColor : penColor }} />
+              </button>
+              <button
+                onClick={() => {
+                  setShowFontMenu((v) => !v);
+                  setShowColorMenu(false);
+                }}
+                title="Font"
+                aria-label="Font"
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-stone-700 hover:bg-stone-100 font-serif text-sm font-semibold"
+              >
+                Aa
+              </button>
+
+              <div className="w-5 h-px bg-stone-200 my-px" />
+
               <button
                 onClick={handleUndo}
                 disabled={!canUndo || !!selectedPreviewVersion}
-                className="p-1.5 text-stone-500 hover:text-stone-900 disabled:opacity-25 rounded-lg hover:bg-stone-100"
                 title={t.undoStroke}
+                aria-label={t.undoStroke}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-stone-600 hover:bg-stone-100 disabled:opacity-25"
               >
-                <Undo2 className="w-3.5 h-3.5" />
+                <Undo2 className="w-4 h-4" />
               </button>
               <button
                 onClick={handleRedo}
                 disabled={!canRedo || !!selectedPreviewVersion}
-                className="p-1.5 text-stone-500 hover:text-stone-900 disabled:opacity-25 rounded-lg hover:bg-stone-100"
                 title={t.redoStroke}
+                aria-label={t.redoStroke}
+                className="w-8 h-8 rounded-xl flex items-center justify-center text-stone-600 hover:bg-stone-100 disabled:opacity-25"
               >
-                <Redo2 className="w-3.5 h-3.5" />
+                <Redo2 className="w-4 h-4" />
+              </button>
+
+              <div className="w-5 h-px bg-stone-200 my-px" />
+
+              <button
+                onClick={() => setInteractionMode(interactionMode === 'stylus' ? 'touch_nav' : 'stylus')}
+                title={interactionMode === 'stylus' ? 'Pencil mode (finger scrolls) – tap for finger drawing' : 'Finger mode – tap for Pencil mode'}
+                aria-label="Pencil or finger"
+                className={`w-8 h-8 rounded-xl flex items-center justify-center ${interactionMode === 'stylus' ? 'text-[#0071e3] bg-blue-50' : 'text-stone-600 hover:bg-stone-100'}`}
+              >
+                {interactionMode === 'stylus' ? <PenTool className="w-4 h-4" /> : <MousePointer className="w-4 h-4" />}
+              </button>
+              <button
+                onClick={() => setIsVersionModalOpen(true)}
+                title={locale === 'ar' ? 'الإصدارات' : 'Versions'}
+                aria-label={locale === 'ar' ? 'الإصدارات' : 'Versions'}
+                className="relative w-8 h-8 rounded-xl flex items-center justify-center text-[#0071e3] hover:bg-blue-50"
+              >
+                <Clock className="w-4 h-4" />
+                {versionsRef.current.length > 0 && (
+                  <span className="absolute -top-0.5 -end-0.5 min-w-[16px] h-4 px-1 rounded-full bg-[#0071e3] text-white text-[9px] font-mono font-bold flex items-center justify-center">
+                    {versionsRef.current.length}
+                  </span>
+                )}
+              </button>
+              <button
+                onClick={handleExtractSelection}
+                title={lassoBox ? t.extractSelection : t.extractPage}
+                aria-label={lassoBox ? t.extractSelection : t.extractPage}
+                className="w-8 h-8 rounded-xl flex items-center justify-center bg-[#0071e3] text-white"
+              >
+                <Sparkles className="w-4 h-4" />
               </button>
             </div>
-
-            {/* AI Extract Selection or Page */}
-            <button
-              onClick={handleExtractSelection}
-              className="p-1.5 bg-[#0071e3] hover:bg-[#0062c4] text-white shadow-xs rounded-xl transition-all"
-              title={lassoBox ? t.extractSelection : t.extractPage}
-            >
-              <Sparkles className="w-3.5 h-3.5" />
-            </button>
-
-          </>
+          </div>
         )}
-      </div>
-      <button
-        type="button"
-        aria-label={drawerOpen ? (locale === 'ar' ? 'إخفاء أدوات القلم' : 'Hide pen tools') : (locale === 'ar' ? 'إظهار أدوات القلم' : 'Show pen tools')}
-        aria-expanded={drawerOpen}
-        onClick={() => {
-          if (handleDragRef.current?.moved) return;
-          setDrawer(!drawerOpen);
-        }}
-        onPointerDown={(e) => {
-          handleDragRef.current = { x: e.clientX, moved: false };
-          (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
-        }}
-        onPointerMove={(e) => {
-          const d = handleDragRef.current;
-          if (!d || d.moved) return;
-          const dx = (e.clientX - d.x) * (locale === 'ar' ? -1 : 1);
-          if (dx > 24) {
-            d.moved = true;
-            setDrawer(true);
-          } else if (dx < -24) {
-            d.moved = true;
-            setDrawer(false);
-          }
-        }}
-        onPointerUp={() => {
-          setTimeout(() => (handleDragRef.current = null), 0);
-        }}
-        className={`pointer-events-auto self-center h-20 w-8 flex items-center justify-center bg-[#0071e3] text-white shadow-lg active:bg-[#0062c4] ${
-          locale === 'ar' ? 'rounded-s-2xl' : 'rounded-e-2xl'
-        }`}
-        style={{ touchAction: 'none' }}
-      >
-        {(drawerOpen ? locale !== 'ar' : locale === 'ar') ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
-      </button>
       </div>
 
       {/* Exit button for Full Paper View only (the normal toggle lives in the notebook sub-header) */}
