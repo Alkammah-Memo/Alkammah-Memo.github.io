@@ -15,6 +15,10 @@ import {
   CheckCircle2,
   AlertCircle,
   Database,
+  BookOpen,
+  RotateCcw,
+  Trash2,
+  ChevronLeft,
 } from 'lucide-react';
 
 interface BackupModalProps {
@@ -69,6 +73,11 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   const [isRestoring, setIsRestoring] = useState(false);
   const [pending, setPending] = useState<PendingRestore | null>(null);
   const [clearWord, setClearWord] = useState('');
+  // The window shows a compact grid of tiles; the three bigger tools open in the same window, one at a time
+  const [view, setView] = useState<'home' | 'planner' | 'restore' | 'erase'>('home');
+  useEffect(() => {
+    if (isOpen) setView('home');
+  }, [isOpen]);
   const fileInputRef = useRef<HTMLInputElement | null>(null);
 
   const CONFIRM_WORD = ar ? 'حذف' : 'DELETE';
@@ -305,17 +314,55 @@ export const BackupModal: React.FC<BackupModalProps> = ({
     }
   };
 
+  const tile = (icon: React.ReactNode, title: string, sub: string, onClick: () => void, tone = 'bg-[#f5f5f7] hover:bg-[#e8e8ed] border-[#d2d2d7] text-[#1d1d1f]') => (
+    <button
+      type="button"
+      onClick={onClick}
+      className={`min-h-[84px] sm:min-h-[96px] p-3 rounded-2xl border text-start flex flex-col justify-between active:scale-[0.98] transition-all ${tone}`}
+    >
+      <span className="w-8 h-8 rounded-xl bg-white/80 flex items-center justify-center text-[#0071e3]">{icon}</span>
+      <span>
+        <span className="block text-[13px] font-bold leading-tight">{title}</span>
+        <span className="block text-[11px] text-[#6e6e73] font-normal leading-tight mt-0.5">{sub}</span>
+      </span>
+    </button>
+  );
+
+  const viewTitle =
+    view === 'planner'
+      ? ar ? 'استيراد الدفتر القديم (PDF)' : 'Import old notebook (PDF)'
+      : view === 'restore'
+      ? ar ? 'استعادة نسخة احتياطية' : 'Restore a backup'
+      : view === 'erase'
+      ? ar ? 'تفريغ كل البيانات' : 'Erase all data'
+      : ar ? 'النسخ والاستيراد' : 'Backup & import';
+
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 animate-in fade-in duration-150 overflow-y-auto">
-      <div className="bg-white/95 text-[#1d1d1f] rounded-3xl p-6 max-w-lg w-full space-y-5 shadow-2xl border border-[#d2d2d7] backdrop-blur-2xl">
-        <div className="flex items-center justify-between pb-3 border-b border-[#e5e5ea]">
-          <div className="flex items-center gap-2.5">
-            <div className="p-2 bg-blue-50 text-[#0071e3] rounded-xl border border-blue-200">
-              <Database className="w-5 h-5 text-[#0071e3]" />
-            </div>
-            <h3 className="text-base font-bold text-[#1d1d1f]">{t.export} & {t.import}</h3>
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-md p-2 sm:p-4 animate-in fade-in duration-150">
+      <div
+        className="bg-white/95 text-[#1d1d1f] rounded-3xl p-4 sm:p-5 max-w-xl w-full max-h-[calc(100dvh-1rem)] flex flex-col gap-3 shadow-2xl border border-[#d2d2d7] backdrop-blur-2xl"
+        dir={ar ? 'rtl' : 'ltr'}
+      >
+        <div className="flex items-center justify-between gap-2 shrink-0">
+          <div className="flex items-center gap-2 min-w-0">
+            {view !== 'home' ? (
+              <button
+                type="button"
+                onClick={() => setView('home')}
+                className="shrink-0 min-h-10 ps-1.5 pe-3 inline-flex items-center gap-1 rounded-xl bg-[#f5f5f7] text-xs font-bold text-[#0071e3]"
+                aria-label={ar ? 'رجوع' : 'Back'}
+              >
+                <ChevronLeft className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
+                {ar ? 'رجوع' : 'Back'}
+              </button>
+            ) : (
+              <div className="p-2 bg-blue-50 text-[#0071e3] rounded-xl border border-blue-200 shrink-0">
+                <Database className="w-4 h-4" />
+              </div>
+            )}
+            <h3 className="text-sm sm:text-base font-bold truncate">{viewTitle}</h3>
           </div>
-          <button onClick={onClose} className="text-[#86868b] hover:text-[#1d1d1f] p-1 rounded-lg hover:bg-black/5 transition-colors">
+          <button onClick={onClose} className="shrink-0 w-10 h-10 flex items-center justify-center text-[#86868b] hover:text-[#1d1d1f] rounded-full hover:bg-black/5 transition-colors" aria-label={ar ? 'إغلاق' : 'Close'}>
             <X className="w-5 h-5" />
           </button>
         </div>
@@ -323,151 +370,85 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         {status && (
           <div
             role="status"
-            className={`p-3 rounded-2xl text-xs flex items-center gap-2 ${
-              status.type === 'ok'
-                ? 'bg-emerald-50 text-emerald-800 border border-emerald-200'
-                : 'bg-red-50 text-red-800 border border-red-200'
+            className={`shrink-0 p-2.5 rounded-2xl text-xs flex items-center gap-2 ${
+              status.type === 'ok' ? 'bg-emerald-50 text-emerald-800 border border-emerald-200' : 'bg-red-50 text-red-800 border border-red-200'
             }`}
           >
             {status.type === 'ok' ? <CheckCircle2 className="w-4 h-4 shrink-0" /> : <AlertCircle className="w-4 h-4 shrink-0" />}
-            <span>{status.text}</span>
+            <span className="min-w-0">{status.text}</span>
           </div>
         )}
 
-        <div className="space-y-3">
-          {/* Print Report */}
-          <button
-            onClick={handlePrintHTML}
-            className="w-full flex items-center justify-between p-3.5 bg-[#f5f5f7] hover:bg-[#e8e8ed] rounded-2xl border border-[#d2d2d7] text-xs font-semibold text-[#1d1d1f] transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <Printer className="w-4 h-4 text-[#0071e3]" />
-              <span>{t.exportPdf}</span>
+        <div className="min-h-0 overflow-y-auto overscroll-contain">
+          {view === 'home' && (
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-2.5">
+              {tile(<Printer className="w-4 h-4" />, t.exportPdf, 'HTML / PDF', handlePrintHTML)}
+              {tile(<FileSpreadsheet className="w-4 h-4" />, t.exportCsv, 'CSV / Excel', handleExportCSV)}
+              {tile(<Download className="w-4 h-4" />, t.backupJson, ar ? 'المهام + الحبر + الصفحات' : 'Tasks + ink + pages', handleFullJSONBackup)}
+              {onImportPlannerPages && tile(<BookOpen className="w-4 h-4" />, ar ? 'استيراد الدفتر القديم' : 'Import old notebook', ar ? 'ملف PDF من GoodNotes' : 'PDF from GoodNotes', () => setView('planner'), 'bg-blue-50/60 hover:bg-blue-50 border-blue-200 text-[#1d1d1f]')}
+              {tile(<RotateCcw className="w-4 h-4" />, ar ? 'استعادة نسخة' : 'Restore backup', ar ? 'من ملف JSON' : 'From a JSON file', () => setView('restore'), 'bg-blue-50/60 hover:bg-blue-50 border-blue-200 text-[#1d1d1f]')}
+              {onClearAllData && tile(<Trash2 className="w-4 h-4 text-rose-600" />, ar ? 'تفريغ كل البيانات' : 'Erase all data', ar ? 'مع نسخة احتياطية أولاً' : 'Backup is saved first', () => setView('erase'), 'bg-rose-50/70 hover:bg-rose-50 border-rose-200 text-rose-900')}
             </div>
-            <span className="text-[11px] text-[#86868b] font-normal">HTML / PDF</span>
-          </button>
+          )}
 
-          {/* Export Tasks CSV */}
-          <button
-            onClick={handleExportCSV}
-            className="w-full flex items-center justify-between p-3.5 bg-[#f5f5f7] hover:bg-[#e8e8ed] rounded-2xl border border-[#d2d2d7] text-xs font-semibold text-[#1d1d1f] transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <FileSpreadsheet className="w-4 h-4 text-[#0071e3]" />
-              <span>{t.exportCsv}</span>
-            </div>
-            <span className="text-[11px] text-[#86868b] font-normal">CSV / Excel</span>
-          </button>
+          {view === 'planner' && onImportPlannerPages && <PlannerImport locale={locale} onImport={onImportPlannerPages} />}
 
-          {/* Full Workspace JSON */}
-          <button
-            onClick={handleFullJSONBackup}
-            className="w-full flex items-center justify-between p-3.5 bg-[#f5f5f7] hover:bg-[#e8e8ed] rounded-2xl border border-[#d2d2d7] text-xs font-semibold text-[#1d1d1f] transition-colors"
-          >
-            <div className="flex items-center gap-2.5">
-              <Download className="w-4 h-4 text-[#0071e3]" />
-              <span>{t.backupJson}</span>
-            </div>
-            <span className="text-[11px] text-[#86868b] font-normal">{ar ? 'المهام + الحبر + الصفحات' : 'Tasks + Ink + Pages'}</span>
-          </button>
-
-          {onImportPlannerPages && <PlannerImport locale={locale} onImport={onImportPlannerPages} />}
-
-          {/* Restore JSON Backup */}
-          <div className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-200 text-xs space-y-2">
-            <span className="font-semibold text-[#0071e3] block">
-              {ar ? 'استعادة النسخة الاحتياطية:' : 'Restore Workspace from JSON Backup:'}
-            </span>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept=".json,application/json"
-              onChange={handleRestoreFile}
-              disabled={isRestoring}
-              className="text-xs file:me-3 file:py-1.5 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#0071e3] file:text-white hover:file:bg-[#0062c4] file:cursor-pointer"
-            />
-
-            {pending && (
-              <div className="bg-white rounded-xl border border-blue-200 p-3 space-y-2">
-                <p className="font-semibold text-stone-800 break-all">{pending.fileName}</p>
-                <p className="text-[11px] text-stone-600">
-                  {pending.counts.map(([k, n]) => `${k}: ${n}`).join(' · ')}
-                </p>
-                <p className="text-[11px] text-stone-600 leading-relaxed">
-                  {ar
-                    ? 'الاستبدال: تصبح بيانات الملف هي النسخة المعتمدة وتُحذف أي سجلات غير موجودة فيه (محلياً وفي السحابة). الدمج: يضيف سجلات الملف ويحدّث المتطابقة دون حذف شيء.'
-                    : 'Replace: the file becomes the workspace and anything not in it is removed (locally and in the cloud). Merge: adds the file\'s records and updates matching ones, removing nothing.'}
-                </p>
-                <div className="flex flex-wrap gap-2">
-                  <button
-                    onClick={() => applyRestore('replace')}
-                    disabled={isRestoring}
-                    className="px-3 py-1.5 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl font-bold"
-                  >
-                    {ar ? 'استبدال كل البيانات' : 'Replace everything'}
-                  </button>
-                  <button
-                    onClick={() => applyRestore('merge')}
-                    disabled={isRestoring}
-                    className="px-3 py-1.5 bg-[#0071e3] hover:bg-[#0062c4] disabled:opacity-50 text-white rounded-xl font-bold"
-                  >
-                    {ar ? 'دمج' : 'Merge'}
-                  </button>
-                  <button
-                    onClick={() => setPending(null)}
-                    disabled={isRestoring}
-                    className="px-3 py-1.5 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-semibold"
-                  >
-                    {t.cancel}
-                  </button>
+          {view === 'restore' && (
+            <div className="p-3.5 bg-blue-50/50 rounded-2xl border border-blue-200 text-xs space-y-2.5">
+              <p className="text-[11px] text-[#515154]">{ar ? 'اختر ملف النسخة الاحتياطية (JSON) الذي حفظته سابقاً.' : 'Choose a backup file (JSON) you saved earlier.'}</p>
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept=".json,application/json"
+                onChange={handleRestoreFile}
+                disabled={isRestoring}
+                className="text-xs file:me-3 file:py-2 file:px-3 file:rounded-xl file:border-0 file:text-xs file:font-semibold file:bg-[#0071e3] file:text-white hover:file:bg-[#0062c4] file:cursor-pointer w-full"
+              />
+              {pending && (
+                <div className="bg-white rounded-xl border border-blue-200 p-3 space-y-2">
+                  <p className="font-semibold text-stone-800 break-all">{pending.fileName}</p>
+                  <p className="text-[11px] text-stone-600">{pending.counts.map(([k, n]) => `${k}: ${n}`).join(' · ')}</p>
+                  <p className="text-[11px] text-stone-600 leading-relaxed">
+                    {ar
+                      ? 'الاستبدال: تصبح بيانات الملف هي النسخة المعتمدة وتُحذف أي سجلات غير موجودة فيه. الدمج: يضيف سجلات الملف ويحدّث المتطابق دون حذف أي شيء.'
+                      : "Replace: the file becomes the workspace and anything not in it is removed. Merge: adds the file's records and updates matching ones, removing nothing."}
+                  </p>
+                  <div className="flex flex-wrap gap-2">
+                    <button onClick={() => applyRestore('merge')} disabled={isRestoring} className="min-h-10 px-4 bg-[#0071e3] hover:bg-[#0062c4] disabled:opacity-50 text-white rounded-xl font-bold">
+                      {ar ? 'دمج (موصى به)' : 'Merge (recommended)'}
+                    </button>
+                    <button onClick={() => applyRestore('replace')} disabled={isRestoring} className="min-h-10 px-4 bg-rose-600 hover:bg-rose-700 disabled:opacity-50 text-white rounded-xl font-bold">
+                      {ar ? 'استبدال كل البيانات' : 'Replace everything'}
+                    </button>
+                    <button onClick={() => setPending(null)} disabled={isRestoring} className="min-h-10 px-4 bg-stone-100 hover:bg-stone-200 text-stone-700 rounded-xl font-semibold">
+                      {t.cancel}
+                    </button>
+                  </div>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+            </div>
+          )}
 
-          {/* Clean & Reset Database */}
-          {onClearAllData && (
-            <div className="p-3.5 bg-rose-50/70 rounded-2xl border border-rose-200 text-xs space-y-2">
-              <span className="font-semibold text-rose-900 block">
-                {ar ? 'تفريغ قاعدة البيانات:' : 'Erase All Data:'}
-              </span>
+          {view === 'erase' && onClearAllData && (
+            <div className="p-3.5 bg-rose-50/70 rounded-2xl border border-rose-200 text-xs space-y-2.5">
               <p className="text-[11px] text-rose-700 leading-relaxed">
                 {ar
-                  ? 'يحذف نهائياً كل المهام والاجتماعات والمفكرات والأشخاص والمشاريع من هذا الجهاز ومن السحابة. يتم تنزيل نسخة احتياطية تلقائياً قبل الحذف.'
+                  ? 'يحذف نهائياً كل المهام والاجتماعات والمفكرات والأشخاص والمشاريع من هذا الجهاز ومن السحابة. يتم تنزيل نسخة احتياطية تلقائياً أولاً.'
                   : 'Permanently deletes all tasks, meetings, notebooks, people and projects from this device and the cloud. A backup file is downloaded automatically first.'}
               </p>
               <label className="block text-[11px] text-rose-800">
                 {ar ? `اكتب "${CONFIRM_WORD}" للتأكيد` : `Type "${CONFIRM_WORD}" to confirm`}
-                <input
-                  type="text"
-                  value={clearWord}
-                  onChange={(ev) => setClearWord(ev.target.value)}
-                  className="mt-1 w-full px-3 py-1.5 rounded-xl border border-rose-300 bg-white text-xs focus:outline-none"
-                  autoComplete="off"
-                />
+                <input type="text" value={clearWord} onChange={(ev) => setClearWord(ev.target.value)} className="mt-1 w-full min-h-10 px-3 rounded-xl border border-rose-300 bg-white text-sm focus:outline-none" autoComplete="off" />
               </label>
               <button
                 onClick={handleClearAll}
                 disabled={isClearing || clearWord.trim() !== CONFIRM_WORD}
-                className="w-full py-2 px-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-2 shadow-xs"
+                className="w-full min-h-11 px-3 bg-rose-600 hover:bg-rose-700 disabled:opacity-40 text-white rounded-xl font-bold text-xs transition-colors flex items-center justify-center gap-2"
               >
-                <span>
-                  {isClearing
-                    ? ar ? 'جارٍ التفريغ...' : 'Erasing...'
-                    : ar ? 'تنزيل نسخة احتياطية وحذف كل البيانات' : 'Download Backup & Erase All Data'}
-                </span>
+                {isClearing ? (ar ? 'جارٍ التفريغ...' : 'Erasing...') : ar ? 'تنزيل نسخة احتياطية وحذف كل البيانات' : 'Download backup & erase all data'}
               </button>
             </div>
           )}
-        </div>
-
-        <div className="flex justify-end pt-2">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
-          >
-            {ar ? 'إغلاق' : 'Done'}
-          </button>
         </div>
       </div>
     </div>
