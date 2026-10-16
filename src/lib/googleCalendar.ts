@@ -4,7 +4,7 @@
  * are added, changed or deleted in Google.
  * Needs a Google OAuth "Web client ID" (public, not a secret) with this site as an authorized JavaScript origin.
  */
-import type { Meeting } from '../types';
+import type { Meeting, Task } from '../types';
 import { cairoLocalToIso } from './cairoTime';
 
 /** read and write events, plus the account's email address (to show which account is linked) */
@@ -23,6 +23,8 @@ export interface GoogleLink {
   lastCount?: number;
   autoSync: boolean;
   scopeV?: number;
+  /** task id -> the Google event that shows it, and a signature of what was last sent */
+  taskEvents?: Record<string, { eventId: string; sig: string }>;
   /** Google event ids that were mirrored at the last sync (used to notice what was deleted here) */
   known?: string[];
 }
@@ -195,7 +197,8 @@ function memoAttendees(e: GoogleEvent): string[] | null {
 export function eventsToMeetings(events: GoogleEvent[]): Meeting[] {
   const meetings: Meeting[] = [];
   for (const e of events) {
-    if (e.status === 'cancelled' || !e.id) continue;
+    // events that show an app task are not meetings
+    if (e.status === 'cancelled' || !e.id || e.extendedProperties?.private?.memoTaskId) continue;
     let start: string;
     let end: string;
     if (e.start?.dateTime && e.end?.dateTime) {
@@ -323,4 +326,71 @@ export async function pushMeeting(token: string, m: Meeting): Promise<{ id: stri
 
 export async function deleteGoogleEvent(token: string, eventId: string): Promise<void> {
   await googleWrite('DELETE', `/${encodeURIComponent(eventId)}`, token);
+}
+
+// ----- tasks -> Google Calendar (one way: the app is the source of truth for tasks)
+const addDay = (d: string) => new Date(Date.parse(`${d}T12:00:00Z`) + 86400_000).toISOString().slice(0, 10);
+
+function taskBody(t: Task) {
+  const due = (t.dueDate || '').slice(0, 10);
+  const timed = !!t.dueTime;
+  const start = timed ? cairoLocalToIso(due, t.dueTime as string) : '';
+  const details = [t.project && `Project: ${t.project}`, t.ownerAlias && `Owner: ${t.ownerAlias}`, `Priority: ${t.priority}`, `Status: ${t.status}`, t.nextAction && `Next action: ${t.nextAction}`, t.description]
+    .filter(Boolean)
+    .join('\n');
+  return {
+    summary: `Task: ${t.title}`,
+    description: details,
+    colorId: '5',
+    ...(timed
+      ? { start: { dateTime: start, timeZone: 'Africa/Cairo' }, end: { dateTime: new Date(Date.parse(start) + 30 * 60_000).toISOString(), timeZone: 'Africa/Cairo' } }
+      : { start: { date: due }, end: { date: addDay(due) } }),
+    extendedProperties: { private: { memoTaskId: t.id } },
+  };
+}
+
+/**
+ * Shows open tasks that have a due date as events in Google Calendar (all-day, or timed when the task has a due time). Changing a task
+ * updates its event; finishing, archiving or deleting it (or clearing its date) removes the event.
+ */
+export async function syncTasksToGoogle(token: string, tasks: Task[], fromDay: string, toDay: string): Promise<{ created: number; updated: number; removed: number }> {
+  const map: NonNullable<GoogleLink['taskEvents']> = { ...(getGoogleLink().taskEvents || {}) };
+  let created = 0;
+  let updated = 0;
+  let removed = 0;
+  const eligible = new Map(
+    tasks
+      .filter((t) => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed' && !!t.dueDate && t.dueDate.slice(0, 10) >= fromDay && t.dueDate.slice(0, 10) <= toDay)
+      .map((t) => [t.id, t])
+  );
+  for (const [taskId, link] of Object.entries(map)) {
+    if (eligible.has(taskId)) continue;
+    await deleteGoogleEvent(token, link.eventId);
+    delete map[taskId];
+    removed++;
+  }
+  for (const t of eligible.values()) {
+    const body = taskBody(t);
+    const sig = JSON.stringify(body);
+    const cur = map[t.id];
+    if (cur && cur.sig === sig) continue;
+    if (cur) {
+      try {
+        await googleWrite('PATCH', `/${encodeURIComponent(cur.eventId)}`, token, body);
+        map[t.id] = { eventId: cur.eventId, sig };
+        updated++;
+        continue;
+      } catch (e) {
+        if ((e as Error).message === 'GOOGLE_SCOPES_MISSING' || (e as Error).message === 'GOOGLE_TOKEN_EXPIRED') throw e;
+        /* the event is gone in Google: fall through and create it again */
+      }
+    }
+    const r = await googleWrite('POST', '', token, body);
+    if (r?.id) {
+      map[t.id] = { eventId: r.id, sig };
+      created++;
+    }
+  }
+  setGoogleLink({ taskEvents: map });
+  return { created, updated, removed };
 }
