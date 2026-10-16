@@ -35,6 +35,8 @@ import {
   RectangleHorizontal,
   RectangleVertical,
   Trash2,
+  ChevronRight,
+  ChevronLeft,
   AlignJustify,
   Grid3X3,
   Grid,
@@ -504,6 +506,23 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   const [toolbarPos, setToolbarPos] = useState<{ x: number; y: number }>({ x: 24, y: 16 });
   const [isDraggingToolbar, setIsDraggingToolbar] = useState<boolean>(false);
   const [isToolbarCollapsed, setIsToolbarCollapsed] = useState<boolean>(false);
+  // Pen tools live in a side drawer: a small arrow on the screen edge slides it in and out
+  const [drawerOpen, setDrawerOpen] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('alkammah_pen_drawer') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const setDrawer = (open: boolean) => {
+    setDrawerOpen(open);
+    try {
+      localStorage.setItem('alkammah_pen_drawer', open ? '1' : '0');
+    } catch {
+      /* ignore */
+    }
+  };
+  const handleDragRef = useRef<{ x: number; moved: boolean } | null>(null);
   const [showPageOptions, setShowPageOptions] = useState<boolean>(false); // phones: paper style/colour row folded away by default
   const [showFontMenu, setShowFontMenu] = useState<boolean>(false);
 
@@ -1454,10 +1473,15 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   return (
     <div className="relative flex-1 flex flex-col h-full bg-[#f5f5f7] overflow-hidden select-none">
       {/* Docked inking toolbar: lives in the layout flow so it can never cover the app header or the paper */}
-      <div className={`${hideTools ? 'hidden' : ''} shrink-0 flex justify-center px-2 py-1.5 bg-[#f5f5f7] border-b border-[#e5e5ea] z-20`}>
+      <div
+        className={`absolute inset-y-0 ${locale === 'ar' ? 'right-0 flex-row-reverse' : 'left-0'} z-40 flex pointer-events-none transition-transform duration-200 ease-out`}
+        style={{ transform: drawerOpen ? 'none' : `translateX(calc(${locale === 'ar' ? '1' : '-1'} * min(288px, 85vw)))` }}
+      >
       <div
         ref={toolbarRef}
-        className="shadow-sm rounded-2xl bg-white border border-stone-200/90 text-stone-800 flex flex-wrap items-center justify-center gap-1.5 p-1.5 max-w-full"
+        aria-hidden={!drawerOpen}
+        className={`pointer-events-auto self-start max-h-full overflow-y-auto overscroll-contain bg-white border-stone-200 text-stone-800 shadow-2xl flex flex-wrap content-start items-center justify-start gap-2 p-3 mt-2 ${locale === 'ar' ? 'border rounded-s-2xl' : 'border rounded-e-2xl'}`}
+        style={{ width: 'min(288px, 85vw)' }}
       >
         {/* Minimized Pill Mode */}
         {isToolbarCollapsed ? (
@@ -1726,17 +1750,43 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
               <Sparkles className="w-3.5 h-3.5" />
             </button>
 
-            {/* Minimize / Collapse Bar */}
-            <button
-              onClick={() => setIsToolbarCollapsed(true)}
-              className="p-1 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-stone-100"
-              title="Minimize movable toolbar"
-            >
-              <Minimize2 className="w-3.5 h-3.5" />
-            </button>
           </>
         )}
       </div>
+      <button
+        type="button"
+        aria-label={drawerOpen ? (locale === 'ar' ? 'إخفاء أدوات القلم' : 'Hide pen tools') : (locale === 'ar' ? 'إظهار أدوات القلم' : 'Show pen tools')}
+        aria-expanded={drawerOpen}
+        onClick={() => {
+          if (handleDragRef.current?.moved) return;
+          setDrawer(!drawerOpen);
+        }}
+        onPointerDown={(e) => {
+          handleDragRef.current = { x: e.clientX, moved: false };
+          (e.currentTarget as HTMLElement).setPointerCapture?.(e.pointerId);
+        }}
+        onPointerMove={(e) => {
+          const d = handleDragRef.current;
+          if (!d || d.moved) return;
+          const dx = (e.clientX - d.x) * (locale === 'ar' ? -1 : 1);
+          if (dx > 24) {
+            d.moved = true;
+            setDrawer(true);
+          } else if (dx < -24) {
+            d.moved = true;
+            setDrawer(false);
+          }
+        }}
+        onPointerUp={() => {
+          setTimeout(() => (handleDragRef.current = null), 0);
+        }}
+        className={`pointer-events-auto self-center h-20 w-8 flex items-center justify-center bg-[#0071e3] text-white shadow-lg active:bg-[#0062c4] ${
+          locale === 'ar' ? 'rounded-s-2xl' : 'rounded-e-2xl'
+        }`}
+        style={{ touchAction: 'none' }}
+      >
+        {(drawerOpen ? locale !== 'ar' : locale === 'ar') ? <ChevronLeft className="w-5 h-5" /> : <ChevronRight className="w-5 h-5" />}
+      </button>
       </div>
 
       {/* Exit button for Full Paper View only (the normal toggle lives in the notebook sub-header) */}
