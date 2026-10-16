@@ -112,15 +112,15 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
-      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl w-full border border-stone-200 overflow-hidden my-8">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4">
+      <div className="bg-white rounded-2xl shadow-2xl max-w-2xl landscape:max-w-4xl w-full border border-stone-200 overflow-hidden">
         {/* Header */}
-        <div className="bg-white text-stone-900 px-6 py-4 flex items-center justify-between border-b border-stone-200">
+        <div className="bg-white text-stone-900 px-4 py-2.5 sm:px-6 sm:py-4 flex items-center justify-between border-b border-stone-200">
           <div>
             <span className="text-[11px] font-mono uppercase text-[#0071e3] font-semibold">
               {task ? (ar ? 'تعديل مهمة تنفيذية' : 'EDIT EXECUTIVE TASK') : (ar ? 'مهمة تنفيذية جديدة' : 'NEW EXECUTIVE TASK')}
             </span>
-            <h2 className="text-lg font-bold text-stone-900">
+            <h2 className="text-base sm:text-lg font-bold text-stone-900 line-clamp-1">
               {task ? task.title : (locale === 'en' ? 'Create New Action Item' : 'إضافة إجراء جديد')}
             </h2>
           </div>
@@ -134,7 +134,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
         </div>
 
         {/* Form Body */}
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-3 sm:p-5 space-y-2.5 sm:space-y-3.5 max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain">
           {/* Title */}
           <div>
             <label className="block text-xs font-semibold text-stone-700 mb-1">
@@ -146,12 +146,12 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               value={title}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={locale === 'ar' ? 'عنوان المهمة أو الإجراء التنفيذي...' : 'Task title or milestone...'}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-sm focus:outline-none focus:border-[#0071e3] font-medium"
+              className="w-full px-3.5 py-2 rounded-xl border border-stone-300 text-sm focus:outline-none focus:border-[#0071e3] font-medium"
             />
           </div>
 
           {/* Workstream & Department */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 landscape:grid-cols-4 gap-2.5">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.workstream}
@@ -159,7 +159,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <select
                 value={workstream}
                 onChange={(e) => setWorkstream(e.target.value as Workstream)}
-                className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
+                className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
               >
                 {INITIAL_WORKSTREAMS.map((ws) => (
                   <option key={ws} value={ws}>
@@ -176,7 +176,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <select
                 value={department}
                 onChange={(e) => setDepartment(e.target.value)}
-                className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
+                className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
               >
                 {(department && !departments.includes(department) ? [department, ...departments] : departments).map((dept) => (
                   <option key={dept} value={dept}>
@@ -188,7 +188,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           </div>
 
           {/* Project & Counterpart */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 landscape:grid-cols-4 gap-2.5">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.project}
@@ -198,7 +198,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 value={project}
                 onChange={(e) => setProject(e.target.value)}
                 placeholder={locale === 'ar' ? 'اسم المشروع أو المنطقة الاستثمارية' : 'Project or investment zone'}
-                className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
+                className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
               />
             </div>
 
@@ -211,13 +211,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 value={counterpart}
                 onChange={(e) => setCounterpart(e.target.value)}
                 placeholder={locale === 'ar' ? 'الجهة أو الشريك المقابل' : 'Counterpart entity or partner'}
-                className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
+                className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
               />
             </div>
           </div>
 
           {/* Status, Priority & Owner Alias */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          <div className="grid grid-cols-2 md:grid-cols-3 landscape:grid-cols-4 gap-2.5">
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.status}
@@ -225,7 +225,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <select
                 value={status}
                 onChange={(e) => setStatus(e.target.value as TaskStatus)}
-                className="w-full min-w-0 box-border px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
+                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
               >
                 <option value="Pending">{t.pending}</option>
                 <option value="In Progress">{t.inProgress}</option>
@@ -243,7 +243,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <select
                 value={priority}
                 onChange={(e) => setPriority(e.target.value as TaskPriority)}
-                className="w-full min-w-0 box-border px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
+                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
               >
                 <option value="Urgent">{ar ? 'عاجل' : 'Urgent'}</option>
                 <option value="High">{ar ? 'مرتفع' : 'High'}</option>
@@ -261,13 +261,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 value={ownerAlias}
                 onChange={(e) => setOwnerAlias(e.target.value)}
                 placeholder={locale === 'ar' ? 'اسم المسؤول أو رمزه' : 'Owner alias or name'}
-                className="w-full min-w-0 box-border px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
+                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
               />
             </div>
           </div>
 
           {/* Due Date & Follow-Up Date */}
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          <div className="grid grid-cols-2 md:grid-cols-3 landscape:grid-cols-4 gap-2.5">
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.dueDate}
@@ -276,7 +276,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 type="date"
                 value={dueDate}
                 onChange={(e) => setDueDate(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
+                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
               />
             </div>
 
@@ -288,7 +288,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 type="time"
                 value={dueTime}
                 onChange={(e) => setDueTime(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
+                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
               />
             </div>
 
@@ -300,7 +300,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 type="date"
                 value={followUpDate}
                 onChange={(e) => setFollowUpDate(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
+                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
               />
             </div>
           </div>
@@ -315,7 +315,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               value={nextAction}
               onChange={(e) => setNextAction(e.target.value)}
               placeholder={locale === 'ar' ? 'الإجراء التالي المتوقع تنفيذه' : 'Next concrete milestone or action'}
-              className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
+              className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
             />
           </div>
 
@@ -331,7 +331,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 required
                 onChange={(e) => setBlocker(e.target.value)}
                 placeholder={locale === 'ar' ? 'الطرف أو الأمر المنتظر إنجازه' : 'Who or what are we waiting on?'}
-                className="w-full px-3 py-2 rounded-xl border border-amber-300 bg-amber-50/50 text-xs focus:outline-none"
+                className="w-full px-3 py-1.5 rounded-xl border border-amber-300 bg-amber-50/50 text-xs focus:outline-none"
               />
             </div>
           )}
@@ -348,7 +348,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 required
                 onChange={(e) => setClosureReason(e.target.value)}
                 placeholder={locale === 'ar' ? 'سبب الإغلاق أو الاستبدال' : 'Reason for closure or superseded action'}
-                className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none"
+                className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none"
               />
             </div>
           )}
@@ -359,11 +359,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               {locale === 'en' ? 'Detailed Notes / Executive Context' : 'ملاحظات وتفاصيل تنفيذية'}
             </label>
             <textarea
-              rows={3}
+              rows={2}
               value={description}
               onChange={(e) => setDescription(e.target.value)}
               placeholder={ar ? 'سجّل السياق والنقاط الرئيسية والملاحظات' : 'Context, key points and notes'}
-              className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
+              className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
             />
           </div>
 
@@ -391,7 +391,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           )}
 
           {/* Modal Actions */}
-          <div className="flex items-center justify-between pt-4 border-t border-stone-200">
+          <div className="flex items-center justify-between pt-2.5 pb-1 border-t border-stone-200 sticky bottom-0 bg-white z-10">
             {task && onDelete ? (
               <button
                 type="button"
