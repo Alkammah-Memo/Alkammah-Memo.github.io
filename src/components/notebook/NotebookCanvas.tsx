@@ -308,7 +308,7 @@ const getStrokeBBox = (st: InkStroke) => {
 };
 
 /** Single stroke painter shared by full redraw and the commit blit (ctx must already have the DPR transform). */
-const paintStroke = (
+export const paintStroke = (
   ctx: CanvasRenderingContext2D,
   stroke: InkStroke,
   theme: { isDark: boolean }

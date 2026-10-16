@@ -13,6 +13,7 @@ import {
 } from '../../types';
 import { Locale, translations } from '../../lib/translations';
 import { NotebookCanvas } from './NotebookCanvas';
+import { NotebookLibrary } from './NotebookLibrary';
 import { INITIAL_WORKSTREAMS } from '../../lib/referenceData';
 import { getCairoDateString } from '../../lib/cairoTime';
 import {
@@ -96,6 +97,10 @@ interface NotebookViewProps {
   /** Opens (creating on demand) a planner page: daily / monthly / to-do list / minutes of meeting */
   onOpenPlanner?: (req: PlannerPageRequest) => void | Promise<void>;
   onDeletePage?: (pageId: string) => void;
+  /** Creates a new, empty notebook and makes it the active one */
+  onCreateNotebook?: (title: string) => void;
+  /** Opens the backup / import dialog (planner PDF import lives there) */
+  onOpenImport?: () => void;
 }
 
 export const NotebookView: React.FC<NotebookViewProps> = ({
@@ -116,6 +121,8 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   onNewPage,
   onOpenPlanner,
   onDeletePage,
+  onCreateNotebook,
+  onOpenImport,
 }) => {
   const t = translations[locale];
   const [viewMode, setViewMode] = useState<'handwritten' | 'structured' | 'split'>('handwritten');
@@ -177,7 +184,9 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
   const ar = locale === 'ar';
   const [navDay, setNavDay] = useState<string>(() => getCairoDateString());
   const [addMenuOpen, setAddMenuOpen] = useState(false);
-  const [plannerPrompt, setPlannerPrompt] = useState<null | 'todo' | 'mom'>(null);
+  const [plannerPrompt, setPlannerPrompt] = useState<null | 'todo' | 'mom' | 'daily' | 'monthly'>(null);
+  // 'library' = cards of every notebook and page; 'editor' = writing on one page
+  const [screen, setScreen] = useState<'library' | 'editor'>('library');
   const [promptText, setPromptText] = useState('');
   const [promptDate, setPromptDate] = useState('');
   const plannerBusy = useRef(false);
@@ -193,6 +202,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     plannerBusy.current = true;
     try {
       await onOpenPlanner(req);
+      setScreen('editor');
     } finally {
       plannerBusy.current = false;
     }
@@ -218,6 +228,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
       void openPlanner({ kind: 'todo', title });
     } else if (plannerPrompt === 'mom') {
       void openPlanner({ kind: 'mom', date: isPlannerDay(promptDate) ? promptDate : todayStr });
+    } else if (plannerPrompt === 'daily') {
+      void openPlanner({ kind: 'daily', date: isPlannerDay(promptDate) ? promptDate : todayStr });
+    } else if (plannerPrompt === 'monthly') {
+      void openPlanner({ kind: 'monthly', month: isPlannerMonth(promptDate) ? promptDate : monthOf(todayStr) });
     }
     setPlannerPrompt(null);
   };
@@ -476,58 +490,83 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
   return (
     <div className={`flex flex-col ${isFullScreenPaper ? 'h-[100dvh]' : 'h-full'} overflow-hidden bg-[#f5f5f7]`}>
+      {screen === 'library' ? (
+        <div className="flex-1 min-h-0">
+          <NotebookLibrary
+            notebooks={notebooks}
+            pages={pages}
+            activeNotebookId={activeNotebook?.id || ''}
+            locale={locale}
+            onSelectNotebook={onSelectNotebook}
+            onOpenPage={(id) => {
+              onSelectPage(id);
+              setScreen('editor');
+            }}
+            onDeletePage={(id) => onDeletePage?.(id)}
+            onToday={() => goDay(todayStr)}
+            onNewNote={() => {
+              onNewPage(activeNotebook?.id || '');
+              setScreen('editor');
+            }}
+            onNewDaily={() => {
+              setPromptDate(todayStr);
+              setPlannerPrompt('daily');
+            }}
+            onNewTodo={() => {
+              setPromptText('');
+              setPlannerPrompt('todo');
+            }}
+            onNewMonthly={() => {
+              setPromptDate(monthOf(todayStr));
+              setPlannerPrompt('monthly');
+            }}
+            onNewMom={() => {
+              setPromptDate(todayStr);
+              setPlannerPrompt('mom');
+            }}
+            onCreateNotebook={(title) => onCreateNotebook?.(title)}
+            onOpenImport={onOpenImport}
+          />
+        </div>
+      ) : (
+        <>
       {/* Top Notebook Sub-header */}
       <div className={`${toolsHidden ? 'hidden' : ''} bg-white/90 backdrop-blur-xl text-[#1d1d1f] px-3 sm:px-4 py-1.5 sm:py-2 flex flex-wrap items-center justify-between gap-x-3 gap-y-1.5 border-b border-[#d2d2d7] shrink-0`}>
-        {/* Notebook & Page Selector */}
+        {/* Back to the library + which page this is */}
         <div className="flex items-center gap-2 min-w-0 max-w-full">
-          <BookOpen className="w-4 h-4 text-[#0071e3]" />
-          <select
-            value={activeNotebook?.id}
-            onChange={(e) => {
-              onSelectNotebook(e.target.value);
-              const firstP = pages.find((p) => p.notebookId === e.target.value);
-              if (firstP) onSelectPage(firstP.id);
-            }}
-            className="bg-[#f5f5f7] text-xs font-semibold text-[#1d1d1f] px-3 py-1.5 rounded-lg border border-[#d2d2d7] focus:outline-none focus:border-[#0071e3] min-w-0 max-w-[38vw] sm:max-w-none truncate"
+          <button
+            type="button"
+            onClick={() => setScreen('library')}
+            className="shrink-0 min-h-11 ps-2 pe-3 inline-flex items-center gap-1 rounded-xl bg-[#f5f5f7] border border-[#d2d2d7] text-xs font-bold text-[#0071e3] active:scale-[0.97]"
+            aria-label={locale === 'ar' ? 'العودة إلى كل الصفحات' : 'Back to all pages'}
           >
-            {notebooks.map((nb) => (
-              <option key={nb.id} value={nb.id}>
-                {nb.title} ({pages.filter((p) => p.notebookId === nb.id).length}p)
-              </option>
-            ))}
-          </select>
-
-          {/* Page Selector: title + date, with previous/next */}
-          <div className="flex items-center gap-0.5 bg-[#f5f5f7] px-1 rounded-lg border border-[#d2d2d7] text-xs min-w-0">
+            <ChevronLeft className={`w-5 h-5 ${locale === 'ar' ? 'rotate-180' : ''}`} />
+            {locale === 'ar' ? 'الصفحات' : 'Pages'}
+          </button>
+          <div className="min-w-0 leading-tight">
+            <div className="text-[10px] text-[#6e6e73] truncate">{activeNotebook?.title}</div>
+            <div className="text-sm font-bold text-[#1d1d1f] truncate max-w-[34vw] sm:max-w-xs">
+              {activePage ? pageOptionLabel(activePage).replace(/^.+ — Page (\d+)$/, locale === 'ar' ? 'صفحة $1' : 'Page $1') : ''}
+            </div>
+          </div>
+          <div className="flex items-center gap-0.5 bg-[#f5f5f7] px-0.5 rounded-xl border border-[#d2d2d7]">
             <button
               onClick={() => {
                 const curIdx = notebookPages.findIndex((p) => p.id === activePage?.id);
                 if (curIdx > 0) onSelectPage(notebookPages[curIdx - 1].id);
               }}
-              className="w-9 h-9 flex items-center justify-center hover:text-[#0071e3]"
+              className="w-10 h-10 flex items-center justify-center hover:text-[#0071e3]"
               title={locale === 'ar' ? 'الصفحة السابقة' : 'Previous Page'}
               aria-label={locale === 'ar' ? 'الصفحة السابقة' : 'Previous Page'}
             >
               <ChevronLeft className={`w-4 h-4 ${locale === 'ar' ? 'rotate-180' : ''}`} />
             </button>
-            <select
-              value={activePage?.id || ''}
-              onChange={(e) => onSelectPage(e.target.value)}
-              aria-label={locale === 'ar' ? 'اختيار الصفحة' : 'Choose page'}
-              className="bg-transparent text-xs font-semibold text-[#1d1d1f] h-9 max-w-[26vw] sm:max-w-[200px] min-w-0 truncate focus:outline-none"
-            >
-              {notebookPages.map((p, idx) => (
-                <option key={p.id} value={p.id}>
-                  {idx + 1}. {pageOptionLabel(p)}
-                </option>
-              ))}
-            </select>
             <button
               onClick={() => {
                 const curIdx = notebookPages.findIndex((p) => p.id === activePage?.id);
                 if (curIdx < notebookPages.length - 1) onSelectPage(notebookPages[curIdx + 1].id);
               }}
-              className="w-9 h-9 flex items-center justify-center hover:text-[#0071e3]"
+              className="w-10 h-10 flex items-center justify-center hover:text-[#0071e3]"
               title={locale === 'ar' ? 'الصفحة التالية' : 'Next Page'}
               aria-label={locale === 'ar' ? 'الصفحة التالية' : 'Next Page'}
             >
@@ -631,164 +670,6 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
           </div>
         </div>
       </div>
-
-      {/* Planner bar: Today, day/month steppers and the "+ Page" menu (opens or creates pages on demand) */}
-      {onOpenPlanner && !toolsHidden && (
-        <div className="relative z-40 bg-white/90 backdrop-blur-xl px-3 sm:px-4 py-1 sm:py-1.5 flex flex-wrap items-center gap-x-2 sm:gap-x-4 gap-y-1 border-b border-[#d2d2d7] shrink-0">
-          <button
-            type="button"
-            onClick={() => goDay(todayStr)}
-            className="min-h-11 px-3 sm:px-4 inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-[#0071e3] hover:bg-[#0062c4] active:scale-[0.98] text-white text-sm font-bold shadow-xs transition-all"
-            title={ar ? 'صفحة اليوم' : "Open today's page"}
-          >
-            <CalendarDays className="w-4 h-4" />
-            {ar ? 'اليوم' : 'Today'}
-          </button>
-
-          {/* Day stepper */}
-          <div className="flex items-center rounded-xl border border-[#d2d2d7] bg-[#f5f5f7] min-w-0 flex-1 sm:flex-none" role="group" aria-label={ar ? 'التنقل بين الأيام' : 'Day navigation'}>
-            <button
-              type="button"
-              onClick={() => goDay(addDays(navDay, -1))}
-              className="w-10 sm:w-11 h-11 shrink-0 flex items-center justify-center hover:text-[#0071e3] rounded-s-xl"
-              title={ar ? 'اليوم السابق' : 'Previous day'}
-              aria-label={ar ? 'اليوم السابق' : 'Previous day'}
-            >
-              <ChevronLeft className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
-            </button>
-            <button
-              type="button"
-              onClick={() => goDay(navDay)}
-              className={`min-h-11 min-w-0 flex-1 sm:flex-none sm:min-w-[9.5rem] px-1 sm:px-2 text-sm font-semibold truncate ${dayExists ? 'text-[#1d1d1f]' : 'text-[#515154]'} hover:text-[#0071e3]`}
-              title={ar ? 'فتح صفحة هذا اليوم' : 'Open this day'}
-            >
-              {navDayLabel}
-            </button>
-            <button
-              type="button"
-              onClick={() => goDay(addDays(navDay, 1))}
-              className="w-10 sm:w-11 h-11 shrink-0 flex items-center justify-center hover:text-[#0071e3] rounded-e-xl"
-              title={ar ? 'اليوم التالي' : 'Next day'}
-              aria-label={ar ? 'اليوم التالي' : 'Next day'}
-            >
-              <ChevronRight className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
-            </button>
-          </div>
-
-          {/* Month stepper */}
-          <div className="max-sm:hidden flex items-center rounded-xl border border-[#d2d2d7] bg-[#f5f5f7]" role="group" aria-label={ar ? 'التنقل بين الشهور' : 'Month navigation'}>
-            <button
-              type="button"
-              onClick={() => goMonth(addMonths(monthOf(navDay), -1))}
-              className="w-11 h-11 flex items-center justify-center hover:text-[#0071e3] rounded-s-xl"
-              title={ar ? 'الشهر السابق' : 'Previous month'}
-              aria-label={ar ? 'الشهر السابق' : 'Previous month'}
-            >
-              <ChevronLeft className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
-            </button>
-            <button
-              type="button"
-              onClick={() => goMonth(monthOf(navDay))}
-              className="min-h-11 min-w-[9.5rem] px-2 text-sm font-semibold text-[#1d1d1f] hover:text-[#0071e3] inline-flex items-center justify-center gap-1.5"
-              title={ar ? 'فتح صفحة الشهر' : 'Open this month'}
-            >
-              <CalendarRange className="w-4 h-4 text-[#0071e3]" />
-              {monthTitle(monthOf(navDay), ar ? 'ar' : 'en')}
-            </button>
-            <button
-              type="button"
-              onClick={() => goMonth(addMonths(monthOf(navDay), 1))}
-              className="w-11 h-11 flex items-center justify-center hover:text-[#0071e3] rounded-e-xl"
-              title={ar ? 'الشهر التالي' : 'Next month'}
-              aria-label={ar ? 'الشهر التالي' : 'Next month'}
-            >
-              <ChevronRight className={`w-5 h-5 ${ar ? 'rotate-180' : ''}`} />
-            </button>
-          </div>
-
-          {/* + Page menu */}
-          <div className="relative ms-auto">
-            <button
-              type="button"
-              onClick={() => setAddMenuOpen((v) => !v)}
-              aria-haspopup="menu"
-              aria-expanded={addMenuOpen}
-              className="min-h-11 px-3 sm:px-4 inline-flex items-center gap-1.5 sm:gap-2 rounded-xl bg-white border border-[#d2d2d7] hover:bg-[#f5f5f7] text-sm font-semibold text-[#1d1d1f] shadow-xs transition-colors"
-            >
-              <Plus className="w-4 h-4 text-[#0071e3]" />
-              <span className="max-sm:sr-only">{ar ? 'صفحة' : 'Page'}</span>
-              <ChevronDown className="w-3.5 h-3.5 text-[#86868b]" />
-            </button>
-            {addMenuOpen && (
-              <>
-                <div className="fixed inset-0 z-40" onClick={() => setAddMenuOpen(false)} aria-hidden="true" />
-                <div role="menu" className="absolute z-50 end-0 top-full mt-1.5 w-64 rounded-2xl bg-white border border-[#d2d2d7] shadow-2xl p-1.5">
-                  {[
-                    {
-                      key: 'daily',
-                      icon: <CalendarDays className="w-4 h-4 text-[#0071e3]" />,
-                      label: ar ? 'صفحة يومية' : 'Daily page',
-                      sub: dayTitle(navDay, ar ? 'ar' : 'en'),
-                      run: () => goDay(navDay),
-                    },
-                    {
-                      key: 'todo',
-                      icon: <ListChecks className="w-4 h-4 text-[#0071e3]" />,
-                      label: ar ? 'قائمة مهام' : 'To-do list',
-                      sub: ar ? 'باسم مسار العمل' : 'named by workstream',
-                      run: () => {
-                        setPromptText('');
-                        setPlannerPrompt('todo');
-                      },
-                    },
-                    {
-                      key: 'monthly',
-                      icon: <CalendarRange className="w-4 h-4 text-[#0071e3]" />,
-                      label: ar ? 'صفحة شهرية' : 'Monthly page',
-                      sub: monthTitle(monthOf(navDay), ar ? 'ar' : 'en'),
-                      run: () => goMonth(monthOf(navDay)),
-                    },
-                    {
-                      key: 'mom',
-                      icon: <NotebookPen className="w-4 h-4 text-[#0071e3]" />,
-                      label: ar ? 'محضر اجتماع (MoM)' : 'Minutes of meeting (MoM)',
-                      sub: ar ? 'مهمة | مسؤول | تاريخ' : 'Task | Owner | Due Date',
-                      run: () => {
-                        setPromptDate(todayStr);
-                        setPlannerPrompt('mom');
-                      },
-                    },
-                    {
-                      key: 'blank',
-                      icon: <FileTextIcon className="w-4 h-4 text-[#0071e3]" />,
-                      label: ar ? 'صفحة سادة / مسطرة' : 'Blank / ruled',
-                      sub: ar ? 'في هذه المفكرة' : 'in this notebook',
-                      run: () => onNewPage(activeNotebook?.id || ''),
-                    },
-                  ].map((item) => (
-                    <button
-                      key={item.key}
-                      type="button"
-                      role="menuitem"
-                      onClick={() => {
-                        setAddMenuOpen(false);
-                        item.run();
-                      }}
-                      className="w-full min-h-11 px-3 py-1.5 flex items-center gap-3 rounded-xl text-start hover:bg-[#f5f5f7] transition-colors"
-                    >
-                      {item.icon}
-                      <span className="flex flex-col leading-tight">
-                        <span className="text-sm font-semibold text-[#1d1d1f]">{item.label}</span>
-                        <span className="text-[11px] text-[#86868b]">{item.sub}</span>
-                      </span>
-                    </button>
-                  ))}
-                </div>
-              </>
-            )}
-          </div>
-        </div>
-      )}
 
       {/* Main View Area */}
       <div className={`flex-1 flex overflow-hidden relative ${viewMode === 'split' ? 'flex-col lg:flex-row' : ''}`}>
@@ -1439,6 +1320,9 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
         )}
       </div>
 
+        </>
+      )}
+
       {/* To-do list name / MoM date prompt */}
       {plannerPrompt && (
         <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-black/40 backdrop-blur-sm" onClick={() => setPlannerPrompt(null)}>
@@ -1453,6 +1337,10 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             <h3 className="text-base font-bold text-stone-900">
               {plannerPrompt === 'todo'
                 ? ar ? 'قائمة مهام جديدة' : 'New to-do list'
+                : plannerPrompt === 'daily'
+                ? ar ? 'صفحة يومية' : 'Daily page'
+                : plannerPrompt === 'monthly'
+                ? ar ? 'صفحة شهرية' : 'Monthly page'
                 : ar ? 'محضر اجتماع جديد' : 'New minutes of meeting'}
             </h3>
             {plannerPrompt === 'todo' ? (
@@ -1483,11 +1371,11 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
             ) : (
               <div className="space-y-2.5">
                 <label className="block text-xs font-semibold text-stone-600" htmlFor="planner-mom-date">
-                  {ar ? 'تاريخ الاجتماع' : 'Meeting date'}
+                  {plannerPrompt === 'monthly' ? (ar ? 'الشهر' : 'Month') : plannerPrompt === 'daily' ? (ar ? 'التاريخ' : 'Date') : ar ? 'تاريخ الاجتماع' : 'Meeting date'}
                 </label>
                 <input
                   id="planner-mom-date"
-                  type="date"
+                  type={plannerPrompt === 'monthly' ? 'month' : 'date'}
                   value={promptDate}
                   onChange={(e) => setPromptDate(e.target.value)}
                   className="w-full min-h-11 px-3 rounded-xl border border-[#d2d2d7] text-sm text-stone-900 focus:outline-none focus:border-[#0071e3]"
