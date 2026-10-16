@@ -89,6 +89,8 @@ export interface Meeting {
   decisions?: string[];
   linkedActionIds?: string[];
   googleEventId?: string;
+  /** when this meeting last matched its Google Calendar event */
+  googleSyncedAt?: string;
   syncState: 'internal_only' | 'synced' | 'pending_sync' | 'failed';
   invitationStatus?: 'not_sent' | 'sent' | 'failed';
   recurrence?: 'none' | 'weekly' | 'monthly';
