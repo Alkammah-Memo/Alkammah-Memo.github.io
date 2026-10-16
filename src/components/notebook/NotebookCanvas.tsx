@@ -2147,6 +2147,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                       type="button"
                       onPointerDown={(e) => e.stopPropagation()}
                       onClick={() => {
+                        if (!window.confirm(locale === 'ar' ? 'حذف هذه الملاحظة النصية؟' : 'Delete this text note?')) return;
                         const updated = textNotesRef.current.filter((n) => n.id !== note.id);
                         textNotesRef.current = updated;
                         setTextNotes(updated);
