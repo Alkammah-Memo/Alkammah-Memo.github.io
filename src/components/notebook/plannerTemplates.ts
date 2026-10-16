@@ -233,10 +233,11 @@ function drawTodo(ctx: CanvasRenderingContext2D, W: number, H: number, o: Planne
   ctx.lineTo(left + 121, 71);
   ctx.stroke();
   text(ctx, L.taskUp, left + 140, (hdrTop + hdrBottom) / 2, 12.5, o.subtextColor, { weight: 500 });
-  const dueX = 1023;
-  const ownerX = 1228;
-  text(ctx, L.due, dueX + 14, (hdrTop + hdrBottom) / 2, 12.5, o.subtextColor, { weight: 500 });
+  // column order: Owner first, Due date last
+  const ownerX = 1023;
+  const dueX = 1228;
   text(ctx, L.owner, ownerX + 14, (hdrTop + hdrBottom) / 2, 12.5, o.subtextColor, { weight: 500 });
+  text(ctx, L.due, dueX + 14, (hdrTop + hdrBottom) / 2, 12.5, o.subtextColor, { weight: 500 });
   hline(ctx, left, right, hdrBottom, ink.strong, 1.4);
 
   for (let i = 0; i < rows; i++) {

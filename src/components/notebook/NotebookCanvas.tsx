@@ -42,6 +42,7 @@ import {
   Grid,
   Square,
   Palette,
+  SlidersHorizontal,
 } from 'lucide-react';
 
 export const PAPER_THEMES: Record<
@@ -428,6 +429,8 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   const logicalRef = useRef({ w: canvasWidth, h: canvasHeight });
   logicalRef.current = { w: canvasWidth, h: canvasHeight };
   const [scale, setScale] = useState<number>(1);
+  const headerRef = useRef<HTMLDivElement | null>(null);
+  const [headerH, setHeaderH] = useState<number>(56);
   const [paperH, setPaperH] = useState<number | null>(null);
   const paperRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
@@ -1496,7 +1499,18 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   }, [isDraggingToolbar]);
 
   // Live Cairo clock
+  useEffect(() => {
+    const el = headerRef.current;
+    if (!el) return;
+    const measure = () => setHeaderH(el.offsetHeight || 56);
+    measure();
+    if (typeof ResizeObserver === 'undefined') return;
+    const ro = new ResizeObserver(measure);
+    ro.observe(el);
+    return () => ro.disconnect();
+  }, [hasFixedPaper, template]);
   const [liveCairoTime, setLiveCairoTime] = useState(formatCairoHeaderDateTime(new Date(), locale));
+  const shortCairoClock = (void liveCairoTime, new Date().toLocaleTimeString('en-US', { timeZone: 'Africa/Cairo', hour: 'numeric', minute: '2-digit' }));
   useEffect(() => {
     const timer = setInterval(() => {
       setLiveCairoTime(formatCairoHeaderDateTime(new Date(), locale));
@@ -1847,41 +1861,53 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
           e.preventDefault();
         }}
       >
-        <button
-          type="button"
-          onClick={() => setShowPageOptions((v) => !v)}
-          aria-expanded={showPageOptions}
-          className={`${hideTools ? 'hidden' : ''} sm:hidden self-start mb-2 min-h-9 px-3 rounded-full border border-stone-300 bg-white/90 text-[11px] font-semibold text-stone-700`}
+        <div
+          className="relative shrink-0"
+          style={{
+            width: (canvasWidth + 2) * scale,
+            height: paperH != null ? paperH * scale : undefined,
+          }}
         >
-          {locale === 'ar' ? (showPageOptions ? 'إخفاء خيارات الصفحة' : 'خيارات الصفحة') : showPageOptions ? 'Hide page options' : 'Page options'}
-        </button>
-        {/* Paper controls: full size (outside the scaled paper) so every control is a comfortable touch target on iPad; scrolls with the page */}
-      <div className={`${hideTools ? 'hidden' : ''} ${showPageOptions ? '' : 'max-sm:hidden'} w-full shrink-0 pb-3 flex flex-wrap items-center justify-center gap-x-3 gap-y-1.5 [&_button]:min-h-9`}>
-              <div className="flex items-center gap-2 flex-wrap">
+        {/* Page controls live inside the paper's header row, next to the title: no extra bar above the paper */}
+        {!hideTools && (
+          <div
+            className="absolute z-20 flex items-center"
+            style={{ top: 0, height: headerH * scale, [locale === 'ar' ? 'left' : 'right']: 8 }}
+          >
+            <button
+              type="button"
+              onClick={() => setShowPageOptions((v) => !v)}
+              aria-expanded={showPageOptions}
+              aria-label={locale === 'ar' ? 'خيارات الصفحة' : 'Page options'}
+              className="sm:hidden min-h-9 min-w-9 inline-flex items-center justify-center rounded-full border shadow-2xs"
+              style={{ backgroundColor: currentTheme.badgeBg, borderColor: currentTheme.badgeBorder, color: currentTheme.textColor }}
+            >
+              <SlidersHorizontal className="w-4 h-4" />
+            </button>
+            <div
+              className={`${showPageOptions ? 'flex' : 'hidden'} sm:flex max-sm:absolute max-sm:top-full max-sm:mt-1 max-sm:rounded-2xl max-sm:p-2 max-sm:shadow-xl max-sm:border max-sm:w-[min(92vw,22rem)] [&_button]:min-h-9 ${locale === 'ar' ? 'max-sm:left-0' : 'max-sm:right-0'}`}
+              style={{ backgroundColor: showPageOptions ? currentTheme.headerBg : undefined, borderColor: currentTheme.headerBorder }}
+            >
+              {/* Controls Group: 4 Paper Styles + 4 Paper Colors + Orientation + Version + Trash */}
+              <div className="flex items-center gap-1.5 flex-wrap justify-end">
                 <div
-                  className="flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-lg border shadow-2xs transition-colors"
-                  style={{
-                    backgroundColor: currentTheme.badgeBg,
-                    borderColor: currentTheme.badgeBorder,
-                    color: currentTheme.isDark ? '#38bdf8' : '#0071e3',
-                  }}
+                  className="flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded-lg border"
+                  style={{ backgroundColor: currentTheme.badgeBg, borderColor: currentTheme.badgeBorder, color: currentTheme.isDark ? '#38bdf8' : '#0071e3' }}
+                  title={liveCairoTime}
                 >
                   <Clock className="w-3.5 h-3.5" />
-                  <span className="font-semibold">{liveCairoTime}</span>
+                  <span className="font-semibold">{shortCairoClock}</span>
                 </div>
                 {!hasFixedPaper && (
                 <button
                   onClick={handleStampCairoTime}
-                  className="flex items-center gap-1.5 px-3 py-1 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-lg text-xs font-bold shadow-2xs transition-all active:scale-95"
-                  title="Stamp current Cairo Time and Date into page header and notes"
+                  className="flex items-center gap-1.5 px-2.5 py-1 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-lg text-xs font-bold shadow-2xs transition-all active:scale-95"
+                  title={locale === 'ar' ? 'ختم الوقت والتاريخ الآن' : 'Stamp current Cairo time and date into the page header'}
                 >
                   <Check className="w-3.5 h-3.5" />
-                  <span>{locale === 'ar' ? 'ختم الوقت والتاريخ الآن' : 'Stamp Now'}</span>
+                  <span className="hidden lg:inline">{locale === 'ar' ? 'ختم الوقت' : 'Stamp'}</span>
                 </button>
                 )}
-              </div>
-              {/* Controls Group: 4 Paper Styles + 4 Paper Colors + Orientation + Version + Trash */}
-              <div className="flex items-center gap-2 flex-wrap">
                 {/* 1. 4 Styles of Paper (Ruled Lines, Grid Boxes, Dot Grid, Blank Plain): hidden on planner pages, which have their own printed layout */}
                 {!hasFixedPaper && (
                 <div
@@ -2019,15 +2045,9 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                   </button>
                 )}
               </div>
-      </div>
-
-        <div
-          className="relative shrink-0"
-          style={{
-            width: (canvasWidth + 2) * scale,
-            height: paperH != null ? paperH * scale : undefined,
-          }}
-        >
+            </div>
+          </div>
+        )}
         <div
           ref={paperRef}
           className="absolute top-0 left-0 shadow-xl rounded-2xl overflow-hidden select-none transition-colors duration-200"
@@ -2050,6 +2070,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
         >
           {/* Executive Paper Stationery Header: Live Cairo Date & Time + 4 Styles + 4 Colors + Orientation */}
           <div
+            ref={headerRef}
             className={`${hasFixedPaper ? 'px-4 py-2 sm:px-6' : 'p-4 sm:p-6 pb-3'} relative z-10 font-sans select-none transition-colors duration-200`}
             style={{
               backgroundColor: currentTheme.headerBg,
