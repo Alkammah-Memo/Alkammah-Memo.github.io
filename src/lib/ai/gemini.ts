@@ -242,6 +242,68 @@ ${SPERO_TOOL_RULES}
   return second.text || (locale === 'ar' ? 'تم، المهندس محمد.' : 'Done, Eng. Mohamed.');
 }
 
+
+/** Small WAV (2 seconds of a soft tone) used to time how fast each model handles an audio clip. */
+function toneWavBase64(): string {
+  const rate = 16000;
+  const n = rate * 2;
+  const buf = new ArrayBuffer(44 + n * 2);
+  const v = new DataView(buf);
+  const w = (o: number, t: string) => [...t].forEach((c, i) => v.setUint8(o + i, c.charCodeAt(0)));
+  w(0, 'RIFF');
+  v.setUint32(4, 36 + n * 2, true);
+  w(8, 'WAVEfmt ');
+  v.setUint32(16, 16, true);
+  v.setUint16(20, 1, true);
+  v.setUint16(22, 1, true);
+  v.setUint32(24, rate, true);
+  v.setUint32(28, rate * 2, true);
+  v.setUint16(32, 2, true);
+  v.setUint16(34, 16, true);
+  w(36, 'data');
+  v.setUint32(40, n * 2, true);
+  for (let i = 0; i < n; i++) v.setInt16(44 + i * 2, Math.round(Math.sin((2 * Math.PI * 440 * i) / rate) * 3000), true);
+  let bin = '';
+  const bytes = new Uint8Array(buf);
+  for (let i = 0; i < bytes.length; i++) bin += String.fromCharCode(bytes[i]);
+  return btoa(bin);
+}
+
+export interface SpeedRow {
+  model: string;
+  textSecs?: number;
+  audioSecs?: number;
+  error?: string;
+}
+
+/** Times a tiny text request and a tiny audio request on each model (used by the Settings speed test). */
+export async function speedTestModels(modelNames: string[]): Promise<SpeedRow[]> {
+  const wav = toneWavBase64();
+  const rows: SpeedRow[] = [];
+  for (const model of modelNames) {
+    const row: SpeedRow = { model };
+    try {
+      let t = Date.now();
+      await generate([model], { contents: 'قولي كلمة واحدة: مرحباً', config: { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL }, maxOutputTokens: 20 } }, { maxRounds: 1 });
+      row.textSecs = Math.round((Date.now() - t) / 100) / 10;
+      t = Date.now();
+      await generate(
+        [model],
+        {
+          contents: { parts: [{ inlineData: { mimeType: 'audio/wav', data: wav } }, { text: 'ماذا سمعت؟ أجيبي بكلمة واحدة.' }] },
+          config: { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL }, maxOutputTokens: 20 },
+        },
+        { maxRounds: 1 }
+      );
+      row.audioSecs = Math.round((Date.now() - t) / 100) / 10;
+    } catch (err) {
+      row.error = (err as Error)?.message?.slice(0, 80) || String(err);
+    }
+    rows.push(row);
+  }
+  return rows;
+}
+
 const INK_PROMPT = `You are an expert bilingual executive document transcriber for a CEO of an industrial / land-development group in Egypt. The page is a photo or export of his handwritten digital planner (Egyptian Arabic and English mixed on the same line, written in blue ink, with orange ink for status marks).
 
 HOW HE WRITES (read the page the way he writes it):
