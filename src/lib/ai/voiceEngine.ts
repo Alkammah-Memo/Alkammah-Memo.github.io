@@ -43,3 +43,31 @@ export function cleanForSpeech(text: string, maxChars = 320): string {
   t = (end > 40 ? cut.slice(0, end + 1) : cut).trim();
   return t;
 }
+
+const LANG_KEY = 'alkammah_voice_lang';
+export type VoiceLang = 'ar' | 'en';
+
+/** Language the CEO speaks to Spero in (speech recognition accepts one language at a time). Arabic by default. */
+export function getVoiceLang(): VoiceLang {
+  try {
+    return localStorage.getItem(LANG_KEY) === 'en' ? 'en' : 'ar';
+  } catch {
+    return 'ar';
+  }
+}
+
+export function setVoiceLang(l: VoiceLang): void {
+  try {
+    localStorage.setItem(LANG_KEY, l);
+  } catch {
+    /* ignore */
+  }
+}
+
+/** True when most letters in the text are Arabic, so the right voice can be chosen whatever the app language is. */
+export function looksArabic(text: string): boolean {
+  const letters = String(text).match(/\p{L}/gu) || [];
+  if (letters.length === 0) return false;
+  const arabic = letters.filter((c) => /[\u0600-\u06FF]/.test(c)).length;
+  return arabic / letters.length > 0.3;
+}

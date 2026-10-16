@@ -159,13 +159,15 @@ export async function economyVoiceTurn(
   locale: 'en' | 'ar',
   context: unknown,
   history: VoiceTurn[],
-  execute: (name: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>
+  execute: (name: string, args: Record<string, unknown>) => Promise<Record<string, unknown>>,
+  speakLang: 'ar' | 'en' = 'ar'
 ): Promise<string> {
   const m = models();
   const order = [ECONOMY_VOICE_MODEL, ...m.chatFallbacks, m.chat];
   const systemInstruction = `${SPERO_PERSONA}
 التوقيت الحالي في القاهرة: ${cairoNowLabel()} (ISO محلي: ${cairoNowIsoLabel()}).
 ${SPERO_TOOL_RULES}
+لغة هذه المحادثة: ${speakLang === 'en' ? 'الإنجليزية الرسمية الواضحة (ردّي بالإنجليزية)' : 'العربية بلهجة مصرية مهذبة (ردّي بالعربية، مع إبقاء أسماء المشاريع بالإنجليزية كما هي)'}.
 قواعد المحادثة الصوتية: ردّي بجملة أو جملتين كحد أقصى (نحو ٣٠ كلمة)، بنص عادي فقط بلا نجوم ولا ترقيم ولا قوائم ولا رموز، وبنبرة طبيعية مهذبة تُقرأ بصوت عالٍ. إذا سُئلتِ عن قائمة مهام أو اجتماعات فاذكري أهم ثلاثة عناصر فقط بأسمائها، ثم قولي كم عنصراً آخر يوجد. خاطبيه دائماً بـ "المهندس محمد" أو "حضرتك" فقط، ولا تقولي "بشمهندس" أو "يا". إذا طُلب اجتماع ولم يُذكر مع من أو موضوعه فاسألي عنه أولاً.
 سياق النظام الحالي: ${JSON.stringify(context)}`;
 
