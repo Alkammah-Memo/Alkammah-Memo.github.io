@@ -1874,24 +1874,26 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
             className="absolute z-20 flex items-center"
             style={{ top: 0, height: headerH * scale, [locale === 'ar' ? 'left' : 'right']: 8 }}
           >
-            <button
-              type="button"
-              onClick={() => setShowPageOptions((v) => !v)}
-              aria-expanded={showPageOptions}
-              aria-label={locale === 'ar' ? 'خيارات الصفحة' : 'Page options'}
-              className="sm:hidden min-h-9 min-w-9 inline-flex items-center justify-center rounded-full border shadow-2xs"
-              style={{ backgroundColor: currentTheme.badgeBg, borderColor: currentTheme.badgeBorder, color: currentTheme.textColor }}
-            >
-              <SlidersHorizontal className="w-4 h-4" />
-            </button>
+            {/* phones: only the paper-style and orientation extras fold away; clock, colours, version and delete stay in the title row */}
+            {!hasFixedPaper && (
+              <button
+                type="button"
+                onClick={() => setShowPageOptions((v) => !v)}
+                aria-expanded={showPageOptions}
+                aria-label={locale === 'ar' ? 'خيارات الصفحة' : 'Page options'}
+                className="sm:hidden h-7 w-7 me-1 inline-flex items-center justify-center rounded-full border shadow-2xs"
+                style={{ backgroundColor: currentTheme.badgeBg, borderColor: currentTheme.badgeBorder, color: currentTheme.textColor }}
+              >
+                <SlidersHorizontal className="w-3.5 h-3.5" />
+              </button>
+            )}
             <div
-              className={`${showPageOptions ? 'flex' : 'hidden'} sm:flex max-sm:absolute max-sm:top-full max-sm:mt-1 max-sm:rounded-2xl max-sm:p-2 max-sm:shadow-xl max-sm:border max-sm:w-[min(92vw,22rem)] [&_button]:min-h-9 ${locale === 'ar' ? 'max-sm:left-0' : 'max-sm:right-0'}`}
-              style={{ backgroundColor: showPageOptions ? currentTheme.headerBg : undefined, borderColor: currentTheme.headerBorder }}
+              className={`flex items-center rounded-xl [&_button]:min-h-0 max-sm:text-[10px] max-sm:[&_svg]:w-3 max-sm:[&_svg]:h-3 max-sm:scale-[0.72] ${locale === 'ar' ? 'max-sm:origin-left' : 'max-sm:origin-right'}`}
             >
               {/* Controls Group: 4 Paper Styles + 4 Paper Colors + Orientation + Version + Trash */}
-              <div className="flex items-center gap-1.5 flex-wrap justify-end">
+              <div className="flex items-center gap-1.5 max-sm:gap-1 flex-wrap justify-end max-sm:max-w-[84vw]">
                 <div
-                  className="flex items-center gap-1 text-[11px] font-mono px-2 py-1 rounded-lg border"
+                  className="flex items-center gap-1 text-[11px] font-mono px-2 py-1 max-sm:px-1.5 max-sm:py-0.5 rounded-lg border"
                   style={{ backgroundColor: currentTheme.badgeBg, borderColor: currentTheme.badgeBorder, color: currentTheme.isDark ? '#38bdf8' : '#0071e3' }}
                   title={liveCairoTime}
                 >
@@ -1901,7 +1903,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                 {!hasFixedPaper && (
                 <button
                   onClick={handleStampCairoTime}
-                  className="flex items-center gap-1.5 px-2.5 py-1 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-lg text-xs font-bold shadow-2xs transition-all active:scale-95"
+                  className={`flex items-center gap-1.5 px-2.5 py-1 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-lg text-xs font-bold shadow-2xs transition-all active:scale-95 ${showPageOptions ? '' : 'max-sm:hidden'}`}
                   title={locale === 'ar' ? 'ختم الوقت والتاريخ الآن' : 'Stamp current Cairo time and date into the page header'}
                 >
                   <Check className="w-3.5 h-3.5" />
@@ -1911,7 +1913,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                 {/* 1. 4 Styles of Paper (Ruled Lines, Grid Boxes, Dot Grid, Blank Plain): hidden on planner pages, which have their own printed layout */}
                 {!hasFixedPaper && (
                 <div
-                  className="flex items-center gap-0.5 p-1 rounded-xl border transition-colors"
+                  className={`flex items-center gap-0.5 p-1 rounded-xl border transition-colors ${showPageOptions ? '' : 'max-sm:hidden'}`}
                   style={{
                     backgroundColor: currentTheme.badgeBg,
                     borderColor: currentTheme.badgeBorder,
@@ -1972,7 +1974,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                           }
                           if (onPaperColorChange) onPaperColorChange(cKey);
                         }}
-                        className={`w-5 h-5 rounded-full border transition-all flex items-center justify-center shrink-0 ${
+                        className={`w-5 h-5 max-sm:w-4 max-sm:h-4 rounded-full border transition-all flex items-center justify-center shrink-0 ${
                           isSelected
                             ? 'ring-2 ring-[#0071e3] ring-offset-1 scale-110'
                             : 'hover:scale-105 opacity-80 hover:opacity-100'
@@ -1999,7 +2001,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                     setOrientation(next);
                     if (onOrientationChange) onOrientationChange(next);
                   }}
-                  className={`text-xs font-semibold flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all shadow-2xs ${
+                  className={`text-xs font-semibold flex items-center gap-1.5 px-2.5 py-1 rounded-lg border transition-all shadow-2xs ${showPageOptions ? '' : 'max-sm:hidden'} ${
                     currentTheme.isDark
                       ? 'bg-zinc-800 text-zinc-200 border-zinc-700 hover:bg-zinc-700 hover:text-white'
                       : 'bg-[#f5f5f7] text-stone-700 border-[#d2d2d7] hover:bg-[#e8e8ed] hover:text-stone-900'
@@ -2023,7 +2025,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                 {/* 4. Small Version Button */}
                 <button
                   onClick={() => setIsVersionModalOpen(true)}
-                  className={`text-xs font-mono flex items-center gap-1 px-2.5 py-1 rounded-lg border transition-colors ${
+                  className={`text-xs font-mono flex items-center gap-1 px-2.5 py-1 max-sm:px-1.5 max-sm:py-0.5 rounded-lg border transition-colors ${
                     currentTheme.isDark
                       ? 'bg-zinc-800 text-zinc-300 border-zinc-700 hover:text-white'
                       : 'bg-stone-100 text-stone-600 border-stone-200 hover:text-stone-900'
@@ -2038,7 +2040,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                 {onDeletePage && (
                   <button
                     onClick={() => setShowDeleteConfirm(true)}
-                    className="p-1.5 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
+                    className="p-1.5 max-sm:p-1 text-stone-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors border border-transparent hover:border-rose-200"
                     title={locale === 'ar' ? 'حذف الصفحة' : 'Delete Page'}
                   >
                     <Trash2 className="w-3.5 h-3.5" />
