@@ -49,12 +49,14 @@ import {
   subscribeToWorkspaceCollection,
   loadRemoteGeminiSettings,
   saveRemoteGeminiSettings,
+  syncSharedQuota,
   clearCloudCollections,
   flushRetryQueue,
 } from './lib/cloud';
 import type { CollectionName } from './lib/cloud';
 import { mergeRemote } from './lib/merge';
 import { keyManager } from './lib/ai/keyManager';
+import { usage } from './lib/ai/modelQueue';
 import { chatWithAssistant } from './lib/ai/gemini';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { SettingsView } from './components/settings/SettingsView';
@@ -252,6 +254,9 @@ export default function App() {
       // Gemini keys follow the user across devices
       keyManager.setRemoteSaver(saveRemoteGeminiSettings);
       keyManager.hydrateFromRemote(await loadRemoteGeminiSettings());
+      // every device shows the same real quota status: share what each one learns
+      usage.setShareHook(() => void syncSharedQuota().catch(console.warn));
+      await syncSharedQuota().catch(console.warn);
       if (keyManager.hasAnyKey()) {
         // push local-only keys up on first connect from this device
         saveRemoteGeminiSettings(keyManager.getSettings()).catch(console.warn);
@@ -317,6 +322,7 @@ export default function App() {
       cancelled = true;
       unsubs.forEach((u) => u());
       keyManager.setRemoteSaver(null);
+      usage.setShareHook(null);
       setIsCloudConnected(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
