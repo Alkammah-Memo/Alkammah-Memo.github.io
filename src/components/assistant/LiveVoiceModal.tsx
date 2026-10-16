@@ -816,6 +816,15 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
   // ---------------------------------------------------------------------------------------------
   // Economy voice: the phone listens and speaks (free); Gemini only sees short text. Lasts for hours.
   // ---------------------------------------------------------------------------------------------
+  // Some browsers (for example Chrome on iPhone) have no usable device speech recognition: remember that and use Live voice there
+  const srBlocked = () => {
+    try {
+      return localStorage.getItem('alkammah_sr_blocked') === '1';
+    } catch {
+      return false;
+    }
+  };
+
   const speakEconomy = (text: string) => {
     const resume = () => {
       isAiSpeakingRef.current = false;
@@ -909,9 +918,21 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rec.onerror = (e: any) => {
-        if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed') {
-          setReconnectNote(locale === 'ar' ? 'الميكروفون غير مسموح به. فعّل الإذن من إعدادات المتصفح.' : 'Microphone or speech permission is blocked. Allow it in the browser settings.');
-          terminateSession();
+        if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed' || e?.error === 'language-not-supported') {
+          // Device speech recognition is not available here: switch to Live voice (it asks for the microphone itself)
+          try {
+            localStorage.setItem('alkammah_sr_blocked', '1');
+          } catch {
+            /* ignore */
+          }
+          activeRef.current = false;
+          stopAiPlayback();
+          stopMicrophone();
+          setTimeout(() => {
+            void initLiveSession().then(() =>
+              setReconnectNote(locale === 'ar' ? 'تعذّر الاستماع عبر الجهاز، فتم التحويل إلى الصوت المباشر.' : 'Device listening is not available in this browser, so Live voice is being used.')
+            );
+          }, 50);
         }
       };
       rec.onend = () => {
@@ -955,7 +976,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
   };
 
   const initLiveSession = async () => {
-    if (getVoiceEngine() === 'economy' && getSpeechRecognitionCtor()) {
+    if (getVoiceEngine() === 'economy' && getSpeechRecognitionCtor() && !srBlocked()) {
       initEconomySession();
       return;
     }
@@ -1409,7 +1430,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
               onClick={() => {
                 if (micActive) {
                   stopMicrophone();
-                } else if (getVoiceEngine() === 'economy' && !wsRef.current) {
+                } else if (getVoiceEngine() === 'economy' && !wsRef.current && !srBlocked()) {
                   initEconomySession();
                 } else {
                   startMicrophoneStream(wsRef.current);
