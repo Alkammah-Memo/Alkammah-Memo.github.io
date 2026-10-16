@@ -1499,7 +1499,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         role="group"
         aria-label={ar ? 'المساعد الصوتي سبيرو' : 'Spero voice assistant'}
       >
-        <div className="relative w-16 h-16">
+        <div className="relative w-12 h-12">
           {/* Breathing aura (reacts to your voice while listening) */}
           <div
             className="absolute -inset-4 rounded-full pointer-events-none spero-breathe"
@@ -1560,18 +1560,18 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
               </span>
             ) : phase === 'listening' ? (
               <Mic
-                className="w-6 h-6 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]"
+                className="w-[18px] h-[18px] text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.9)]"
                 style={{ transform: `scale(${1 + level * 0.25})`, transition: 'transform 100ms' }}
               />
             ) : (
-              <Sparkles className="w-6 h-6 text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.85)]" />
+              <Sparkles className="w-[18px] h-[18px] text-white drop-shadow-[0_0_8px_rgba(255,255,255,0.85)]" />
             )}
           </div>
         </div>
 
         {/* Status chip with always-visible controls (touch friendly; no hover needed) */}
         <div
-          className={`absolute ${captionOnLeft ? 'right-0' : 'left-0'} top-[72px] flex items-center gap-1 rounded-full bg-[#0e0f14]/92 backdrop-blur-xl text-white pl-3 pr-1 py-1 border border-white/15 shadow-lg whitespace-nowrap`}
+          className={`absolute ${captionOnLeft ? 'right-0' : 'left-0'} top-[56px] flex items-center gap-1 rounded-full bg-[#0e0f14]/92 backdrop-blur-xl text-white pl-3 pr-1 py-1 border border-white/15 shadow-lg whitespace-nowrap`}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerUp={(e) => e.stopPropagation()}
         >
@@ -1608,7 +1608,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         {/* Live caption: what Spero is saying (or what you said), placed on the roomier side */}
         {caption && (
           <div
-            className={`absolute top-1 ${captionOnLeft ? 'right-[76px]' : 'left-[76px]'} w-[min(280px,60vw)] bg-[#0e0f14]/92 backdrop-blur-xl text-white px-3.5 py-2.5 rounded-2xl border border-white/15 shadow-xl pointer-events-none`}
+            className={`absolute top-1 ${captionOnLeft ? 'right-[58px]' : 'left-[58px]'} w-[min(280px,60vw)] bg-[#0e0f14]/92 backdrop-blur-xl text-white px-3.5 py-2.5 rounded-2xl border border-white/15 shadow-xl pointer-events-none`}
             dir={ar ? 'rtl' : 'ltr'}
           >
             <p className="line-clamp-3 leading-relaxed text-[12px] text-white/95">{caption}</p>
@@ -1617,7 +1617,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
 
         {reconnectNote && (
           <div
-            className={`absolute top-[110px] ${captionOnLeft ? 'right-0' : 'left-0'} w-[min(260px,70vw)] text-center text-[11px] text-amber-100 bg-amber-500/20 border border-amber-400/40 rounded-xl px-2.5 py-1.5 backdrop-blur-xl`}
+            className={`absolute top-[92px] ${captionOnLeft ? 'right-0' : 'left-0'} w-[min(260px,70vw)] text-center text-[11px] text-amber-100 bg-amber-500/20 border border-amber-400/40 rounded-xl px-2.5 py-1.5 backdrop-blur-xl`}
             role="status"
           >
             {reconnectNote}
