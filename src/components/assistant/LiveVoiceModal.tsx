@@ -4,7 +4,8 @@ import { VoiceDebugMonitor, SpeechEvent } from './VoiceDebugMonitor';
 import { GeminiLiveSocket, LIVE_OPEN, LIVE_CONNECTING } from '../../lib/ai/liveSocket';
 import { voiceFastQuery, economyVoiceTurn } from '../../lib/ai/gemini';
 import type { VoiceTurn } from '../../lib/ai/gemini';
-import { getVoiceEngine, getSpeechRecognitionCtor, cleanForSpeech } from '../../lib/ai/voiceEngine';
+import { getVoiceEngine, getSpeechRecognitionCtor, cleanForSpeech, getVoiceLang, setVoiceLang, looksArabic } from '../../lib/ai/voiceEngine';
+import type { VoiceLang } from '../../lib/ai/voiceEngine';
 import { getCairoDateString } from '../../lib/cairoTime';
 import {
   X,
@@ -175,6 +176,17 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
 
   const wsRef = useRef<GeminiLiveSocket | null>(null);
   const [showMoreMenu, setShowMoreMenu] = useState<boolean>(false);
+  const [voiceLang, setVoiceLangState] = useState<VoiceLang>(() => getVoiceLang());
+  const changeVoiceLang = (l: VoiceLang) => {
+    setVoiceLang(l);
+    setVoiceLangState(l);
+    // restart listening in the new language
+    try {
+      recognitionRef.current?.abort?.();
+    } catch {
+      /* ignore */
+    }
+  };
   // Economy engine (device speech in and out, one small text request per turn) and idle auto-stop
   const economyHistoryRef = useRef<VoiceTurn[]>([]);
   const economyBusyRef = useRef<boolean>(false);
@@ -821,13 +833,18 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     try {
       window.speechSynthesis.cancel();
       const utterance = new SpeechSynthesisUtterance(text);
-      utterance.lang = locale === 'ar' ? 'ar-EG' : 'en-US';
+      // The voice follows the language of the reply itself (Spero answers in Arabic even when the app is in English)
+      const arabic = looksArabic(text);
       const voices = window.speechSynthesis.getVoices();
-      const wanted = locale === 'ar' ? 'ar' : 'en';
-      utterance.voice =
-        voices.find((v) => v.lang.replace('_', '-').toLowerCase() === utterance.lang.toLowerCase()) ||
-        voices.find((v) => v.lang.toLowerCase().startsWith(wanted)) ||
-        null;
+      const byLang = (prefix: string) => voices.filter((v) => v.lang.replace('_', '-').toLowerCase().startsWith(prefix));
+      const picked = arabic
+        ? byLang('ar-eg')[0] || byLang('ar-sa')[0] || byLang('ar')[0] || null
+        : byLang('en-gb')[0] || byLang('en-us')[0] || byLang('en')[0] || null;
+      utterance.voice = picked;
+      utterance.lang = picked?.lang || (arabic ? 'ar-SA' : 'en-US');
+      if (arabic && !picked) {
+        setReconnectNote(locale === 'ar' ? 'لا يوجد صوت عربي مثبّت على هذا الجهاز، فسيُقرأ الرد بصوت آخر. يمكنك إضافته من إعدادات الجهاز > اللغات.' : 'No Arabic voice is installed on this device, so the reply may sound wrong. Add one in the device language settings.');
+      }
       utterance.rate = 1;
       utterance.onend = resume;
       utterance.onerror = resume;
@@ -851,7 +868,8 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         locale,
         { meetings: buildMeetingContext(), tasks: buildTaskContext() },
         economyHistoryRef.current,
-        async (name, args) => ((await executeToolSafely(name, args)) ?? { ok: false, error: 'No result' }) as Record<string, unknown>
+        async (name, args) => ((await executeToolSafely(name, args)) ?? { ok: false, error: 'No result' }) as Record<string, unknown>,
+        getVoiceLang()
       ));
       economyHistoryRef.current = [...economyHistoryRef.current, { role: 'user' as const, text }, { role: 'spero' as const, text: reply }].slice(-12);
       lastActivityRef.current = Date.now();
@@ -873,7 +891,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     let lastInterim = '';
     try {
       const rec = new SR();
-      rec.lang = locale === 'ar' ? 'ar-EG' : 'en-US';
+      rec.lang = getVoiceLang() === 'ar' ? 'ar-EG' : 'en-US';
       rec.interimResults = true;
       rec.continuous = false;
       rec.maxAlternatives = 1;
@@ -1270,13 +1288,26 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
             </div>
 
             <div className="flex items-center gap-1.5 shrink-0">
+              <div className="flex items-center rounded-full bg-[#f5f5f7] p-0.5 text-[11px] font-bold" role="group" aria-label={ar ? 'لغة الحديث' : 'Speaking language'} dir="ltr">
+                {(['ar', 'en'] as const).map((l) => (
+                  <button
+                    key={l}
+                    type="button"
+                    onClick={() => changeVoiceLang(l)}
+                    aria-pressed={voiceLang === l}
+                    className={`min-w-8 sm:min-w-9 h-8 sm:h-9 px-2 rounded-full transition-colors ${voiceLang === l ? 'bg-[#0071e3] text-white shadow-sm' : 'text-[#515154]'}`}
+                  >
+                    {l === 'ar' ? 'عربي' : 'EN'}
+                  </button>
+                ))}
+              </div>
               <div className="relative">
                 <button
                   type="button"
                   onClick={() => setShowMoreMenu((v) => !v)}
                   aria-haspopup="menu"
                   aria-expanded={showMoreMenu}
-                  className="w-10 h-10 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] active:scale-95 text-[#515154] flex items-center justify-center transition-all"
+                  className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] active:scale-95 text-[#515154] flex items-center justify-center transition-all"
                   title={ar ? 'المزيد' : 'More'}
                   aria-label={ar ? 'المزيد' : 'More'}
                 >
@@ -1338,7 +1369,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
                   setIsWindowOpen(false);
                   onClose?.();
                 }}
-                className="w-10 h-10 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] active:scale-95 text-[#515154] flex items-center justify-center transition-all"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-[#f5f5f7] hover:bg-[#e8e8ed] active:scale-95 text-[#515154] flex items-center justify-center transition-all"
                 title={ar ? 'تصغير إلى الفقاعة (تستمر في الحديث)' : 'Minimise to the bubble (keeps talking)'}
                 aria-label={ar ? 'تصغير' : 'Minimise'}
               >
@@ -1350,7 +1381,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
                   terminateSession();
                   onClose?.();
                 }}
-                className="w-10 h-10 rounded-full bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-600 flex items-center justify-center transition-all"
+                className="w-9 h-9 sm:w-10 sm:h-10 rounded-full bg-rose-50 hover:bg-rose-100 active:scale-95 text-rose-600 flex items-center justify-center transition-all"
                 title={ar ? 'إنهاء الجلسة' : 'End session'}
                 aria-label={ar ? 'إنهاء الجلسة' : 'End session'}
               >
