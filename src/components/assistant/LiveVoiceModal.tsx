@@ -56,6 +56,8 @@ interface LiveVoiceModalProps {
 // On phones the fixed bottom tab bar occupies the lower edge; keep the floating bubble above it
 // Device speech recognition is tried first on every visit; only if it fails in this visit do we record clips instead
 let srBlockedThisVisit = false;
+// device recognition sessions in a row that never even started capturing audio (a silent failure on some phones)
+let srDeadStreak = 0;
 
 function bottomNavInset(): number {
   return typeof window !== 'undefined' && window.innerWidth < 640 ? 72 : 0;
@@ -926,8 +928,17 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         ctx.createMediaStreamSource(stream).connect(an);
         analyserRef.current = an;
       }
-    } catch {
-      setReconnectNote(locale === 'ar' ? 'الميكروفون غير مسموح به. فعّل الإذن لهذا الموقع من إعدادات المتصفح.' : 'Microphone is blocked. Allow it for this site in the browser settings.');
+    } catch (err) {
+      const name = (err as { name?: string })?.name || '';
+      addDebugLog('ERROR', 'AudioStream', `Microphone request failed: ${name || String(err)}`);
+      const ar = locale === 'ar';
+      setReconnectNote(
+        name === 'NotFoundError'
+          ? ar ? 'لا يوجد ميكروفون متصل بهذا الجهاز.' : 'No microphone was found on this device.'
+          : name === 'NotReadableError' || name === 'AbortError'
+          ? ar ? 'الميكروفون مستخدم من تطبيق آخر. أغلقه ثم اضغط للتحدث مجدداً.' : 'The microphone is busy in another app. Close it, then tap to talk again.'
+          : ar ? 'الميكروفون غير مسموح به. اضغط على أيقونة القفل بجانب عنوان الموقع واختر «السماح» للميكروفون، ثم أعد المحاولة. على الآيفون: إعدادات سفاري > الميكروفون > السماح.' : 'Microphone is blocked. Tap the lock icon next to the address, set Microphone to Allow, then try again. On iPhone: Settings > Safari > Microphone > Allow.'
+      );
       terminateSession();
       return;
     }
@@ -954,6 +965,8 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     let lastLevelPaint = 0;
     let floorSum = 0;
     let floorN = 0;
+    let sawSignal = false;
+    let lastWake = 0;
 
     rec.ondataavailable = (e) => {
       if (e.data.size > 0) chunks.push(e.data);
@@ -994,6 +1007,13 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         lastLevelPaint = now;
         setAudioLevel(Math.min(100, Math.round(rms * 500)));
       }
+      if (rms > 0) sawSignal = true;
+      // a context stuck in "suspended" reads flat zero forever, which looks like "listening" with nobody heard: wake it
+      if (!sawSignal && now - began > 1200 && now - lastWake > 1500) {
+        lastWake = now;
+        addDebugLog('WARN', 'AudioStream', `Mic level is flat zero (audio engine ${audioContextInRef.current?.state}); waking it`);
+        void audioContextInRef.current?.resume().catch(() => undefined);
+      }
       // the first moments set the room's noise floor; speech is anything clearly above it
       if (now - began < 500) {
         floorSum += rms;
@@ -1032,14 +1052,30 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     if (!SR) return;
     let finalText = '';
     let lastInterim = '';
+    let audioStarted = false;
+    let ended = false;
+    let startWatchdog: ReturnType<typeof setTimeout> | undefined;
+    const markBlocked = (why: string) => {
+      srBlockedThisVisit = true;
+      recognitionRef.current = null;
+      addDebugLog('WARN', 'SpeechTTS', `Device speech recognition unavailable (${why}); switching to recording`);
+    };
     try {
       const rec = new SR();
       rec.lang = getVoiceLang() === 'ar' ? 'ar-EG' : 'en-US';
       rec.interimResults = true;
       rec.continuous = false;
       rec.maxAlternatives = 1;
+      rec.onaudiostart = () => {
+        audioStarted = true;
+        srDeadStreak = 0;
+        clearTimeout(startWatchdog);
+      };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rec.onresult = (event: any) => {
+        audioStarted = true;
+        srDeadStreak = 0;
+        clearTimeout(startWatchdog);
         let interim = '';
         for (let i = event.resultIndex; i < event.results.length; i++) {
           const r = event.results[i];
@@ -1052,22 +1088,46 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       };
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rec.onerror = (e: any) => {
-        if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed' || e?.error === 'language-not-supported') {
-          // Device speech recognition is not available here: record short clips and transcribe them instead
-          srBlockedThisVisit = true;
-          recognitionRef.current = null;
+        const code = e?.error;
+        // These mean device recognition cannot work here: record short clips and let Gemini listen instead
+        if (code === 'not-allowed' || code === 'service-not-allowed' || code === 'language-not-supported' || code === 'network' || code === 'audio-capture') {
+          markBlocked(String(code));
         }
       };
       rec.onend = () => {
+        if (ended) return;
+        ended = true;
+        clearTimeout(startWatchdog);
         recognitionRef.current = null;
         if (!activeRef.current || economyBusyRef.current) return;
         const said = (finalText || lastInterim).trim();
-        if (said) void economyTurn(said);
-        else setTimeout(listenNext, 250);
+        if (said) {
+          void economyTurn(said);
+          return;
+        }
+        if (!audioStarted && !srBlockedThisVisit) {
+          srDeadStreak += 1;
+          if (srDeadStreak >= 2) markBlocked('it never started listening');
+        }
+        setTimeout(listenNext, 250);
       };
       rec.start();
       recognitionRef.current = rec;
       setStatus('listening');
+      // Some phones start the recognizer and then never listen or report an error: do not wait on it forever
+      startWatchdog = setTimeout(() => {
+        if (audioStarted || ended || !activeRef.current) return;
+        addDebugLog('WARN', 'SpeechTTS', 'Device speech recognition gave no sign of life in 4s');
+        markBlocked('no sign of life');
+        try {
+          rec.abort();
+        } catch {
+          /* ignore */
+        }
+        // abort() may not fire onend on a broken recognizer, so move on ourselves
+        ended = true;
+        setTimeout(listenNext, 100);
+      }, 4000);
     } catch {
       setTimeout(listenOnce, 600);
     }
