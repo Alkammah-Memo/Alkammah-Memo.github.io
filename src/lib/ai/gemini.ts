@@ -5,7 +5,8 @@
 import { GoogleGenAI, Type, Modality, ThinkingLevel } from '@google/genai';
 import type { GenerateContentParameters, GenerateContentResponse } from '@google/genai';
 import { keyManager, runWithFailover, classifyError, DEFAULT_MODELS, AllKeysFailedError, NoKeysConfiguredError } from './keyManager';
-import type { KeySlot } from './keyManager';
+import { usage, runnableQueue, earliestResume, formatWait, fullQueue } from './modelQueue';
+import type { QueueEntry } from './modelQueue';
 import type { ModelSettings } from './keyManager';
 import {
   EXECUTIVE_FUNCTION_TOOLS,
@@ -34,14 +35,18 @@ type GenParams = Omit<GenerateContentParameters, 'model'>;
 /** Tries each model on the current key; a rejected key aborts the model loop so the next key can try. */
 async function generate(models: string[], params: GenParams, opts: { maxRounds?: number } = {}): Promise<GenerateContentResponse> {
   const unique = [...new Set(models.filter(Boolean))];
-  return runWithFailover(async (apiKey) => {
+  return runWithFailover(async (apiKey, slot) => {
     const ai = clientFor(apiKey);
     let lastError: unknown;
     for (const model of unique) {
+      const started = Date.now();
       try {
-        return await ai.models.generateContent({ ...params, model });
+        const res = await ai.models.generateContent({ ...params, model });
+        usage.recordSuccess(slot.id, model, Date.now() - started);
+        return res;
       } catch (err) {
         lastError = err;
+        usage.recordFailure(slot.id, model, err);
         if (classifyError(err).kind === 'auth') throw err;
       }
     }
@@ -49,18 +54,24 @@ async function generate(models: string[], params: GenParams, opts: { maxRounds?:
   }, opts);
 }
 
-
 /**
- * Speed-first request for voice. Google's fast models sometimes stall for 30 seconds or answer "high demand" on one key
- * while the next key answers in a second. So: start on the best key; if there is no answer within `hedgeMs` (or it fails),
- * start the same request on the next key/model WITHOUT cancelling the first. The first good answer wins, the rest are aborted.
+ * Runs a request through the model queue: Key 1 (High models, then Mid models), then Key 2, then Key 3. Models that are known to
+ * be used up or unavailable are skipped without a call. With a finite `hedgeMs`, a slow answer also starts the next entry in
+ * the queue without cancelling the first, and the first good answer wins (used by voice, where waiting is the worst outcome).
+ * When nothing in the queue can run, it throws AllKeysFailedError saying when Gemini returns.
  */
-async function generateHedged(models: string[], params: GenParams, hedgeMs = 2500): Promise<GenerateContentResponse> {
-  const unique = [...new Set(models.filter(Boolean))].slice(0, 3);
+async function generateQueued(params: GenParams, opts: { hedgeMs?: number; timeoutMs?: number } = {}): Promise<GenerateContentResponse> {
+  const hedgeMs = opts.hedgeMs ?? Infinity;
+  const timeoutMs = opts.timeoutMs ?? 30_000;
   if (!keyManager.hasAnyKey()) throw new NoKeysConfiguredError();
-  const slots = keyManager.getCandidateSlots();
-  const plan: { slot: KeySlot; model: string }[] = [];
-  for (const model of unique) for (const slot of slots) plan.push({ slot, model });
+  const plan: QueueEntry[] = runnableQueue();
+  if (plan.length === 0) {
+    const back = earliestResume();
+    throw new AllKeysFailedError(
+      back ? `All Gemini models are used up for now. The first one is back in ${formatWait(back - Date.now(), false)}.` : 'No Gemini model is available. Check Settings → Gemini keys.',
+      null
+    );
+  }
 
   return new Promise<GenerateContentResponse>((resolve, reject) => {
     let next = 0;
@@ -69,6 +80,7 @@ async function generateHedged(models: string[], params: GenParams, hedgeMs = 250
     let lastError: unknown = new Error('No attempt made');
     let hedgeTimer: ReturnType<typeof setTimeout> | undefined;
     const controllers: AbortController[] = [];
+    const deadSlots = new Set<number>();
 
     const stopAll = (except?: AbortController) => {
       clearTimeout(hedgeTimer);
@@ -76,18 +88,25 @@ async function generateHedged(models: string[], params: GenParams, hedgeMs = 250
     };
 
     const launch = (): boolean => {
+      while (next < plan.length && (deadSlots.has(plan[next].slot.id) || usage.isBlocked(plan[next].slot.id, plan[next].model))) next++;
       if (done || next >= plan.length) return false;
       const { slot, model } = plan[next++];
       const ac = new AbortController();
       controllers.push(ac);
       pending++;
-      const giveUp = setTimeout(() => ac.abort(), 20_000);
+      const started = Date.now();
+      let stalled = false;
+      const giveUp = setTimeout(() => {
+        stalled = true;
+        ac.abort();
+      }, timeoutMs);
       clientFor(slot.key)
         .models.generateContent({ ...params, model, config: { ...params.config, abortSignal: ac.signal } })
         .then((res) => {
           if (done) return;
           done = true;
           stopAll(ac);
+          usage.recordSuccess(slot.id, model, Date.now() - started);
           keyManager.reportSuccess(slot.id);
           resolve(res);
         })
@@ -95,27 +114,54 @@ async function generateHedged(models: string[], params: GenParams, hedgeMs = 250
           if (done) return;
           lastError = err;
           const classified = classifyError(err);
+          if (stalled) usage.recordStall(slot.id, model);
+          else if (!ac.signal.aborted) usage.recordFailure(slot.id, model, err);
           if (!classified.retryable) {
             done = true;
             stopAll();
             reject(err);
             return;
           }
-          if (!ac.signal.aborted) keyManager.reportFailure(slot.id, classified);
+          if (classified.kind === 'auth') {
+            deadSlots.add(slot.id);
+            keyManager.reportFailure(slot.id, classified);
+          }
           pending--;
           if (!launch() && pending === 0) {
             done = true;
             stopAll();
-            reject(new AllKeysFailedError('All Gemini keys failed. Check Settings → Gemini keys to test each key.', lastError));
+            const back = earliestResume();
+            reject(
+              new AllKeysFailedError(
+                back ? `All Gemini models are used up for now. The first one is back in ${formatWait(back - Date.now(), false)}.` : 'All Gemini keys failed. Check Settings → Gemini keys to test each key.',
+                lastError
+              )
+            );
           }
         })
         .finally(() => clearTimeout(giveUp));
       clearTimeout(hedgeTimer);
-      hedgeTimer = setTimeout(launch, hedgeMs);
+      if (Number.isFinite(hedgeMs)) hedgeTimer = setTimeout(launch, hedgeMs);
       return true;
     };
-    launch();
+    if (!launch()) reject(new AllKeysFailedError('No Gemini model is available right now.', null));
   });
+}
+
+/** Settings "Check now": one tiny request per key and model that is not already known to be used up, so the status shown is real. */
+export async function probeModelQueue(): Promise<void> {
+  const entries = fullQueue().filter((e) => !usage.isBlocked(e.slot.id, e.model));
+  await Promise.all(
+    entries.map(async (e) => {
+      const started = Date.now();
+      try {
+        await clientFor(e.slot.key).models.generateContent({ model: e.model, contents: 'hi', config: { maxOutputTokens: 16 } });
+        usage.recordSuccess(e.slot.id, e.model, Date.now() - started);
+      } catch (err) {
+        usage.recordFailure(e.slot.id, e.model, err);
+      }
+    })
+  );
 }
 
 const models = (): ModelSettings => keyManager.getSettings().models;
@@ -136,12 +182,14 @@ export async function chatWithAssistant(
   message: string,
   context: unknown
 ): Promise<{ content: string; functionCalls: FunctionCallResult[] }> {
-  const m = models();
   const contextSummary = context ? `\n[Current Workspace Summary]: ${JSON.stringify(context)}` : '';
-  const res = await generate([m.chat, ...m.chatFallbacks], {
-    contents: `${message}${contextSummary}`,
-    config: { systemInstruction: chatSystemInstruction(), tools: EXECUTIVE_FUNCTION_TOOLS },
-  });
+  const res = await generateQueued(
+    {
+      contents: `${message}${contextSummary}`,
+      config: { systemInstruction: chatSystemInstruction(), tools: EXECUTIVE_FUNCTION_TOOLS },
+    },
+    { timeoutMs: 45_000 }
+  );
   return { content: res.text || '', functionCalls: extractCalls(res) };
 }
 
@@ -240,9 +288,6 @@ export interface VoiceTurn {
   text: string;
 }
 
-/** Cheapest capable model first: voice turns are short, so flash-lite is plenty and has the roomiest free limits. */
-const ECONOMY_VOICE_MODEL = 'gemini-3.1-flash-lite';
-
 /**
  * Economy voice turn. The phone does the listening and the speaking for free; this is ONE small text request
  * (two only when a tool ran and its result must be read back). Returns the sentence Spero should say.
@@ -256,8 +301,6 @@ export async function economyVoiceTurn(
   speakLang: 'ar' | 'en' = 'ar',
   audio?: { data: string; mime: string }
 ): Promise<string> {
-  const m = models();
-  const order = [ECONOMY_VOICE_MODEL, ...m.chatFallbacks, m.chat];
   const systemInstruction = `${SPERO_PERSONA}
 التوقيت الحالي في القاهرة: ${cairoNowLabel()} (ISO محلي: ${cairoNowIsoLabel()}).
 ${SPERO_TOOL_RULES}
@@ -279,10 +322,10 @@ ${SPERO_TOOL_RULES}
   // Voice needs speed: ask for minimal "thinking"; if a model rejects that setting, retry without it
   const gen = async (params: GenParams): Promise<GenerateContentResponse> => {
     try {
-      return await generateHedged(order, { ...params, config: { ...params.config, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } });
+      return await generateQueued({ ...params, config: { ...params.config, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } }, { hedgeMs: 4000, timeoutMs: 20_000 });
     } catch (err) {
       const kind = classifyError(err).kind;
-      if (kind === 'bad_request' || kind === 'model') return generateHedged(order, params);
+      if (kind === 'bad_request' || kind === 'model') return generateQueued(params, { hedgeMs: 4000, timeoutMs: 20_000 });
       throw err;
     }
   };
