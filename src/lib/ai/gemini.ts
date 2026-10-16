@@ -79,17 +79,39 @@ export async function transcribeAudio(audioBase64: string, mimeType?: string): P
   const m = models();
   const clean = audioBase64.split('base64,').pop() || '';
   const baseMime = (mimeType || 'audio/webm').split(';')[0];
-  const res = await generate([m.transcribe, m.chat, ...m.chatFallbacks], {
-    contents: {
-      parts: [
-        { inlineData: { mimeType: baseMime, data: clean } },
-        {
-          text: 'Transcribe this executive audio accurately. The speaker may speak Arabic (Egyptian or Modern Standard), English, or mixed English and Arabic. Return only the verbatim transcription text.',
-        },
-      ],
-    },
-  });
-  return res.text || '';
+  const contents = {
+    parts: [
+      { inlineData: { mimeType: baseMime, data: clean } },
+      {
+        text: 'Transcribe this executive audio accurately. The speaker may speak Arabic (Egyptian or Modern Standard), English, or mixed English and Arabic. Return only the verbatim transcription text.',
+      },
+    ],
+  };
+  const textOf = (res: GenerateContentResponse) =>
+    (res.text || (res.candidates?.[0]?.content?.parts || []).map((p) => p.text || '').join(' ')).trim();
+  // Try the transcription model first, then the general models; the first one that returns words wins
+  const order = [...new Set([m.transcribe, 'gemini-3.1-flash-lite', m.chat, ...m.chatFallbacks].filter(Boolean))];
+  let lastErr: unknown = null;
+  for (const model of order) {
+    for (const withThinking of [true, false]) {
+      try {
+        const res = await generate([model], {
+          contents,
+          config: withThinking ? { thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } : undefined,
+        });
+        const t = textOf(res);
+        if (t) return t;
+        break; // empty answer: no point retrying the same model
+      } catch (err) {
+        lastErr = err;
+        const kind = classifyError(err).kind;
+        if (withThinking && (kind === 'bad_request' || kind === 'model')) continue;
+        break;
+      }
+    }
+  }
+  if (lastErr) throw lastErr;
+  return '';
 }
 
 export interface VoiceFastResult {
