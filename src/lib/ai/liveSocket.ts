@@ -17,6 +17,7 @@ import type { LiveServerMessage, Session } from '@google/genai';
 import { clientFor } from './gemini';
 import { keyManager, classifyError, NoKeysConfiguredError } from './keyManager';
 import type { KeySlot } from './keyManager';
+import { usage } from './modelQueue';
 import { EXECUTIVE_FUNCTION_TOOLS, liveSystemInstruction } from './tools';
 import { arrayBufferToBase64 } from './audioUtils';
 
@@ -328,14 +329,24 @@ export class GeminiLiveSocket {
 
       let connected: ActiveSession | null = null;
       let lastErr: unknown = null;
-      for (const slot of keyManager.getCandidateSlots()) {
+      const liveModel = keyManager.getSettings().models.live;
+      // Live is used up on a key: do not even try it until Google says it is back
+      const usable = keyManager.getCandidateSlots().filter((s) => !usage.isBlocked(s.id, liveModel));
+      if (usable.length === 0) {
+        this.emit({ liveExhausted: true });
+        this.close();
+        return;
+      }
+      for (const slot of usable) {
         if (this.userClosed) return;
         try {
           connected = await this.openSession(slot);
           keyManager.reportSuccess(slot.id);
+          usage.recordSuccess(slot.id, liveModel, 0);
           break;
         } catch (err) {
           lastErr = err;
+          usage.recordFailure(slot.id, liveModel, err);
           keyManager.reportFailure(slot.id, classifyError(err));
         }
       }
@@ -350,6 +361,12 @@ export class GeminiLiveSocket {
       }
 
       if (!connected) {
+        // every key just failed in a way that blocks Live (used up, busy): hand over to Economy instead of retrying forever
+        if (keyManager.getCandidateSlots().every((sl) => usage.isBlocked(sl.id, liveModel))) {
+          this.emit({ liveExhausted: true });
+          this.close();
+          return;
+        }
         failStreak++;
         const message = classifyError(lastErr).message;
         this.emit({ status: 'reconnecting', attempt: failStreak, error: message });
@@ -379,6 +396,7 @@ export class GeminiLiveSocket {
       const lived = Date.now() - connected.startedAt;
       if (end.error) {
         const c = classifyError(end.error);
+        usage.recordFailure(connected.slot.id, liveModel, end.error);
         keyManager.reportFailure(connected.slot.id, c);
         this.emit({ interrupted: true });
         this.emit({ status: 'reconnecting', attempt: 0, error: c.message });

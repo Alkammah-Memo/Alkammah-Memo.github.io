@@ -1,13 +1,14 @@
-/** Which voice engine Spero uses. "economy" costs nothing and lasts for hours; "live" is the natural Gemini Live voice and uses far more quota. */
+/** Which voice engine Spero uses. "live" (default) is the natural Gemini Live voice; when every Live key is used up, Spero switches to "economy" by itself. */
 export type VoiceEngine = 'economy' | 'live';
 
-const KEY = 'alkammah_voice_engine';
+// new key: everyone starts on Live again (the old key held the previous Economy default)
+const KEY = 'alkammah_voice_engine_v2';
 
 export function getVoiceEngine(): VoiceEngine {
   try {
-    return localStorage.getItem(KEY) === 'live' ? 'live' : 'economy';
+    return localStorage.getItem(KEY) === 'economy' ? 'economy' : 'live';
   } catch {
-    return 'economy';
+    return 'live';
   }
 }
 
