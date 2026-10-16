@@ -162,7 +162,7 @@ export default function App() {
             })
           : '';
         return lang === 'ar'
-          ? `مرحباً المهندس محمد، أنا في خدمتك. نودّ التذكير بوجود اجتماع "${nextM.title}" ${timeStr ? `في تمام الساعة ${timeStr}` : ''}. هل ترغب في أن أُعدّ ملخصاً للاجتماع أو أراجع بنود جدول الأعمال؟`
+          ? `مرحباً المهندس محمد، أنا في خدمتك. أُذكّرك بأن لديك اجتماعاً "${nextM.title}" ${timeStr ? `في تمام الساعة ${timeStr}` : ''}. هل ترغب في أن أُعدّ ملخصاً للاجتماع أو أراجع بنود جدول الأعمال؟`
           : `Good morning, Eng. Mohamed. How can I assist you today? Just reminding you that you have an upcoming meeting "${nextM.title}" ${timeStr ? `at ${timeStr}` : ''}. Would you like me to prepare briefing notes or review agenda items?`;
       }
       return lang === 'ar'
