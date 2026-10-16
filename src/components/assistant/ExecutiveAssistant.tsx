@@ -58,6 +58,24 @@ const cairoClock = (iso: string) => {
     : d.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', timeZone: 'Africa/Cairo' });
 };
 
+const TOOL_LABELS: Record<string, { en: string; ar: string }> = {
+  createTask: { en: 'Task added', ar: 'تمت إضافة مهمة' },
+  deleteTask: { en: 'Task deleted', ar: 'تم حذف مهمة' },
+  updateTask: { en: 'Task updated', ar: 'تم تحديث مهمة' },
+  setTaskStatus: { en: 'Task status changed', ar: 'تم تغيير حالة مهمة' },
+  searchTasks: { en: 'Looked up tasks', ar: 'تم البحث في المهام' },
+  createMeeting: { en: 'Meeting scheduled', ar: 'تمت جدولة اجتماع' },
+  deleteMeeting: { en: 'Meeting deleted', ar: 'تم حذف اجتماع' },
+  rescheduleMeeting: { en: 'Meeting rescheduled', ar: 'تم تغيير موعد اجتماع' },
+  updateMeeting: { en: 'Meeting updated', ar: 'تم تحديث اجتماع' },
+  listMeetings: { en: 'Checked the calendar', ar: 'تمت مراجعة التقويم' },
+  getMeetingBriefing: { en: 'Prepared a meeting briefing', ar: 'تم إعداد ملخص الاجتماع' },
+  archiveTask: { en: 'Task archived', ar: 'تمت أرشفة مهمة' },
+  navigateTo: { en: 'Opened a page', ar: 'تم فتح صفحة' },
+  openItem: { en: 'Opened an item', ar: 'تم فتح عنصر' },
+};
+const toolLabel = (name: string, ar: boolean) => (TOOL_LABELS[name] ? (ar ? TOOL_LABELS[name].ar : TOOL_LABELS[name].en) : name);
+
 export const ExecutiveAssistant: React.FC<ExecutiveAssistantProps> = ({
   messages,
   tasks,
@@ -97,6 +115,7 @@ export const ExecutiveAssistant: React.FC<ExecutiveAssistantProps> = ({
   const streamRef = useRef<MediaStream | null>(null);
   const mountedRef = useRef(true);
   const [undone, setUndone] = useState<Set<string>>(new Set());
+  const [openDetails, setOpenDetails] = useState<Set<string>>(new Set());
 
   const chatEndRef = useRef<HTMLDivElement | null>(null);
 
@@ -284,14 +303,14 @@ export const ExecutiveAssistant: React.FC<ExecutiveAssistantProps> = ({
   return (
     <div className="flex flex-col h-full max-w-5xl mx-auto bg-white/90 backdrop-blur-2xl rounded-3xl border border-[#d2d2d7] shadow-xl overflow-hidden pb-4">
       {/* Assistant Header with Live Voice Trigger */}
-      <div className="bg-[#fbfbfd] text-[#1d1d1f] px-6 py-4 flex flex-wrap items-center justify-between gap-3 border-b border-[#d2d2d7]/60">
+      <div className="bg-white text-[#1d1d1f] px-4 sm:px-6 py-3 sm:py-4 flex items-center justify-between gap-3 border-b border-[#ececf0]">
         <div className="flex items-center gap-3">
-          <div className="w-9 h-9 rounded-2xl bg-[#0071e3] flex items-center justify-center text-white shadow-xs">
-            <Sparkles className="w-5 h-5" />
+          <div className="w-10 h-10 rounded-full spero-core flex items-center justify-center text-white">
+            <Sparkles className="w-[18px] h-[18px]" />
           </div>
           <div>
             <h2 className="text-base font-bold tracking-tight text-[#1d1d1f]">
-              {locale === 'en' ? 'Executive AI Assistant' : 'المساعد التنفيذي الذكي'}
+              {locale === 'en' ? 'Spero · Executive Assistant' : 'سبيرو · مساعدتك التنفيذية'}
             </h2>
             <div className="flex items-center gap-2 text-xs text-[#86868b]">
               <span>Cairo ({getCairoUtcOffsetLabel()})</span>
@@ -303,20 +322,21 @@ export const ExecutiveAssistant: React.FC<ExecutiveAssistantProps> = ({
         <div className="flex items-center gap-2">
           <button
             onClick={() => setShowRecentPanel(!showRecentPanel)}
-            className="flex items-center gap-1.5 px-3 py-1.5 bg-white hover:bg-[#e8e8ed] text-[#1d1d1f] rounded-xl text-xs font-semibold border border-[#d2d2d7] transition-colors shadow-xs"
+            className="flex items-center gap-1.5 min-h-10 px-3 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#1d1d1f] rounded-full text-xs font-semibold transition-colors"
             title="Recent Voice Commands"
+            aria-label={locale === 'en' ? 'Recent commands' : 'الأوامر السابقة'}
           >
             <Clock className="w-3.5 h-3.5 text-[#0071e3]" />
-            <span>{locale === 'en' ? 'Recent Commands' : 'الأوامر السابقة'}</span>
+            <span className="hidden sm:inline">{locale === 'en' ? 'Recent' : 'السابقة'}</span>
           </button>
 
           <button
             onClick={() => onOpenLiveVoice?.()}
-            className="flex items-center gap-2 px-3.5 py-1.5 bg-gradient-to-r from-[#0071e3] to-[#7928ca] hover:opacity-95 text-white rounded-xl text-xs font-bold shadow-md transition-all active:scale-95 cursor-pointer"
-            title="Open Siri AI Voice Assistant"
+            className="flex items-center gap-2 min-h-10 px-4 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-full text-xs font-bold shadow-sm transition-all active:scale-95 cursor-pointer"
+            title={locale === 'en' ? 'Talk to Spero' : 'تحدّث مع سبيرو'}
           >
-            <Radio className="w-3.5 h-3.5 animate-pulse text-white" />
-            <span>{locale === 'en' ? 'Siri Voice' : 'المساعد الصوتي (Siri)'}</span>
+            <Radio className="w-3.5 h-3.5 text-white" />
+            <span>{locale === 'en' ? 'Voice' : 'صوتي'}</span>
           </button>
         </div>
       </div>
@@ -376,75 +396,75 @@ export const ExecutiveAssistant: React.FC<ExecutiveAssistantProps> = ({
       )}
 
       {/* Messages Scroll Area */}
-      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#FAF8F5]">
+      <div className="flex-1 overflow-y-auto p-4 sm:p-6 space-y-4 bg-[#f5f5f7]">
         {messages.map((msg) => (
           <div
             key={msg.id}
             className={`flex flex-col ${msg.role === 'user' ? 'items-end' : 'items-start'}`}
           >
             <div
-              className={`max-w-[85%] rounded-2xl p-4 text-xs sm:text-sm leading-relaxed shadow-xs ${
+              className={`max-w-[88%] rounded-3xl px-4 py-3 text-[13px] sm:text-sm leading-relaxed shadow-xs ${
                 msg.role === 'user'
-                  ? 'bg-slate-900 text-white rounded-br-xs'
-                  : 'bg-white text-stone-900 border border-stone-200 rounded-bl-xs'
+                  ? 'bg-[#0071e3] text-white rounded-br-md'
+                  : 'bg-white text-[#1d1d1f] border border-[#e5e5ea] rounded-bl-md'
               }`}
             >
               <p className="whitespace-pre-wrap">{msg.content}</p>
 
-              {/* Render Tool Invocations */}
+              {/* What Spero did, in plain words (details are one tap away) */}
               {msg.toolInvocations && msg.toolInvocations.length > 0 && (
-                <div className="mt-3 pt-3 border-t border-stone-150 space-y-2">
-                  {msg.toolInvocations.map((inv, idx) => (
-                    <div
-                      key={idx}
-                      className="bg-stone-50 border border-stone-200 rounded-xl p-3 text-xs space-y-1.5"
-                    >
-                      <div className="flex items-center justify-between font-mono text-[11px] text-stone-600">
-                        <span className="font-bold text-amber-800">
-                          TOOL: {inv.toolName}
-                        </span>
-                        {inv.status === 'success' && (
-                          <span className="text-emerald-700 font-bold flex items-center gap-1">
-                            <CheckCircle2 className="w-3.5 h-3.5" />
-                            Executed
+                <div className="mt-2.5 space-y-1.5">
+                  {msg.toolInvocations.map((inv, idx) => {
+                    const key = `${msg.id}:${idx}`;
+                    return (
+                      <div key={idx} className="rounded-2xl bg-[#f5f5f7] border border-[#ececf0] px-3 py-2 text-xs text-[#1d1d1f]">
+                        <div className="flex items-center justify-between gap-2">
+                          <span className="flex items-center gap-1.5 font-semibold">
+                            {inv.status === 'success' ? <CheckCircle2 className="w-4 h-4 text-emerald-600 shrink-0" /> : <span className="w-4 h-4 rounded-full border-2 border-amber-500 shrink-0" />}
+                            {toolLabel(inv.toolName, locale === 'ar')}
                           </span>
+                          <span className="flex items-center gap-1.5 shrink-0">
+                            <button
+                              type="button"
+                              onClick={() => setOpenDetails((prev) => { const n = new Set(prev); if (n.has(key)) n.delete(key); else n.add(key); return n; })}
+                              className="text-[11px] text-[#0071e3] font-semibold px-1.5 min-h-8"
+                            >
+                              {openDetails.has(key) ? (locale === 'ar' ? 'إخفاء' : 'Hide') : locale === 'ar' ? 'التفاصيل' : 'Details'}
+                            </button>
+                            {inv.undoAvailable && inv.undoAction && (
+                              <button
+                                disabled={undone.has(key)}
+                                onClick={() => {
+                                  setUndone((prev) => new Set(prev).add(key));
+                                  onUndoToolAction(inv.undoAction);
+                                }}
+                                className="px-2.5 min-h-8 text-xs bg-white border border-[#d2d2d7] hover:bg-[#e8e8ed] disabled:opacity-40 text-[#1d1d1f] rounded-full flex items-center gap-1 transition-colors"
+                              >
+                                <RotateCcw className="w-3 h-3" />
+                                <span>{t.undo}</span>
+                              </button>
+                            )}
+                          </span>
+                        </div>
+                        {openDetails.has(key) && (
+                          <pre className="mt-2 bg-white p-2 rounded-lg border border-[#ececf0] font-mono text-[11px] text-[#515154] whitespace-pre-wrap break-words">{JSON.stringify(inv.args, null, 2)}</pre>
                         )}
                       </div>
-
-                      <div className="bg-white p-2 rounded border border-stone-200/80 font-mono text-[11px] text-stone-700">
-                        {JSON.stringify(inv.args, null, 2)}
-                      </div>
-
-                      {inv.undoAvailable && inv.undoAction && (
-                        <div className="pt-1 flex justify-end">
-                          <button
-                            disabled={undone.has(`${msg.id}:${idx}`)}
-                            onClick={() => {
-                              setUndone((prev) => new Set(prev).add(`${msg.id}:${idx}`));
-                              onUndoToolAction(inv.undoAction);
-                            }}
-                            className="px-2.5 py-1 text-xs bg-stone-200 hover:bg-stone-300 disabled:opacity-40 text-stone-800 rounded-lg flex items-center gap-1 transition-colors"
-                          >
-                            <RotateCcw className="w-3 h-3" />
-                            <span>{t.undo}</span>
-                          </button>
-                        </div>
-                      )}
-                    </div>
-                  ))}
+                    );
+                  })}
                 </div>
               )}
             </div>
-            <span className="text-[10px] text-stone-400 font-mono mt-1 px-1">
+            <span className="text-[10px] text-[#86868b] font-mono mt-1 px-1.5">
               {cairoClock(msg.timestamp)}
             </span>
           </div>
         ))}
 
         {loading && (
-          <div className="flex items-center gap-2 text-xs text-[#86868b] bg-white px-4 py-2.5 rounded-xl border border-[#d2d2d7] max-w-xs shadow-xs">
+          <div className="flex items-center gap-2 text-xs text-[#6e6e73] bg-white px-4 py-2.5 rounded-full border border-[#e5e5ea] max-w-xs shadow-xs">
             <div className="w-3.5 h-3.5 border-2 border-[#0071e3] border-t-transparent rounded-full animate-spin" />
-            <span>{locale === 'en' ? 'Verifying entities and executing action...' : 'جارٍ معالجة الأمر والتحقق...'}</span>
+            <span>{locale === 'en' ? 'Spero is working on it…' : 'سبيرو تعمل على طلبك…'}</span>
           </div>
         )}
 
@@ -452,13 +472,13 @@ export const ExecutiveAssistant: React.FC<ExecutiveAssistantProps> = ({
       </div>
 
       {/* Suggested Executive Prompt Chips */}
-      <div className="px-4 py-2 bg-white border-t border-[#d2d2d7]/60 overflow-x-auto">
+      <div className="px-4 py-2 bg-white border-t border-[#ececf0] overflow-x-auto">
         <div className="flex items-center gap-1.5 whitespace-nowrap">
           {samplePromptsList.map((prompt, i) => (
             <button
               key={i}
               onClick={() => setInputText(prompt)}
-              className="text-xs bg-[#f5f5f7] hover:bg-[#e8e8ed] hover:border-[#0071e3] text-[#1d1d1f] px-3 py-1.5 rounded-full border border-[#d2d2d7] transition-colors"
+              className="text-xs bg-white hover:bg-[#f5f5f7] hover:border-[#0071e3] text-[#1d1d1f] min-h-10 px-3.5 rounded-full border border-[#d2d2d7] transition-colors"
             >
               {prompt}
             </button>
@@ -504,17 +524,17 @@ export const ExecutiveAssistant: React.FC<ExecutiveAssistantProps> = ({
         {/* Live Voice Interactive Modal Trigger */}
         <button
           onClick={() => onOpenLiveVoice?.()}
-          className="p-3 rounded-xl border border-[#d2d2d7] bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#1d1d1f] flex items-center gap-1.5 transition-colors text-xs font-semibold shadow-xs cursor-pointer"
+          className="min-w-11 min-h-11 px-3 rounded-full border border-[#d2d2d7] bg-white hover:bg-[#f5f5f7] text-[#1d1d1f] flex items-center justify-center gap-1.5 transition-colors text-xs font-semibold cursor-pointer"
           title={locale === 'ar' ? 'المساعد الصوتي المباشر (Siri)' : 'Live Siri Voice Assistant'}
         >
-          <Radio className="w-4 h-4 text-[#0071e3] animate-pulse" />
-          <span className="hidden sm:inline">{locale === 'ar' ? 'صوتي مباشر' : 'Siri Voice'}</span>
+          <Radio className="w-4 h-4 text-[#0071e3]" />
+          <span className="hidden sm:inline">{locale === 'ar' ? 'صوتي' : 'Voice'}</span>
         </button>
 
         {/* Microphone Dictate Trigger */}
         <button
           onClick={isRecordingAudio ? stopRecordingAudio : startRecordingAudio}
-          className={`p-3 rounded-xl border transition-colors cursor-pointer ${
+          className={`min-w-11 min-h-11 flex items-center justify-center rounded-full border transition-colors cursor-pointer ${
             isRecordingAudio
               ? 'bg-red-600 text-white border-red-700 animate-pulse'
               : 'bg-[#f5f5f7] text-[#1d1d1f] border-[#d2d2d7] hover:bg-[#e8e8ed] hover:border-[#0071e3]'
@@ -531,14 +551,14 @@ export const ExecutiveAssistant: React.FC<ExecutiveAssistantProps> = ({
           onKeyDown={(e) => {
             if (e.key === 'Enter' && !e.nativeEvent.isComposing) handleSend();
           }}
-          placeholder={locale === 'en' ? 'Ask AI, type an executive command, or dictate audio...' : 'اكتب أو أملِ أمراً صوتياً...'}
-          className="flex-1 px-4 py-2.5 rounded-xl border border-[#d2d2d7] text-sm focus:outline-none focus:border-[#0071e3] font-medium bg-[#f5f5f7] text-[#1d1d1f] placeholder-[#86868b]"
+          placeholder={locale === 'en' ? 'Message Spero…' : 'اكتب رسالة لسبيرو…'}
+          className="flex-1 min-w-0 min-h-11 px-4 rounded-full border border-[#d2d2d7] text-sm focus:outline-none focus:border-[#0071e3] font-medium bg-[#f5f5f7] focus:bg-white text-[#1d1d1f] placeholder-[#86868b]"
         />
 
         <button
           onClick={() => handleSend()}
           disabled={!inputText.trim() || loading}
-          className="p-3 bg-[#0071e3] hover:bg-[#0062c4] disabled:opacity-40 text-white rounded-xl shadow-xs transition-colors"
+          className="min-w-11 min-h-11 flex items-center justify-center bg-[#0071e3] hover:bg-[#0062c4] disabled:opacity-40 text-white rounded-full shadow-xs transition-colors"
           title="Send"
         >
           <Send className="w-4 h-4" />
