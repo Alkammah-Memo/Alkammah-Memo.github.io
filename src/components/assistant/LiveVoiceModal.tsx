@@ -1,3 +1,4 @@
+import { earliestResume, formatWait } from '../../lib/ai/modelQueue';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Locale } from '../../lib/translations';
 import { VoiceDebugMonitor, SpeechEvent } from './VoiceDebugMonitor';
@@ -888,7 +889,14 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       speakEconomy(reply);
     } catch (err) {
       addDebugLog('ERROR', 'SpeechTTS', 'Voice turn failed', err instanceof Error ? err.message : String(err));
-      const msg = locale === 'ar' ? 'تعذّر تنفيذ الطلب الآن، المهندس محمد. يرجى المحاولة مرة أخرى.' : 'I could not complete that request just now, Eng. Mohamed. Please try again.';
+      // Last step of the queue: every Gemini model is used up, so the device voice says so and when Gemini returns
+      const allUsedUp = err instanceof Error && err.name === 'AllKeysFailedError' && earliestResume() !== null;
+      const back = allUsedUp ? formatWait((earliestResume() as number) - Date.now(), locale === 'ar') : '';
+      const msg = allUsedUp
+        ? locale === 'ar'
+          ? `المهندس محمد، حصة جميع نماذج جيميناي انتهت الآن. سيعود أول نموذج بعد ${back}.`
+          : `Eng. Mohamed, every Gemini model is used up right now. The first one returns in ${back}.`
+        : locale === 'ar' ? 'تعذّر تنفيذ الطلب الآن، المهندس محمد. يرجى المحاولة مرة أخرى.' : 'I could not complete that request just now, Eng. Mohamed. Please try again.';
       setLastTranscript(msg);
       speakEconomy(msg);
     }
