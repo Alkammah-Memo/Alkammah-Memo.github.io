@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Locale } from '../../lib/translations';
 import { VoiceDebugMonitor, SpeechEvent } from './VoiceDebugMonitor';
 import { GeminiLiveSocket, LIVE_OPEN, LIVE_CONNECTING } from '../../lib/ai/liveSocket';
-import { voiceFastQuery, economyVoiceTurn, transcribeAudio } from '../../lib/ai/gemini';
+import { voiceFastQuery, economyVoiceTurn } from '../../lib/ai/gemini';
 import type { VoiceTurn } from '../../lib/ai/gemini';
 import { getVoiceEngine, getSpeechRecognitionCtor, cleanForSpeech, getVoiceLang, setVoiceLang, looksArabic } from '../../lib/ai/voiceEngine';
 import type { VoiceLang } from '../../lib/ai/voiceEngine';
@@ -851,7 +851,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         : byLang('en-gb')[0] || byLang('en-us')[0] || byLang('en')[0] || null;
       utterance.voice = picked;
       utterance.lang = picked?.lang || (arabic ? 'ar-SA' : 'en-US');
-      if (arabic && !picked) {
+      if (arabic && !picked && voices.length > 0) {
         setReconnectNote(locale === 'ar' ? 'لا يوجد صوت عربي مثبّت على هذا الجهاز، فسيُقرأ الرد بصوت آخر. يمكنك إضافته من إعدادات الجهاز > اللغات.' : 'No Arabic voice is installed on this device, so the reply may sound wrong. Add one in the device language settings.');
       }
       utterance.rate = 1;
@@ -865,12 +865,13 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     }
   };
 
-  const economyTurn = async (text: string) => {
+  const economyTurn = async (text: string, audio?: { data: string; mime: string }) => {
+    const turnStart = Date.now();
     economyBusyRef.current = true;
     lastActivityRef.current = Date.now();
     setStatus('connecting');
     setLastTranscript('');
-    addDebugLog('INFO', 'SpeechTTS', `User said: "${text}"`);
+    addDebugLog('INFO', 'SpeechTTS', audio ? 'User spoke (audio sent straight to the model)' : `User said: "${text}"`);
     try {
       const reply = cleanForSpeech(await economyVoiceTurn(
         text,
@@ -878,9 +879,11 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         { meetings: buildMeetingContext(), tasks: buildTaskContext() },
         economyHistoryRef.current,
         async (name, args) => ((await executeToolSafely(name, args)) ?? { ok: false, error: 'No result' }) as Record<string, unknown>,
-        getVoiceLang()
+        getVoiceLang(),
+        audio
       ));
-      economyHistoryRef.current = [...economyHistoryRef.current, { role: 'user' as const, text }, { role: 'spero' as const, text: reply }].slice(-12);
+      addDebugLog('SUCCESS', 'SpeechTTS', `Answer ready in ${((Date.now() - turnStart) / 1000).toFixed(1)}s`);
+      economyHistoryRef.current = [...economyHistoryRef.current, { role: 'user' as const, text: text || (locale === 'ar' ? '(رسالة صوتية)' : '(voice message)') }, { role: 'spero' as const, text: reply }].slice(-12);
       lastActivityRef.current = Date.now();
       setLastTranscript(reply);
       speakEconomy(reply);
@@ -971,23 +974,11 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       economyBusyRef.current = true;
       setStatus('connecting');
       try {
-        addDebugLog('INFO', 'AudioStream', 'Sending the recording to be transcribed');
+        addDebugLog('INFO', 'AudioStream', 'Sending the recording straight to Spero (one request)');
         const b64 = await blobToBase64(new Blob(chunks, { type: actualMime }));
-        const heard = (await transcribeAudio(b64, actualMime)).trim();
-        if (!heard) {
-          addDebugLog('WARN', 'AudioStream', 'Transcription returned no words');
-          economyBusyRef.current = false;
-          setStatus('listening');
-          void listenByRecording();
-          return;
-        }
-        addDebugLog('SUCCESS', 'AudioStream', `Heard: ${heard}`);
-        setUserTranscript(heard);
-        await economyTurn(heard);
+        await economyTurn('', { data: b64, mime: actualMime });
       } catch (err) {
-        addDebugLog('ERROR', 'SpeechTTS', 'Transcription failed', err instanceof Error ? err.message : String(err));
-        const em = err instanceof Error ? err.message : String(err);
-        setLastTranscript(locale === 'ar' ? `تعذّر فهم التسجيل: ${em.slice(0, 120)}` : `Could not process the recording: ${em.slice(0, 120)}`);
+        addDebugLog('ERROR', 'SpeechTTS', 'Voice turn failed', err instanceof Error ? err.message : String(err));
         economyBusyRef.current = false;
         setStatus('listening');
         setTimeout(() => void listenByRecording(), 800);
@@ -1017,7 +1008,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         lastVoice = now;
         lastActivityRef.current = now;
       }
-      const stopNow = (voiceStart && now - lastVoice > 1100) || (!voiceStart && now - began > 8000) || now - began > 25000;
+      const stopNow = (voiceStart && now - lastVoice > 800) || (!voiceStart && now - began > 8000) || now - began > 25000;
       if (stopNow) {
         finished = true;
         try {
