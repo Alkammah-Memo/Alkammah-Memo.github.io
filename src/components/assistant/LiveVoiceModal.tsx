@@ -259,7 +259,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       if (saved) {
         const parsed = JSON.parse(saved);
         if (typeof parsed.x === 'number' && typeof parsed.y === 'number') {
-          const maxX = typeof window !== 'undefined' ? window.innerWidth - 76 : 300;
+          const maxX = typeof window !== 'undefined' ? window.innerWidth - (window.innerWidth < 640 ? 60 : 76) : 300;
           const maxY = typeof window !== 'undefined' ? window.innerHeight - 124 - bottomNavInset() : 600;
           return {
             x: Math.min(Math.max(16, parsed.x), Math.max(16, maxX)),
@@ -309,7 +309,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
   useEffect(() => {
     const handleResize = () => {
       setBubblePos((prev) => ({
-        x: Math.min(Math.max(16, prev.x), window.innerWidth - 76),
+        x: Math.min(Math.max(16, prev.x), window.innerWidth - (window.innerWidth < 640 ? 60 : 76)),
         y: Math.min(Math.max(16, prev.y), window.innerHeight - 124 - bottomNavInset()),
       }));
     };
@@ -1313,7 +1313,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     }
 
     if (start.moved) {
-      const maxX = window.innerWidth - 76;
+      const maxX = window.innerWidth - (window.innerWidth < 640 ? 60 : 76);
       const maxY = window.innerHeight - 124 - bottomNavInset();
       const newX = Math.min(Math.max(16, start.initX + dx), maxX);
       const newY = Math.min(Math.max(16, start.initY + dy), maxY);
@@ -1801,10 +1801,10 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         role="group"
         aria-label={ar ? 'المساعد الصوتي سبيرو' : 'Spero voice assistant'}
       >
-        <div className="relative w-12 h-12">
+        <div className="relative w-9 h-9 sm:w-12 sm:h-12">
           {/* Soft halo that breathes (and swells with your voice while listening) */}
           <span
-            className="absolute -inset-5 rounded-full pointer-events-none spero-halo"
+            className="absolute -inset-3 sm:-inset-5 rounded-full pointer-events-none spero-halo"
             style={{
               background: `radial-gradient(circle, ${aura} 0%, transparent 66%)`,
               transform: `scale(${1 + (phase === 'listening' ? level * 0.45 : 0)})`,
@@ -1841,24 +1841,24 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
           >
             <span className="absolute -top-2 left-1/2 -translate-x-1/2 w-8 h-6 rounded-full pointer-events-none" style={{ background: 'radial-gradient(ellipse at center, rgba(255,255,255,0.42) 0%, transparent 70%)' }} />
             {phase === 'connecting' || phase === 'reconnecting' ? (
-              <span className="w-5 h-5 rounded-full border-[2.5px] border-white/25 border-t-white animate-spin" />
+              <span className="w-4 h-4 sm:w-5 sm:h-5 rounded-full border-[2.5px] border-white/25 border-t-white animate-spin" />
             ) : phase === 'speaking' ? (
-              <span className="flex items-center gap-[3px] h-5" aria-hidden="true">
+              <span className="flex items-center gap-[2px] sm:gap-[3px] h-4 sm:h-5" aria-hidden="true">
                 {[0, 1, 2, 3, 4].map((i) => (
-                  <span key={i} className="w-[3px] h-5 rounded-full bg-white spero-bar" style={{ animationDelay: `${i * 0.11}s` }} />
+                  <span key={i} className="w-[2px] sm:w-[3px] h-4 sm:h-5 rounded-full bg-white spero-bar" style={{ animationDelay: `${i * 0.11}s` }} />
                 ))}
               </span>
             ) : phase === 'listening' ? (
-              <Mic className="w-[18px] h-[18px] text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.8)]" style={{ transform: `scale(${1 + level * 0.25})`, transition: 'transform 100ms' }} />
+              <Mic className="w-3.5 h-3.5 sm:w-[18px] sm:h-[18px] text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.8)]" style={{ transform: `scale(${1 + level * 0.25})`, transition: 'transform 100ms' }} />
             ) : (
-              <Sparkles className="w-[18px] h-[18px] text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.7)]" />
+              <Sparkles className="w-3.5 h-3.5 sm:w-[18px] sm:h-[18px] text-white drop-shadow-[0_0_6px_rgba(255,255,255,0.7)]" />
             )}
           </div>
         </div>
 
         {/* Frosted status chip with always-visible controls (touch friendly; no hover needed) */}
         <div
-          className={`absolute ${captionOnLeft ? 'right-0' : 'left-0'} top-[58px] flex items-center gap-1 rounded-full bg-white/85 backdrop-blur-xl text-[#1d1d1f] ps-3 pe-1 py-1 border border-black/5 shadow-[0_8px_24px_-8px_rgba(10,25,60,0.35)] whitespace-nowrap`}
+          className={`absolute ${captionOnLeft ? 'right-0' : 'left-0'} top-[44px] sm:top-[58px] flex items-center gap-1 rounded-full bg-white/85 backdrop-blur-xl text-[#1d1d1f] ps-3 pe-1 py-1 border border-black/5 shadow-[0_8px_24px_-8px_rgba(10,25,60,0.35)] whitespace-nowrap`}
           onPointerDown={(e) => e.stopPropagation()}
           onPointerUp={(e) => e.stopPropagation()}
         >
@@ -1891,7 +1891,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         {/* Live caption: what Spero is saying (or what you said), placed on the roomier side */}
         {caption && (
           <div
-            className={`absolute top-1 ${captionOnLeft ? 'right-[60px]' : 'left-[60px]'} w-[min(280px,60vw)] bg-white/90 backdrop-blur-xl text-[#1d1d1f] px-3.5 py-2.5 rounded-2xl border border-black/5 shadow-[0_10px_30px_-10px_rgba(10,25,60,0.4)] pointer-events-none`}
+            className={`absolute top-1 ${captionOnLeft ? 'right-[46px] sm:right-[60px]' : 'left-[46px] sm:left-[60px]'} w-[min(280px,60vw)] bg-white/90 backdrop-blur-xl text-[#1d1d1f] px-3.5 py-2.5 rounded-2xl border border-black/5 shadow-[0_10px_30px_-10px_rgba(10,25,60,0.4)] pointer-events-none`}
             dir={ar ? 'rtl' : 'ltr'}
           >
             <p className="line-clamp-3 leading-relaxed text-[12px]">{caption}</p>
@@ -1900,7 +1900,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
 
         {reconnectNote && (
           <div
-            className={`absolute top-[94px] ${captionOnLeft ? 'right-0' : 'left-0'} w-[min(260px,70vw)] text-center text-[11px] text-amber-900 bg-amber-50/95 border border-amber-200 rounded-xl px-2.5 py-1.5 backdrop-blur-xl`}
+            className={`absolute top-[78px] sm:top-[94px] ${captionOnLeft ? 'right-0' : 'left-0'} w-[min(260px,70vw)] text-center text-[11px] text-amber-900 bg-amber-50/95 border border-amber-200 rounded-xl px-2.5 py-1.5 backdrop-blur-xl`}
             role="status"
           >
             {reconnectNote}
