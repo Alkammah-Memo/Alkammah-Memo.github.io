@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Task, Workstream, TaskStatus } from '../../types';
 import { Locale, translations } from '../../lib/translations';
 import { INITIAL_WORKSTREAMS, INITIAL_DEPARTMENTS } from '../../lib/referenceData';
@@ -17,6 +18,7 @@ import {
   ChevronDown,
   RotateCcw,
   Archive,
+  Trash2,
   ArrowUpDown,
 } from 'lucide-react';
 
@@ -26,6 +28,7 @@ interface TaskCenterProps {
   onOpenTaskModal: (task: Task | null) => void;
   onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void;
   onToggleArchive: (taskId: string) => void;
+  onDeleteTask: (taskId: string) => void;
   departments?: string[];
 }
 
@@ -37,6 +40,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
   onOpenTaskModal,
   onUpdateTaskStatus,
   onToggleArchive,
+  onDeleteTask,
   departments = INITIAL_DEPARTMENTS,
 }) => {
   const t = translations[locale];
@@ -57,6 +61,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
   const [selectedWorkstream, setSelectedWorkstream] = useState<string>('all');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedProject, setSelectedProject] = useState<string>('all');
+  const [pending, setPending] = useState<{ kind: 'archive' | 'delete'; task: Task } | null>(null);
   const projectOptions = Array.from(new Set(tasks.map((t) => (t.project || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
   // Filter tasks
@@ -407,11 +412,19 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                         {/* Actions */}
                         <td className="py-3 px-4 text-end whitespace-nowrap" onClick={(e) => e.stopPropagation()}>
                           <button
-                            onClick={() => onToggleArchive(task.id)}
-                            className="p-1 text-stone-400 hover:text-stone-800 rounded"
+                            onClick={() => setPending({ kind: 'archive', task })}
+                            className="p-2 text-stone-400 hover:text-stone-800 rounded"
                             title={task.isArchived ? (ar ? 'استعادة' : 'Restore') : (ar ? 'أرشفة' : 'Archive')}
                           >
-                            <Archive className="w-3.5 h-3.5" />
+                            <Archive className="w-4 h-4" />
+                          </button>
+                          <button
+                            onClick={() => setPending({ kind: 'delete', task })}
+                            className="p-2 text-stone-400 hover:text-rose-600 rounded"
+                            title={ar ? 'حذف' : 'Delete'}
+                            aria-label={ar ? 'حذف المهمة' : 'Delete task'}
+                          >
+                            <Trash2 className="w-4 h-4" />
                           </button>
                         </td>
                       </tr>
@@ -489,6 +502,29 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           })}
         </div>
       )}
+      <ConfirmDialog
+        open={!!pending}
+        ar={ar}
+        title={
+          pending?.kind === 'delete'
+            ? ar ? 'هل تريد حذف هذه المهمة؟' : 'Delete this task?'
+            : pending?.task.isArchived
+              ? ar ? 'استعادة هذه المهمة من الأرشيف؟' : 'Restore this task from the archive?'
+              : ar ? 'أرشفة هذه المهمة؟' : 'Archive this task?'
+        }
+        detail={pending?.task.title}
+        confirmLabel={
+          pending?.kind === 'delete' ? undefined : pending?.task.isArchived ? (ar ? 'نعم، استعد' : 'Yes, restore') : ar ? 'نعم، أرشف' : 'Yes, archive'
+        }
+        onCancel={() => setPending(null)}
+        onConfirm={() => {
+          const p = pending;
+          setPending(null);
+          if (!p) return;
+          if (p.kind === 'delete') onDeleteTask(p.task.id);
+          else onToggleArchive(p.task.id);
+        }}
+      />
     </div>
   );
 };
