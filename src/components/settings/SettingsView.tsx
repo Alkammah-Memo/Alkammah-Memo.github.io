@@ -23,6 +23,7 @@ import { keyManager, DEFAULT_MODELS, KEY_SLOT_COUNT } from '../../lib/ai/keyMana
 import type { GeminiSettings, KeySlot, ModelSettings } from '../../lib/ai/keyManager';
 import { testGeminiKey, economyVoiceTurn, speedTestModels } from '../../lib/ai/gemini';
 import type { SpeedRow } from '../../lib/ai/gemini';
+import { ModelQueuePanel } from './ModelQueuePanel';
 import { getVoiceEngine, setVoiceEngine } from '../../lib/ai/voiceEngine';
 import type { VoiceEngine } from '../../lib/ai/voiceEngine';
 import type { KeyTestResult } from '../../lib/ai/gemini';
@@ -541,6 +542,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             : `Keys are stored privately in your account (protected by row-level security) and on this device. Use up to ${KEY_SLOT_COUNT} keys from different Google projects so quotas are independent.`}
         </p>
       </section>
+
+      {/* Model queue and usage */}
+      <ModelQueuePanel ar={ar} />
 
       {/* Failover monitor */}
       <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-5 sm:p-6">
