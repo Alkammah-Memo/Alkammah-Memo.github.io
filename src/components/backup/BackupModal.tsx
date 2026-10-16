@@ -306,7 +306,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-md p-4 animate-in fade-in duration-150 overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/40 backdrop-blur-md p-4 animate-in fade-in duration-150 overflow-y-auto">
       <div className="bg-white/95 text-[#1d1d1f] rounded-3xl p-6 max-w-lg w-full space-y-5 shadow-2xl border border-[#d2d2d7] backdrop-blur-2xl">
         <div className="flex items-center justify-between pb-3 border-b border-[#e5e5ea]">
           <div className="flex items-center gap-2.5">
