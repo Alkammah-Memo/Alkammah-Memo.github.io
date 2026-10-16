@@ -58,7 +58,7 @@ import { mergeRemote } from './lib/merge';
 import { keyManager } from './lib/ai/keyManager';
 import { usage } from './lib/ai/modelQueue';
 import { NotificationCenter } from './components/notifications/NotificationCenter';
-import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planImport, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid } from './lib/googleCalendar';
+import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planSync, pushMeeting, deleteGoogleEvent, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid } from './lib/googleCalendar';
 import { chatWithAssistant } from './lib/ai/gemini';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { SettingsView } from './components/settings/SettingsView';
@@ -494,36 +494,77 @@ export default function App() {
     );
   };
 
-  // Google Calendar: pull events (read-only) and merge them into the meetings
+  // Google Calendar, two-way: Google events come in as meetings; meetings added, changed or deleted here go to Google
+  const googleBusy = useRef(false);
   const syncGoogleCalendar = async (interactive: boolean): Promise<{ added: number; updated: number; removed: number; email: string }> => {
-    let token = getGoogleLink().token;
-    if (!tokenIsValid()) token = await requestGoogleToken(interactive);
-    if (!token) throw new Error('GOOGLE_TOKEN_EXPIRED');
-    const from = new Date(Date.now() - 30 * 86400_000).toISOString();
-    const to = new Date(Date.now() + 365 * 86400_000).toISOString();
-    const { email } = await fetchPrimaryCalendar(token);
-    const incoming = eventsToMeetings(await fetchGoogleEvents(token, from, to));
-    const current = meetingsRef.current;
-    const plan = planImport(current, incoming, from, to);
-    const knownIds = new Set(current.map((m) => m.id));
-    if (plan.upsert.length || plan.remove.length) {
-      const removeIds = new Set(plan.remove.map((m) => m.id));
+    if (googleBusy.current) throw new Error('A sync is already running, try again in a moment.');
+    googleBusy.current = true;
+    try {
+      let token = getGoogleLink().token;
+      if (!tokenIsValid()) token = await requestGoogleToken(interactive);
+      if (!token) throw new Error('GOOGLE_TOKEN_EXPIRED');
+      const from = new Date(Date.now() - 30 * 86400_000).toISOString();
+      const to = new Date(Date.now() + 365 * 86400_000).toISOString();
+      const { email } = await fetchPrimaryCalendar(token);
+      const remote = eventsToMeetings(await fetchGoogleEvents(token, from, to));
+      const current = meetingsRef.current;
+      const plan = planSync(current, remote, from, to, getGoogleLink().known || []);
+
+      // 1) deletions made here -> delete in Google
+      for (const gid of plan.deleteRemote) await deleteGoogleEvent(token, gid);
+
+      // 2) new or changed here -> Google
+      const pushed = new Map<string, Meeting>();
+      for (const m of plan.push) {
+        const r = await pushMeeting(token, m);
+        pushed.set(m.id, { ...m, googleEventId: r.id, googleSyncedAt: r.updated, syncState: 'synced' });
+      }
+
+      // 3) apply everything to the local meetings
+      const removeIds = new Set(plan.removeLocal.map((m) => m.id));
       const upsertMap = new Map(plan.upsert.map((m) => [m.id, m]));
-      const next = [...plan.upsert.filter((m) => !knownIds.has(m.id)), ...current.filter((m) => !removeIds.has(m.id)).map((m) => upsertMap.get(m.id) || m)];
-      meetingsRef.current = next;
-      setMeetings(next);
-      for (const m of plan.upsert) {
-        await localDB.put('meetings', m);
-        syncMeetingToCloud(m).catch(console.warn);
+      const knownIds = new Set(current.map((m) => m.id));
+      const changed = [...pushed.values(), ...plan.upsert];
+      if (changed.length || removeIds.size) {
+        const next = [
+          ...plan.upsert.filter((m) => !knownIds.has(m.id)),
+          ...current.filter((m) => !removeIds.has(m.id)).map((m) => pushed.get(m.id) || upsertMap.get(m.id) || m),
+        ];
+        meetingsRef.current = next;
+        setMeetings(next);
+        for (const m of changed) {
+          await localDB.put('meetings', m);
+          syncMeetingToCloud(m).catch(console.warn);
+        }
+        for (const m of plan.removeLocal) {
+          await localDB.delete('meetings', m.id);
+          deleteMeetingFromCloud(m.id).catch(console.warn);
+        }
       }
-      for (const m of plan.remove) {
-        await localDB.delete('meetings', m.id);
-        deleteMeetingFromCloud(m.id).catch(console.warn);
-      }
+      // remember what is mirrored now, so a later deletion here can be recognised
+      const known = meetingsRef.current.map((m) => m.googleEventId).filter((x): x is string => !!x);
+      setGoogleLink({ email, lastSyncAt: new Date().toISOString(), lastCount: remote.length, known });
+      return {
+        added: plan.upsert.filter((m) => !knownIds.has(m.id)).length + [...pushed.keys()].filter((id) => !current.find((m) => m.id === id)?.googleEventId).length,
+        updated: plan.upsert.filter((m) => knownIds.has(m.id)).length + [...pushed.keys()].filter((id) => !!current.find((m) => m.id === id)?.googleEventId).length,
+        removed: plan.removeLocal.length + plan.deleteRemote.length,
+        email,
+      };
+    } finally {
+      googleBusy.current = false;
     }
-    setGoogleLink({ email, lastSyncAt: new Date().toISOString(), lastCount: incoming.length });
-    return { added: plan.upsert.filter((m) => !knownIds.has(m.id)).length, updated: plan.upsert.filter((m) => knownIds.has(m.id)).length, removed: plan.remove.length, email };
   };
+
+  // Mirror changes made here quickly: a few seconds after the meetings change, sync again (only while the sign-in is valid)
+  useEffect(() => {
+    const l = getGoogleLink();
+    if (!l.autoSync || !l.clientId || !tokenIsValid(l) || !l.lastSyncAt) return;
+    const t = setTimeout(() => {
+      syncGoogleCalendar(false).catch(() => undefined);
+    }, 4000);
+    return () => clearTimeout(t);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [meetings]);
 
   // Quietly refresh from Google when the app opens and every 10 minutes, as long as the sign-in is still valid
   useEffect(() => {
