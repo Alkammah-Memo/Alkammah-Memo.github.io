@@ -1,4 +1,4 @@
-import React, { useEffect, useRef } from 'react';
+import React, { useEffect, useRef, useState } from 'react';
 import { Locale, translations } from '../../lib/translations';
 import {
   LayoutDashboard,
@@ -13,6 +13,8 @@ import {
   CloudOff,
   RotateCcw,
   Settings as SettingsIcon,
+  ChevronUp,
+  ChevronDown,
 } from 'lucide-react';
 
 interface AppShellProps {
@@ -27,6 +29,8 @@ interface AppShellProps {
   onOpenQuickTask: () => void;
   onOpenQuickMeeting: () => void;
   onOpenBackupModal: () => void;
+  /** bell and other header extras supplied by the app */
+  headerExtras?: React.ReactNode;
 }
 
 export const AppShell: React.FC<AppShellProps> = ({
@@ -41,9 +45,28 @@ export const AppShell: React.FC<AppShellProps> = ({
   onOpenQuickTask,
   onOpenQuickMeeting,
   onOpenBackupModal,
+  headerExtras,
 }) => {
   const t = translations[locale];
   const mainRef = useRef<HTMLElement | null>(null);
+  // Every bar can be folded away to give the page the whole screen (remembered)
+  const [barsHidden, setBarsHidden] = useState<boolean>(() => {
+    try {
+      return localStorage.getItem('alkammah_bars_hidden') === '1';
+    } catch {
+      return false;
+    }
+  });
+  const toggleBars = () =>
+    setBarsHidden((h) => {
+      try {
+        localStorage.setItem('alkammah_bars_hidden', h ? '0' : '1');
+      } catch {
+        /* ignore */
+      }
+      return !h;
+    });
+  const showBars = !hideTopBar && !barsHidden;
 
   // Every page starts at the top (otherwise a page opens scrolled to wherever the previous one was)
   useEffect(() => {
@@ -73,8 +96,8 @@ export const AppShell: React.FC<AppShellProps> = ({
       className="h-[100dvh] w-full bg-[#f5f5f7] text-[#1d1d1f] flex flex-col font-sans selection:bg-[#0071e3] selection:text-white overflow-hidden min-w-0"
     >
       {/* Top Bar Header (Single Unified Navigation Bar - No Duplicate Sidebars) */}
-      {!hideTopBar && (
-        <header className="shrink-0 bg-white/85 backdrop-blur-2xl text-[#1d1d1f] border-b border-[#d2d2d7]/80 px-3 sm:px-5 xl:px-8 h-14 flex items-center justify-between gap-2 sm:gap-4 xl:gap-6 min-w-0 shadow-xs z-40">
+      {showBars && (
+        <header data-shell="header" className="shrink-0 bg-white/85 backdrop-blur-2xl text-[#1d1d1f] border-b border-[#d2d2d7]/80 px-3 sm:px-5 xl:px-8 h-14 flex items-center justify-between gap-2 sm:gap-4 xl:gap-6 min-w-0 shadow-xs z-40">
           {/* Zone 1: Brand wordmark */}
           <div className="flex items-center gap-3 shrink-0">
             <button
@@ -161,6 +184,18 @@ export const AppShell: React.FC<AppShellProps> = ({
               <SettingsIcon className="w-4 h-4" />
             </button>
 
+            {headerExtras}
+
+            {/* Fold the top and bottom bars away */}
+            <button
+              onClick={toggleBars}
+              className="p-2.5 sm:p-2 text-[#515154] hover:text-[#1d1d1f] rounded-xl hover:bg-black/5 transition-colors flex"
+              title={locale === 'ar' ? 'إخفاء الأشرطة' : 'Hide bars'}
+              aria-label={locale === 'ar' ? 'إخفاء الأشرطة' : 'Hide bars'}
+            >
+              <ChevronUp className="w-4 h-4" />
+            </button>
+
             {/* Backup / Export */}
             <button
               onClick={onOpenBackupModal}
@@ -204,8 +239,9 @@ export const AppShell: React.FC<AppShellProps> = ({
       </div>
 
       {/* Mobile Fixed Bottom Navigation Bar (4 Core Hubs) */}
-      {!hideTopBar && (
+      {showBars && (
         <nav
+          data-shell="bottom"
           className="sm:hidden shrink-0 bg-white/95 backdrop-blur-md border-t border-[#d2d2d7]/80 flex items-center justify-around px-2 py-1.5 pb-[calc(0.4rem+env(safe-area-inset-bottom))]"
         >
           {mobileNavItems.map((item) => {
@@ -232,6 +268,19 @@ export const AppShell: React.FC<AppShellProps> = ({
         </nav>
       )}
 
+
+      {/* Small handle to bring the bars back */}
+      {!hideTopBar && barsHidden && (
+        <button
+          data-shell="restore"
+          onClick={toggleBars}
+          className={`fixed z-[300] top-[max(0.4rem,env(safe-area-inset-top))] ${locale === 'ar' ? 'left-2' : 'right-2'} min-h-10 min-w-10 rounded-full bg-white/90 shadow-lg border border-[#d2d2d7] flex items-center justify-center text-[#515154]`}
+          title={locale === 'ar' ? 'إظهار الأشرطة' : 'Show bars'}
+          aria-label={locale === 'ar' ? 'إظهار الأشرطة' : 'Show bars'}
+        >
+          <ChevronDown className="w-4 h-4" />
+        </button>
+      )}
 
       {/* Floating Instant Undo Toast */}
       {undoToast && (
