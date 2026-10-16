@@ -67,17 +67,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [showModels, setShowModels] = useState(false);
   const [engine, setEngine] = useState<VoiceEngine>(() => getVoiceEngine());
   const [voiceTestText, setVoiceTestText] = useState('');
-  const [voiceTestState, setVoiceTestState] = useState<{ busy: boolean; reply?: string; error?: string }>({ busy: false });
+  const [voiceTestState, setVoiceTestState] = useState<{ busy: boolean; reply?: string; error?: string; secs?: number }>({ busy: false });
   const runVoiceTest = async () => {
     const q = voiceTestText.trim();
     if (!q || voiceTestState.busy) return;
     setVoiceTestState({ busy: true });
+    const started = Date.now();
     try {
       // Test mode: the assistant may "use" a tool, but nothing in the workspace is changed
       const reply = await economyVoiceTurn(q, ar ? 'ar' : 'en', { meetings: [], tasks: [] }, [], async () => ({ ok: true, note: 'Test mode: nothing was changed.' }));
-      setVoiceTestState({ busy: false, reply });
+      setVoiceTestState({ busy: false, reply, secs: Math.round((Date.now() - started) / 100) / 10 });
     } catch (err) {
-      setVoiceTestState({ busy: false, error: (err as Error)?.message || String(err) });
+      setVoiceTestState({ busy: false, error: (err as Error)?.message || String(err), secs: Math.round((Date.now() - started) / 100) / 10 });
     }
   };
   const [now, setNow] = useState(Date.now());
@@ -313,7 +314,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
               {voiceTestState.busy ? (ar ? 'جارٍ...' : 'Testing…') : ar ? 'اختبار' : 'Test'}
             </button>
           </div>
-          {voiceTestState.reply && <p className="mt-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 break-words">{voiceTestState.reply}</p>}
+          {voiceTestState.reply && <p className="mt-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 break-words">{voiceTestState.reply} <span className="font-mono text-[11px] opacity-70">({voiceTestState.secs}s)</span></p>}
           {voiceTestState.error && <p className="mt-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 break-words">{voiceTestState.error}</p>}
         </div>
       </section>
