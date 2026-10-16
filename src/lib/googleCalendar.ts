@@ -20,7 +20,9 @@ export interface GoogleLink {
   autoSync: boolean;
 }
 
-const DEFAULT: GoogleLink = { clientId: (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) || '', autoSync: true };
+// The Client ID is public (it only names this app to Google), so it ships as the default and every device is ready to sign in
+const DEFAULT_CLIENT_ID = '849813350824-nlaan8g858fs2o3hhenfedrtc1ehclte.apps.googleusercontent.com';
+const DEFAULT: GoogleLink = { clientId: (import.meta.env.VITE_GOOGLE_CLIENT_ID as string | undefined) || DEFAULT_CLIENT_ID, autoSync: true };
 let link: GoogleLink | null = null;
 const listeners = new Set<() => void>();
 
@@ -29,6 +31,7 @@ export function getGoogleLink(): GoogleLink {
     try {
       const raw = localStorage.getItem(KEY);
       link = raw ? { ...DEFAULT, ...JSON.parse(raw) } : DEFAULT;
+      if (!link!.clientId) link = { ...link!, clientId: DEFAULT.clientId };
     } catch {
       link = DEFAULT;
     }
