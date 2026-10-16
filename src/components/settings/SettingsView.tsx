@@ -24,6 +24,10 @@ import type { GeminiSettings, KeySlot, ModelSettings } from '../../lib/ai/keyMan
 import { testGeminiKey, economyVoiceTurn, speedTestModels } from '../../lib/ai/gemini';
 import type { SpeedRow } from '../../lib/ai/gemini';
 import { ModelQueuePanel } from './ModelQueuePanel';
+import { Fold } from './Fold';
+import { NotificationSettings } from './NotificationSettings';
+import { AppearanceSettings } from './AppearanceSettings';
+import { GoogleCalendarSettings } from './GoogleCalendarSettings';
 import { getVoiceEngine, setVoiceEngine } from '../../lib/ai/voiceEngine';
 import type { VoiceEngine } from '../../lib/ai/voiceEngine';
 import type { KeyTestResult } from '../../lib/ai/gemini';
@@ -34,6 +38,7 @@ interface SettingsViewProps {
   isCloudConfigured: boolean;
   userEmail?: string | null;
   onSignOut?: () => void;
+  onSyncGoogle?: (interactive: boolean) => Promise<{ added: number; updated: number; removed: number; email: string }>;
 }
 
 const useKeyManager = (): GeminiSettings => {
@@ -54,6 +59,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   isCloudConfigured,
   userEmail,
   onSignOut,
+  onSyncGoogle,
 }) => {
   const ar = locale === 'ar';
   const saved = useKeyManager();
@@ -264,12 +270,10 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         </p>
       </div>
 
+      <AppearanceSettings ar={ar} />
+
       {/* Voice engine */}
-      <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-5 sm:p-6">
-        <div className="flex items-center gap-2 mb-1">
-          <Activity className="w-5 h-5 text-[#0071e3]" />
-          <h2 className="text-base font-bold">{ar ? 'محرك الصوت' : 'Voice engine'}</h2>
-        </div>
+      <Fold id="voice" defaultOpen icon={<Activity className="w-5 h-5" />} title={ar ? 'محرك الصوت' : 'Voice engine'}>
         <p className="text-xs text-[#515154] mb-3">
           {ar
             ? 'الأساسي هو الصوت المباشر (Gemini Live). عندما تنتهي حصته على كل المفاتيح يتحول سبيرو تلقائياً إلى الصوت الاقتصادي، ثم إلى صوت الجهاز عند انتهاء كل شيء. يمكنك تثبيت الاقتصادي فقط إن أردت.'
@@ -348,16 +352,16 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             </ul>
           )}
         </div>
-      </section>
+      </Fold>
 
       {/* Gemini Keys */}
-      <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-5 sm:p-6">
-        <div className="flex flex-wrap items-center justify-between gap-3 mb-4">
-          <div className="flex items-center gap-2">
-            <KeyRound className="w-5 h-5 text-[#0071e3]" />
-            <h2 className="text-base font-bold">{ar ? 'مفاتيح Gemini' : 'Gemini API Keys'}</h2>
-          </div>
-          <div className="flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-xl bg-[#f5f5f7] border border-[#d2d2d7]/70">
+      <Fold
+        id="keys"
+        defaultOpen
+        icon={<KeyRound className="w-5 h-5" />}
+        title={ar ? 'مفاتيح Gemini' : 'Gemini API Keys'}
+        right={
+          <div className="hidden sm:flex items-center gap-2 text-xs font-mono px-3 py-1.5 rounded-xl bg-[#f5f5f7] border border-[#d2d2d7]/70">
             <Activity className="w-3.5 h-3.5 text-[#0071e3]" />
             <span>
               {active
@@ -373,8 +377,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
                 : 'All keys resting, retrying'}
             </span>
           </div>
-        </div>
-
+        }
+      >
         <div className="space-y-4">
           {draftSlots.map((slot) => {
             const chip = statusChip(slot);
@@ -541,25 +545,26 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             ? `المفاتيح محفوظة بشكل خاص في حسابك (محمية بصلاحيات على مستوى الصف) وعلى هذا الجهاز. استخدم حتى ${KEY_SLOT_COUNT} مفاتيح من مشاريع Google مختلفة.`
             : `Keys are stored privately in your account (protected by row-level security) and on this device. Use up to ${KEY_SLOT_COUNT} keys from different Google projects so quotas are independent.`}
         </p>
-      </section>
+      </Fold>
+
+      <GoogleCalendarSettings ar={ar} onSync={onSyncGoogle} />
+
+      <NotificationSettings ar={ar} />
 
       {/* Model queue and usage */}
       <ModelQueuePanel ar={ar} />
 
       {/* Failover monitor */}
-      <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-5 sm:p-6">
-        <div className="flex items-center justify-between mb-3">
-          <div className="flex items-center gap-2">
-            <Activity className="w-5 h-5 text-[#0071e3]" />
-            <h2 className="text-base font-bold">{ar ? 'سجل التحويل التلقائي' : 'Automatic failover log'}</h2>
-          </div>
-          <button
-            onClick={() => keyManager.clearCooldowns()}
-            className="text-xs font-semibold text-[#0071e3] hover:underline"
-          >
-            {ar ? 'إنهاء الاستراحة الآن' : 'End resting now'}
+      <Fold
+        id="failover"
+        icon={<Activity className="w-5 h-5" />}
+        title={ar ? 'سجل التحويل التلقائي' : 'Automatic failover log'}
+        right={
+          <button onClick={() => keyManager.clearCooldowns()} className="min-h-10 px-2 text-xs font-semibold text-[#0071e3] hover:underline shrink-0">
+            {ar ? 'إنهاء الاستراحة' : 'End resting'}
           </button>
-        </div>
+        }
+      >
         {events.length === 0 ? (
           <p className="text-sm text-stone-500">
             {ar ? 'لا أحداث بعد. هتظهر هنا أي مرة النظام يحوّل فيها لمفتاح تاني.' : 'No events yet. Any time the system switches keys, it will appear here.'}
@@ -577,7 +582,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             ))}
           </ul>
         )}
-      </section>
+      </Fold>
 
       {/* Models */}
       <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-5 sm:p-6">

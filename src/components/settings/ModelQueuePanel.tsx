@@ -1,5 +1,6 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { Layers, RefreshCw, Loader2, Mic } from 'lucide-react';
+import { Fold } from './Fold';
 import { keyManager } from '../../lib/ai/keyManager';
 import { usage, fullQueue, runnableQueue, MODEL_TIERS, nextDailyReset, formatWait } from '../../lib/ai/modelQueue';
 import type { Tier } from '../../lib/ai/modelQueue';
@@ -64,22 +65,22 @@ export const ModelQueuePanel: React.FC<{ ar: boolean }> = ({ ar }) => {
   };
 
   return (
-    <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-5 sm:p-6">
-      <div className="flex flex-wrap items-center justify-between gap-3 mb-1">
-        <div className="flex items-center gap-2">
-          <Layers className="w-5 h-5 text-[#0071e3]" />
-          <h2 className="text-base font-bold">{ar ? 'طابور النماذج والاستهلاك' : 'Model queue and usage'}</h2>
-        </div>
+    <Fold
+      id="queue"
+      icon={<Layers className="w-5 h-5" />}
+      title={ar ? 'طابور النماذج والاستهلاك' : 'Model queue and usage'}
+      right={
         <button
           type="button"
           onClick={() => void runCheck()}
           disabled={probing || slots.length === 0}
-          className="min-h-10 px-4 rounded-xl bg-[#f5f5f7] border border-[#d2d2d7] text-xs font-bold disabled:opacity-40 inline-flex items-center gap-2"
+          className="min-h-10 px-3 rounded-xl bg-[#f5f5f7] border border-[#d2d2d7] text-xs font-bold disabled:opacity-40 inline-flex items-center gap-2 shrink-0"
         >
           {probing ? <Loader2 className="w-3.5 h-3.5 animate-spin" /> : <RefreshCw className="w-3.5 h-3.5" />}
-          {ar ? 'تحقق الآن' : 'Check now'}
+          <span className="max-sm:hidden">{ar ? 'تحقق الآن' : 'Check now'}</span>
         </button>
-      </div>
+      }
+    >
       <p className="text-xs text-[#515154] mb-4">
         {ar ? 'الصوت المباشر هو الأساسي. إذا انتهى على كل المفاتيح يتحول سبيرو تلقائياً إلى الاقتصادي: المفتاح الأول (العالي ثم المتوسط) ثم الثاني ثم الثالث. وإذا انتهى كل شيء يتكلم الجهاز بصوته ويخبرك متى تعود الخدمة.' : 'Live voice is used first. If it is used up on every key, Spero switches to Economy by itself: Key 1 (High, then Mid), then Key 2, then Key 3. If everything is used up, the device voice speaks and tells you when Gemini returns.'}
       </p>
@@ -193,6 +194,6 @@ export const ModelQueuePanel: React.FC<{ ar: boolean }> = ({ ar }) => {
           ? `هذه أرقام حقيقية وليست تقديرية: Google لا تنشر الحصة المتبقية عبر واجهتها، لذلك نعرض عدد الطلبات التي أجابت عنها فعلاً من هذا الجهاز اليوم، والحد اليومي وموعد العودة كما أبلغتنا Google بنفسها عند بلوغ الحد. المتبقي هو "حتى" لأن جهازاً غير متصل أو لم يُزامن بعد قد يكون استخدم نفس المفاتيح. تُصفَّر العدادات عند منتصف الليل بتوقيت المحيط الهادئ (الساعة ${cairoClock(nextDailyReset(now))} بتوقيت القاهرة تقريباً).`
           : `These are real numbers, not estimates. Google does not publish remaining quota through its API, so we show the requests Google actually answered from your devices today (shared through your account), plus the daily limit and return time exactly as Google reports them when a limit is hit. "Left: up to" is an upper bound because a device that is offline or not synced yet may have used the same keys. Counters reset at midnight Pacific time (about ${cairoClock(nextDailyReset(now))} Cairo time).`}
       </p>
-    </section>
+    </Fold>
   );
 };
