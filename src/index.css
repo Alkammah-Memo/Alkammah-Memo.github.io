@@ -1,6 +1,24 @@
 @import "tailwindcss";
 
 @layer base {
+  /* Phone/tablet: no accidental pinch- or double-tap-zoom (it pushed the bottom bar off screen); scrolling still works */
+  html,
+  body {
+    touch-action: pan-x pan-y;
+    overscroll-behavior: none;
+    -webkit-text-size-adjust: 100%;
+    text-size-adjust: 100%;
+  }
+
+  /* iOS zooms the whole page when a field smaller than 16px gets focus; keep fields at 16px on phones */
+  @media (max-width: 767px) {
+    input:not([type='checkbox']):not([type='radio']):not([type='range']),
+    select,
+    textarea {
+      font-size: 16px !important;
+    }
+  }
+
   body {
     font-family: -apple-system, BlinkMacSystemFont, 'SF Pro Display', 'SF Pro Text', 'Helvetica Neue', Helvetica, Arial, sans-serif;
     background-color: #f5f5f7;
