@@ -21,7 +21,9 @@ import {
 import type { Locale } from '../../lib/translations';
 import { keyManager, DEFAULT_MODELS, KEY_SLOT_COUNT } from '../../lib/ai/keyManager';
 import type { GeminiSettings, KeySlot, ModelSettings } from '../../lib/ai/keyManager';
-import { testGeminiKey } from '../../lib/ai/gemini';
+import { testGeminiKey, economyVoiceTurn } from '../../lib/ai/gemini';
+import { getVoiceEngine, setVoiceEngine } from '../../lib/ai/voiceEngine';
+import type { VoiceEngine } from '../../lib/ai/voiceEngine';
 import type { KeyTestResult } from '../../lib/ai/gemini';
 
 interface SettingsViewProps {
@@ -63,6 +65,21 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
   const [saving, setSaving] = useState(false);
   const [saveMessage, setSaveMessage] = useState<{ ok: boolean; text: string } | null>(null);
   const [showModels, setShowModels] = useState(false);
+  const [engine, setEngine] = useState<VoiceEngine>(() => getVoiceEngine());
+  const [voiceTestText, setVoiceTestText] = useState('');
+  const [voiceTestState, setVoiceTestState] = useState<{ busy: boolean; reply?: string; error?: string }>({ busy: false });
+  const runVoiceTest = async () => {
+    const q = voiceTestText.trim();
+    if (!q || voiceTestState.busy) return;
+    setVoiceTestState({ busy: true });
+    try {
+      // Test mode: the assistant may "use" a tool, but nothing in the workspace is changed
+      const reply = await economyVoiceTurn(q, ar ? 'ar' : 'en', { meetings: [], tasks: [] }, [], async () => ({ ok: true, note: 'Test mode: nothing was changed.' }));
+      setVoiceTestState({ busy: false, reply });
+    } catch (err) {
+      setVoiceTestState({ busy: false, error: (err as Error)?.message || String(err) });
+    }
+  };
   const [now, setNow] = useState(Date.now());
 
   // Re-hydrate the form if settings arrive from the cloud (e.g. after sign-in on another device)
@@ -232,6 +249,74 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             : 'Manage the Gemini keys that power the voice agent. If any key hits a limit or fails, the system switches to the next key automatically and keeps retrying, so the voice agent never goes down.'}
         </p>
       </div>
+
+      {/* Voice engine */}
+      <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-5 sm:p-6">
+        <div className="flex items-center gap-2 mb-1">
+          <Activity className="w-5 h-5 text-[#0071e3]" />
+          <h2 className="text-base font-bold">{ar ? 'محرك الصوت' : 'Voice engine'}</h2>
+        </div>
+        <p className="text-xs text-[#515154] mb-3">
+          {ar
+            ? 'الاقتصادي يستخدم الاستماع والنطق داخل الجهاز مجاناً، ولا يرسل لـ Gemini إلا نصاً قصيراً، فيكفي لساعات من الحديث. المباشر صوته أطبع لكنه يستهلك حصة المفاتيح بسرعة.'
+            : 'Economy listens and speaks on the device for free and only sends short text to Gemini, so it lasts for hours of conversation. Live sounds more natural but uses up key quota quickly.'}
+        </p>
+        <div className="grid sm:grid-cols-2 gap-3" role="radiogroup" aria-label={ar ? 'محرك الصوت' : 'Voice engine'}>
+          {(
+            [
+              ['economy', ar ? 'اقتصادي (مجاني)' : 'Economy (free)', ar ? 'يكفي ساعة حديث وأكثر. الصوت من الجهاز.' : 'Lasts an hour of talking and more. Voice comes from the device.'],
+              ['live', ar ? 'مباشر (Gemini Live)' : 'Live (Gemini Live)', ar ? 'صوت طبيعي جداً، لكنه يستهلك حد المفاتيح بسرعة.' : 'Very natural voice, but drains the key limits fast.'],
+            ] as const
+          ).map(([id, title, sub]) => (
+            <button
+              key={id}
+              type="button"
+              role="radio"
+              aria-checked={engine === id}
+              onClick={() => {
+                setEngine(id);
+                setVoiceEngine(id);
+              }}
+              className={`min-h-16 p-3.5 rounded-2xl border text-start transition-colors ${
+                engine === id ? 'border-[#0071e3] bg-blue-50' : 'border-[#d2d2d7] bg-white hover:bg-[#f5f5f7]'
+              }`}
+            >
+              <div className="flex items-center gap-2 text-sm font-bold text-[#1d1d1f]">
+                <span className={`w-4 h-4 rounded-full border-2 ${engine === id ? 'border-[#0071e3] bg-[#0071e3]' : 'border-[#c7c7cc]'}`} />
+                {title}
+              </div>
+              <div className="text-xs text-[#515154] mt-1">{sub}</div>
+            </button>
+          ))}
+        </div>
+        <div className="mt-4 pt-4 border-t border-[#ececf0]">
+          <label className="block text-xs font-semibold text-[#515154] mb-1.5" htmlFor="voice-test">
+            {ar ? 'اختبار الصوت الاقتصادي (كتابةً، بلا تغيير في بياناتك)' : 'Test the Economy voice (typed, changes nothing in your data)'}
+          </label>
+          <div className="flex gap-2">
+            <input
+              id="voice-test"
+              value={voiceTestText}
+              onChange={(e) => setVoiceTestText(e.target.value)}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter') void runVoiceTest();
+              }}
+              placeholder={ar ? 'مثال: مرحباً سبيرو' : 'e.g. Hello Spero'}
+              className="flex-1 min-w-0 h-11 px-3 rounded-xl border border-[#d2d2d7] text-sm focus:outline-none focus:border-[#0071e3]"
+            />
+            <button
+              type="button"
+              onClick={() => void runVoiceTest()}
+              disabled={voiceTestState.busy || !voiceTestText.trim()}
+              className="min-h-11 px-4 rounded-xl bg-[#0071e3] disabled:opacity-40 text-white text-sm font-bold"
+            >
+              {voiceTestState.busy ? (ar ? 'جارٍ...' : 'Testing…') : ar ? 'اختبار' : 'Test'}
+            </button>
+          </div>
+          {voiceTestState.reply && <p className="mt-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-3 py-2 break-words">{voiceTestState.reply}</p>}
+          {voiceTestState.error && <p className="mt-2 text-sm text-rose-700 bg-rose-50 border border-rose-200 rounded-xl px-3 py-2 break-words">{voiceTestState.error}</p>}
+        </div>
+      </section>
 
       {/* Gemini Keys */}
       <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-5 sm:p-6">
