@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { eventsToMeetings, planImport } from '../src/lib/googleCalendar';
+import { eventsToMeetings, planSync } from '../src/lib/googleCalendar';
 import type { Meeting } from '../src/types';
 
 describe('google calendar import', () => {
@@ -15,13 +15,28 @@ describe('google calendar import', () => {
     expect(list[1].start < list[1].end).toBe(true);
   });
 
-  it('plans adds, changes and removals without overwriting newer local edits', () => {
-    const mk = (id: string, title: string, updatedAt: string, start = '2026-10-20T07:00:00.000Z'): Meeting =>
-      ({ id, title, description: '', start, end: '2026-10-20T08:00:00.000Z', attendees: [], updatedAt, syncState: 'synced' } as unknown as Meeting);
-    const existing = [mk('gcal_keep', 'Old', '2026-10-01T00:00:00Z'), mk('gcal_edited', 'My title', '2026-10-10T00:00:00Z'), mk('gcal_gone', 'Gone', '2026-10-01T00:00:00Z'), mk('own_1', 'Mine', '2026-10-01T00:00:00Z')];
-    const incoming = [mk('gcal_keep', 'New title', '2026-10-05T00:00:00Z'), mk('gcal_edited', 'Google title', '2026-10-05T00:00:00Z'), mk('gcal_new', 'Fresh', '2026-10-05T00:00:00Z')];
-    const plan = planImport(existing, incoming, '2026-10-01T00:00:00.000Z', '2026-12-01T00:00:00.000Z');
-    expect(plan.upsert.map((m) => m.id).sort()).toEqual(['gcal_keep', 'gcal_new']);
-    expect(plan.remove.map((m) => m.id)).toEqual(['gcal_gone']);
+  it('plans a two-way sync: pull, push, and deletions on both sides', () => {
+    const mk = (id: string, title: string, updatedAt: string, extra: Partial<Meeting> = {}): Meeting =>
+      ({ id, title, description: '', start: '2026-10-20T07:00:00.000Z', end: '2026-10-20T08:00:00.000Z', attendees: [], updatedAt, syncState: 'synced', ...extra } as unknown as Meeting);
+    const W = ['2026-10-01T00:00:00.000Z', '2026-12-01T00:00:00.000Z'] as const;
+    const existing = [
+      mk('gcal_keep', 'Old', '2026-10-01T00:00:00Z', { googleEventId: 'keep' }),
+      mk('gcal_edited', 'My title', '2026-10-10T00:00:00Z', { googleEventId: 'edited' }),
+      mk('gcal_gone', 'Gone in Google', '2026-10-01T00:00:00Z', { googleEventId: 'gone' }),
+      mk('own_new', 'Created here', '2026-10-02T00:00:00Z'),
+      mk('own_synced', 'Mirrored', '2026-10-02T00:00:00Z', { googleEventId: 'mirrored' }),
+    ];
+    const remote = [
+      mk('gcal_keep', 'New title', '2026-10-05T00:00:00Z', { googleEventId: 'keep' }),
+      mk('gcal_edited', 'Google title', '2026-10-05T00:00:00Z', { googleEventId: 'edited' }),
+      mk('gcal_fresh', 'Fresh', '2026-10-05T00:00:00Z', { googleEventId: 'fresh' }),
+      mk('gcal_mirrored', 'Mirrored', '2026-10-02T00:00:00Z', { googleEventId: 'mirrored' }),
+      mk('gcal_deleted_here', 'Deleted here', '2026-10-02T00:00:00Z', { googleEventId: 'deleted_here' }),
+    ];
+    const plan = planSync(existing, remote, W[0], W[1], ['keep', 'edited', 'gone', 'mirrored', 'deleted_here']);
+    expect(plan.upsert.map((m) => m.id).sort()).toEqual(['gcal_fresh', 'gcal_keep']);
+    expect(plan.push.map((m) => m.id).sort()).toEqual(['gcal_edited', 'own_new']);
+    expect(plan.removeLocal.map((m) => m.id)).toEqual(['gcal_gone']);
+    expect(plan.deleteRemote).toEqual(['deleted_here']);
   });
 });
