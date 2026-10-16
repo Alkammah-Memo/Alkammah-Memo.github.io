@@ -1239,7 +1239,7 @@ export default function App() {
 
     try {
       const workspaceContext = {
-        activeTasksCount: tasks.filter((t) => t.status !== 'Done').length,
+        activeTasksCount: tasks.filter((t) => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed').length,
         topProjects: projects.slice(0, 5).map((p) => p.name),
         recentMeetings: meetings.slice(0, 3).map((m) => ({ id: m.id, title: m.title, start: m.start })),
         recentTasks: tasks.slice(0, 5).map((t) => ({ id: t.id, title: t.title, status: t.status, owner: t.ownerAlias })),
@@ -1495,7 +1495,7 @@ export default function App() {
                   : 'text-[#515154] hover:text-[#1d1d1f]'
               }`}
             >
-              {locale === 'ar' ? 'مركز المهام' : 'Tasks Center'} ({tasks.filter((t) => t.status !== 'Done').length})
+              {locale === 'ar' ? 'مركز المهام' : 'Tasks Center'} ({tasks.filter((t) => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed').length})
             </button>
             <button
               onClick={() => setCurrentTab('calendar')}
