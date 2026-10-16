@@ -149,14 +149,14 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-4 overflow-y-auto">
+    <div className="fixed inset-0 z-[100] flex items-center justify-center bg-black/60 backdrop-blur-xs p-2 sm:p-4">
       <div className="bg-white rounded-2xl shadow-2xl max-w-xl w-full border border-stone-200 overflow-hidden my-8">
-        <div className="bg-white text-stone-900 px-6 py-4 flex items-center justify-between border-b border-stone-200">
+        <div className="bg-white text-stone-900 px-4 py-2.5 sm:px-6 sm:py-4 flex items-center justify-between border-b border-stone-200">
           <div>
             <span className="text-[11px] font-mono uppercase text-[#0071e3] font-semibold">
               {meeting ? (ar ? 'تعديل اجتماع تنفيذي' : 'EDIT EXECUTIVE MEETING') : (ar ? 'جدولة اجتماع تنفيذي' : 'SCHEDULE EXECUTIVE MEETING')}
             </span>
-            <h2 className="text-lg font-bold text-stone-900">
+            <h2 className="text-base sm:text-lg font-bold text-stone-900 line-clamp-1">
               {meeting?.title ? meeting.title : (locale === 'en' ? 'New Meeting' : 'اجتماع جديد')}
             </h2>
           </div>
@@ -165,7 +165,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
           </button>
         </div>
 
-        <form onSubmit={handleSubmit} className="p-6 space-y-4 max-h-[80vh] overflow-y-auto">
+        <form onSubmit={handleSubmit} className="p-3 sm:p-5 space-y-2.5 sm:space-y-3.5 max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain">
           {/* Conflict warning banner */}
           {conflicts.length > 0 && (
             <div className="bg-amber-50 border border-amber-300 p-3 rounded-xl text-xs text-amber-900 flex items-start gap-2">
@@ -199,11 +199,11 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               autoFocus={!meeting}
               onChange={(e) => setTitle(e.target.value)}
               placeholder={locale === 'ar' ? 'عنوان الاجتماع أو الجلسة الاستراتيجية...' : 'Meeting title or executive session...'}
-              className="w-full px-3.5 py-2.5 rounded-xl border border-stone-300 text-sm focus:outline-none focus:border-[#0071e3] font-medium"
+              className="w-full px-3.5 py-2 rounded-xl border border-stone-300 text-sm focus:outline-none focus:border-[#0071e3] font-medium"
             />
           </div>
 
-          <div className="grid grid-cols-1 md:grid-cols-3 gap-3.5">
+          <div className="grid grid-cols-2 md:grid-cols-3 landscape:grid-cols-4 gap-2.5">
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {locale === 'en' ? 'Date (Cairo)' : 'التاريخ'}
@@ -213,7 +213,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 required
                 value={startDate}
                 onChange={(e) => setStartDate(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
+                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
               />
             </div>
 
@@ -226,7 +226,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 required
                 value={startTime}
                 onChange={(e) => setStartTime(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
+                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
               />
             </div>
 
@@ -239,12 +239,12 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 required
                 value={endTime}
                 onChange={(e) => setEndTime(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-2 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
+                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
               />
             </div>
           </div>
 
-          <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+          <div className="grid grid-cols-2 landscape:grid-cols-4 gap-2.5">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {locale === 'en' ? 'Location / Video URL' : 'المكان / رابط الاتصال'}
@@ -254,7 +254,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 value={location}
                 onChange={(e) => setLocation(e.target.value)}
                 placeholder={locale === 'ar' ? 'قاعة الاجتماعات أو رابط الاتصال' : 'Boardroom / Video call link'}
-                className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none"
+                className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none"
               />
             </div>
 
@@ -267,7 +267,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
                 value={attendees}
                 onChange={(e) => setAttendees(e.target.value)}
                 placeholder={locale === 'ar' ? 'أسماء الحضور' : 'Attendee names'}
-                className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none"
+                className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none"
               />
             </div>
           </div>
@@ -277,11 +277,11 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               {locale === 'en' ? 'Agenda & Discussion Items' : 'جدول الأعمال ونقاط النقاش'}
             </label>
             <textarea
-              rows={3}
+              rows={2}
               value={agenda}
               onChange={(e) => setAgenda(e.target.value)}
               placeholder={locale === 'ar' ? 'بنود جدول الأعمال...' : 'Meeting agenda items...'}
-              className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none"
+              className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none"
             />
           </div>
 
@@ -294,7 +294,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               value={decisions}
               onChange={(e) => setDecisions(e.target.value)}
               placeholder={locale === 'ar' ? 'القرارات والتوجيهات المعتمدة...' : 'Approved directives and key decisions...'}
-              className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none"
+              className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none"
             />
           </div>
 
@@ -304,7 +304,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
             </div>
           )}
 
-          <div className="flex items-center justify-between pt-4 border-t border-stone-200">
+          <div className="flex items-center justify-between pt-2.5 pb-1 border-t border-stone-200 sticky bottom-0 bg-white z-10">
             {meeting?.id && onDelete ? (
               <button
                 type="button"
