@@ -2,7 +2,7 @@ import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Locale } from '../../lib/translations';
 import { VoiceDebugMonitor, SpeechEvent } from './VoiceDebugMonitor';
 import { GeminiLiveSocket, LIVE_OPEN, LIVE_CONNECTING } from '../../lib/ai/liveSocket';
-import { voiceFastQuery, economyVoiceTurn } from '../../lib/ai/gemini';
+import { voiceFastQuery, economyVoiceTurn, transcribeAudio } from '../../lib/ai/gemini';
 import type { VoiceTurn } from '../../lib/ai/gemini';
 import { getVoiceEngine, getSpeechRecognitionCtor, cleanForSpeech, getVoiceLang, setVoiceLang, looksArabic } from '../../lib/ai/voiceEngine';
 import type { VoiceLang } from '../../lib/ai/voiceEngine';
@@ -832,7 +832,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       economyBusyRef.current = false;
       if (activeRef.current) {
         setStatus('listening');
-        listenOnce();
+        listenNext();
       }
     };
     if (!('speechSynthesis' in window)) {
@@ -892,6 +892,133 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     }
   };
 
+  // Which way to hear the CEO: the browser's own speech recognition when it works, otherwise record a short clip
+  // and have Gemini transcribe it (still far cheaper than streaming Live audio, because only spoken sentences are sent)
+  const listenNext = () => {
+    if (getSpeechRecognitionCtor() && !srBlocked()) listenOnce();
+    else void listenByRecording();
+  };
+
+  const blobToBase64 = (blob: Blob) =>
+    new Promise<string>((resolve, reject) => {
+      const r = new FileReader();
+      r.onloadend = () => resolve(String(r.result || ''));
+      r.onerror = () => reject(r.error);
+      r.readAsDataURL(blob);
+    });
+
+  const listenByRecording = async () => {
+    if (!activeRef.current || economyBusyRef.current) return;
+    try {
+      if (!mediaStreamRef.current) {
+        const stream = await navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true, autoGainControl: true, channelCount: 1 } });
+        mediaStreamRef.current = stream;
+        const AC = window.AudioContext || (window as unknown as { webkitAudioContext: typeof AudioContext }).webkitAudioContext;
+        const ctx = new AC();
+        if (ctx.state === 'suspended') await ctx.resume();
+        audioContextInRef.current = ctx;
+        const an = ctx.createAnalyser();
+        an.fftSize = 1024;
+        ctx.createMediaStreamSource(stream).connect(an);
+        analyserRef.current = an;
+      }
+    } catch {
+      setReconnectNote(locale === 'ar' ? 'الميكروفون غير مسموح به. فعّل الإذن لهذا الموقع من إعدادات المتصفح.' : 'Microphone is blocked. Allow it for this site in the browser settings.');
+      terminateSession();
+      return;
+    }
+    const stream = mediaStreamRef.current;
+    const an = analyserRef.current;
+    if (!stream || !an || !activeRef.current) return;
+
+    const mime = ['audio/webm', 'audio/mp4', 'audio/aac'].find((m) => typeof MediaRecorder !== 'undefined' && MediaRecorder.isTypeSupported?.(m)) || '';
+    let rec: MediaRecorder;
+    try {
+      rec = mime ? new MediaRecorder(stream, { mimeType: mime }) : new MediaRecorder(stream);
+    } catch {
+      setReconnectNote(locale === 'ar' ? 'هذا المتصفح لا يدعم تسجيل الصوت.' : 'This browser cannot record audio.');
+      terminateSession();
+      return;
+    }
+    const actualMime = rec.mimeType || mime || 'audio/webm';
+    const chunks: Blob[] = [];
+    let voiceStart = 0;
+    let lastVoice = 0;
+    let finished = false;
+    let raf = 0;
+    const began = Date.now();
+    let lastLevelPaint = 0;
+
+    rec.ondataavailable = (e) => {
+      if (e.data.size > 0) chunks.push(e.data);
+    };
+    rec.onstop = async () => {
+      cancelAnimationFrame(raf);
+      if (!activeRef.current) return;
+      const spokeMs = lastVoice - voiceStart;
+      if (!voiceStart || spokeMs < 350) {
+        void listenByRecording();
+        return;
+      }
+      economyBusyRef.current = true;
+      setStatus('connecting');
+      try {
+        const b64 = await blobToBase64(new Blob(chunks, { type: actualMime }));
+        const heard = (await transcribeAudio(b64, actualMime)).trim();
+        if (!heard) {
+          economyBusyRef.current = false;
+          setStatus('listening');
+          void listenByRecording();
+          return;
+        }
+        setUserTranscript(heard);
+        await economyTurn(heard);
+      } catch (err) {
+        addDebugLog('ERROR', 'SpeechTTS', 'Transcription failed', err instanceof Error ? err.message : String(err));
+        economyBusyRef.current = false;
+        setStatus('listening');
+        setTimeout(() => void listenByRecording(), 800);
+      }
+    };
+
+    const buf = new Float32Array(an.fftSize);
+    const tick = () => {
+      if (!activeRef.current || finished) return;
+      an.getFloatTimeDomainData(buf);
+      let sum = 0;
+      for (let i = 0; i < buf.length; i++) sum += buf[i] * buf[i];
+      const rms = Math.sqrt(sum / buf.length);
+      const now = Date.now();
+      if (now - lastLevelPaint > 80) {
+        lastLevelPaint = now;
+        setAudioLevel(Math.min(100, Math.round(rms * 500)));
+      }
+      if (rms > 0.02) {
+        if (!voiceStart) voiceStart = now;
+        lastVoice = now;
+        lastActivityRef.current = now;
+      }
+      const stopNow = (voiceStart && now - lastVoice > 1100) || (!voiceStart && now - began > 8000) || now - began > 25000;
+      if (stopNow) {
+        finished = true;
+        try {
+          rec.stop();
+        } catch {
+          /* ignore */
+        }
+        return;
+      }
+      raf = requestAnimationFrame(tick);
+    };
+    try {
+      rec.start(250);
+      setStatus('listening');
+      raf = requestAnimationFrame(tick);
+    } catch {
+      setTimeout(() => void listenByRecording(), 800);
+    }
+  };
+
   const listenOnce = () => {
     if (!activeRef.current || economyBusyRef.current) return;
     const SR = getSpeechRecognitionCtor();
@@ -919,20 +1046,13 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       // eslint-disable-next-line @typescript-eslint/no-explicit-any
       rec.onerror = (e: any) => {
         if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed' || e?.error === 'language-not-supported') {
-          // Device speech recognition is not available here: switch to Live voice (it asks for the microphone itself)
+          // Device speech recognition is not available here: record short clips and transcribe them instead
           try {
             localStorage.setItem('alkammah_sr_blocked', '1');
           } catch {
             /* ignore */
           }
-          activeRef.current = false;
-          stopAiPlayback();
-          stopMicrophone();
-          setTimeout(() => {
-            void initLiveSession().then(() =>
-              setReconnectNote(locale === 'ar' ? 'تعذّر الاستماع عبر الجهاز، فتم التحويل إلى الصوت المباشر.' : 'Device listening is not available in this browser, so Live voice is being used.')
-            );
-          }, 50);
+          recognitionRef.current = null;
         }
       };
       rec.onend = () => {
@@ -940,7 +1060,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         if (!activeRef.current || economyBusyRef.current) return;
         const said = (finalText || lastInterim).trim();
         if (said) void economyTurn(said);
-        else setTimeout(listenOnce, 250);
+        else setTimeout(listenNext, 250);
       };
       rec.start();
       recognitionRef.current = rec;
@@ -972,11 +1092,11 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     } catch {
       /* ignore */
     }
-    listenOnce();
+    listenNext();
   };
 
   const initLiveSession = async () => {
-    if (getVoiceEngine() === 'economy' && getSpeechRecognitionCtor() && !srBlocked()) {
+    if (getVoiceEngine() === 'economy') {
       initEconomySession();
       return;
     }
@@ -1304,6 +1424,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
                     }`}
                   />
                   <span className="truncate">{stateLabel}</span>
+                  <span className="shrink-0 px-1.5 rounded-full bg-[#f5f5f7] text-[10px] font-bold text-[#6e6e73]">{wsRef.current ? 'Live' : ar ? 'اقتصادي' : 'Economy'}</span>
                 </div>
               </div>
             </div>
@@ -1430,7 +1551,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
               onClick={() => {
                 if (micActive) {
                   stopMicrophone();
-                } else if (getVoiceEngine() === 'economy' && !wsRef.current && !srBlocked()) {
+                } else if (getVoiceEngine() === 'economy' && !wsRef.current) {
                   initEconomySession();
                 } else {
                   startMicrophoneStream(wsRef.current);
