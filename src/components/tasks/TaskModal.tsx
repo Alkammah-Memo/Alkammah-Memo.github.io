@@ -150,8 +150,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
             />
           </div>
 
-          {/* Workstream & Department */}
-          <div className="grid grid-cols-2 landscape:grid-cols-4 gap-2.5">
+          {/* Where it belongs */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.workstream}
@@ -168,7 +168,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 ))}
               </select>
             </div>
-
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.department}
@@ -185,10 +184,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 ))}
               </select>
             </div>
-          </div>
-
-          {/* Project & Counterpart */}
-          <div className="grid grid-cols-2 landscape:grid-cols-4 gap-2.5">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.project}
@@ -201,7 +196,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
               />
             </div>
+          </div>
 
+          {/* Who and how urgent */}
+          <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.counterpart}
@@ -214,10 +212,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
               />
             </div>
-          </div>
-
-          {/* Status, Priority & Owner Alias */}
-          <div className="grid grid-cols-2 md:grid-cols-3 landscape:grid-cols-4 gap-2.5">
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.status}
@@ -235,7 +229,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <option value="Closed">{t.closed}</option>
               </select>
             </div>
-
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.priority}
@@ -251,7 +244,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <option value="Low">{ar ? 'منخفض' : 'Low'}</option>
               </select>
             </div>
+          </div>
 
+          {/* Owner and dates: one per row on a phone so the native pickers never touch each other */}
+          <div className="grid grid-cols-1 min-[520px]:grid-cols-3 gap-2.5">
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.owner}
@@ -264,10 +260,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
               />
             </div>
-          </div>
-
-          {/* Due Date & Follow-Up Date: one per row on a phone so the native pickers never touch each other */}
-          <div className="grid grid-cols-1 min-[520px]:grid-cols-3 gap-2.5">
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.dueDate}
@@ -279,7 +271,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
               />
             </div>
-
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {locale === 'en' ? 'Due Time (Cairo)' : 'وقت الاستحقاق'}
@@ -291,7 +282,10 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
               />
             </div>
+          </div>
 
+          {/* Follow-up */}
+          <div className="grid grid-cols-1 min-[520px]:grid-cols-3 gap-2.5">
             <div className="min-w-0">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {locale === 'en' ? 'Next Follow-up Date' : 'تاريخ المتابعة'}
