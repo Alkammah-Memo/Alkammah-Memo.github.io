@@ -473,6 +473,17 @@ export default function App() {
     setTasks((prev) => prev.map((t) => (t.id === taskId ? updated : t)));
     await localDB.put('tasks', updated);
     syncTaskToCloud(updated).catch(console.warn);
+
+    triggerUndoToast(
+      locale === 'ar'
+        ? `${updated.isArchived ? 'تمت أرشفة' : 'تمت استعادة'} المهمة "${task.title}"`
+        : `Task ${updated.isArchived ? 'archived' : 'restored'}: "${task.title}"`,
+      async () => {
+        setTasks((prev) => prev.map((t) => (t.id === taskId ? task : t)));
+        await localDB.put('tasks', task);
+        syncTaskToCloud(task).catch(console.warn);
+      }
+    );
   };
 
   // 2. Meeting Operations
@@ -1507,6 +1518,7 @@ export default function App() {
           }}
           onUpdateTaskStatus={handleUpdateTaskStatus}
           onToggleArchive={handleToggleArchiveTask}
+          onDeleteTask={handleDeleteTask}
           departments={departments}
         />
       )}
