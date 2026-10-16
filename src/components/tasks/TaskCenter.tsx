@@ -61,7 +61,9 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
   const [selectedWorkstream, setSelectedWorkstream] = useState<string>('all');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedProject, setSelectedProject] = useState<string>('all');
+  const [selectedOwner, setSelectedOwner] = useState<string>('all');
   const [pending, setPending] = useState<{ kind: 'archive' | 'delete'; task: Task } | null>(null);
+  const ownerOptions = Array.from(new Set(tasks.flatMap((t) => (t.ownerAlias || '').split(/[,،/&]+/).map((o) => o.trim()).filter((o) => o && o !== 'Unassigned')))).sort((a, b) => a.localeCompare(b));
   const projectOptions = Array.from(new Set(tasks.map((t) => (t.project || '').trim()).filter(Boolean))).sort((a, b) => a.localeCompare(b));
 
   // Filter tasks
@@ -86,6 +88,12 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
     // Project filter
     if (selectedProject !== 'all' && (task.project || '').trim() !== selectedProject) {
       return false;
+    }
+
+    // Person filter (a task can have several owners, e.g. "YA, MM")
+    if (selectedOwner !== 'all') {
+      const owners = (task.ownerAlias || '').split(/[,،/&]+/).map((o) => o.trim());
+      if (!owners.includes(selectedOwner)) return false;
     }
 
     // Tab filter
@@ -233,8 +241,8 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
         </div>
 
         {/* Search & Dropdown Selectors */}
-        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-2.5 pt-2 border-t border-stone-100">
-          <div className="relative">
+        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5 pt-2 border-t border-stone-100">
+          <div className="relative col-span-2 sm:col-span-1">
             <Search className="w-4 h-4 text-stone-400 absolute start-3 top-2.5" />
             <input
               type="text"
@@ -290,13 +298,98 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
               ))}
             </select>
           </div>
+
+          <div>
+            <select
+              value={selectedOwner}
+              onChange={(e) => setSelectedOwner(e.target.value)}
+              aria-label={locale === 'en' ? 'Filter by person' : 'تصفية حسب الشخص'}
+              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 focus:bg-white focus:outline-none"
+            >
+              <option value="all">{locale === 'en' ? 'All People' : 'كل الأشخاص'}</option>
+              {ownerOptions.map((o) => (
+                <option key={o} value={o}>
+                  {o}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
       </div>
 
       {/* Views */}
       {viewType === 'table' ? (
-        /* Executive Table View */
-        <div className="bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
+        /* Phone: one card per task (a wide table forces sideways scrolling), table from tablet width up */
+        <>
+        <div className="sm:hidden space-y-2.5">
+          {filteredTasks.length === 0 ? (
+            <div className="bg-white rounded-2xl border border-stone-200 py-10 text-center text-xs text-stone-400">
+              {locale === 'en' ? 'No tasks found matching criteria.' : 'لم يتم العثور على مهام مطابقة.'}
+            </div>
+          ) : (
+            filteredTasks.map((task) => {
+              const overdue = isTaskOverdue(task.dueDate, task.dueTime, task.status);
+              return (
+                <div
+                  key={task.id}
+                  onClick={() => onOpenTaskModal(task)}
+                  className="bg-white rounded-2xl border border-stone-200 shadow-xs p-3.5 active:bg-stone-50"
+                >
+                  <div className="flex items-start justify-between gap-2">
+                    <div className="min-w-0">
+                      <div className="text-sm font-bold text-stone-900 break-words">{task.title}</div>
+                      {(task.project || task.counterpart) && (
+                        <div className="mt-0.5 text-[11px] text-stone-500 truncate">
+                          {[task.project, task.counterpart].filter(Boolean).join(' · ')}
+                        </div>
+                      )}
+                    </div>
+                    <div className="flex shrink-0 -me-1.5 -mt-1" onClick={(e) => e.stopPropagation()}>
+                      <button
+                        onClick={() => setPending({ kind: 'archive', task })}
+                        className="w-10 h-10 flex items-center justify-center text-stone-400 rounded-lg"
+                        aria-label={task.isArchived ? (ar ? 'استعادة' : 'Restore') : ar ? 'أرشفة' : 'Archive'}
+                      >
+                        <Archive className="w-4 h-4" />
+                      </button>
+                      <button
+                        onClick={() => setPending({ kind: 'delete', task })}
+                        className="w-10 h-10 flex items-center justify-center text-stone-400 rounded-lg"
+                        aria-label={ar ? 'حذف المهمة' : 'Delete task'}
+                      >
+                        <Trash2 className="w-4 h-4" />
+                      </button>
+                    </div>
+                  </div>
+                  <div className="mt-2.5 flex flex-wrap items-center gap-2" onClick={(e) => e.stopPropagation()}>
+                    <select
+                      value={task.status}
+                      onChange={(e) => onUpdateTaskStatus(task.id, e.target.value as TaskStatus)}
+                      className="h-9 text-xs font-semibold px-2 rounded-lg border border-stone-300 bg-white"
+                    >
+                      {KANBAN_STATUSES.map((st) => (
+                        <option key={st} value={st}>
+                          {statusLabel[st]}
+                        </option>
+                      ))}
+                    </select>
+                    {task.ownerAlias && (
+                      <span className="font-mono text-[11px] font-semibold bg-stone-100 px-2 py-1 rounded text-stone-800">{task.ownerAlias}</span>
+                    )}
+                    {task.dueDate && (
+                      <span className={`font-mono text-[11px] tabular-nums ${overdue ? 'text-red-600 font-bold' : 'text-stone-600'}`}>
+                        {overdue ? '⚠ ' : ''}
+                        {task.dueDate}
+                      </span>
+                    )}
+                  </div>
+                  {task.nextAction && <div className="mt-2 text-xs text-stone-600 break-words">→ {task.nextAction}</div>}
+                </div>
+              );
+            })
+          )}
+        </div>
+        <div className="max-sm:hidden bg-white rounded-2xl border border-stone-200 shadow-xs overflow-hidden">
           <div className="overflow-x-auto">
             <table className="w-full text-start border-collapse text-xs">
               <thead>
@@ -435,6 +528,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
             </table>
           </div>
         </div>
+        </>
       ) : (
         /* Kanban Board View */
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 overflow-x-auto pb-4">
