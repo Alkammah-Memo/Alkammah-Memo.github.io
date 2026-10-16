@@ -975,6 +975,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         const b64 = await blobToBase64(new Blob(chunks, { type: actualMime }));
         const heard = (await transcribeAudio(b64, actualMime)).trim();
         if (!heard) {
+          addDebugLog('WARN', 'AudioStream', 'Transcription returned no words');
           economyBusyRef.current = false;
           setStatus('listening');
           void listenByRecording();
