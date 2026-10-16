@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { CalendarDays, Loader2, RefreshCw, LogOut } from 'lucide-react';
 import { Fold } from './Fold';
-import { getGoogleLink, setGoogleLink, subscribeGoogleLink, loadGoogleIdentity, tokenIsValid } from '../../lib/googleCalendar';
+import { getGoogleLink, setGoogleLink, subscribeGoogleLink, loadGoogleIdentity, tokenIsValid, probeServer, getServerState, disconnectGoogle } from '../../lib/googleCalendar';
+import type { ServerState } from '../../lib/googleCalendar';
 
 type SyncFn = (interactive: boolean) => Promise<{ added: number; updated: number; removed: number; email: string }>;
 
@@ -11,10 +12,12 @@ export const GoogleCalendarSettings: React.FC<{ ar: boolean; onSync?: SyncFn }> 
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
   const [clientDraft, setClientDraft] = useState(link.clientId);
   const connected = !!link.email && !!link.lastSyncAt;
+  const [server, setServer] = useState<ServerState>(getServerState());
 
   // load Google's sign-in library ahead of time so the tap can open the account chooser right away
   useEffect(() => {
     void loadGoogleIdentity().catch(() => undefined);
+    void probeServer().then(setServer);
   }, []);
 
   const run = async (interactive: boolean) => {
@@ -97,7 +100,7 @@ export const GoogleCalendarSettings: React.FC<{ ar: boolean; onSync?: SyncFn }> 
             <button
               type="button"
               onClick={() => {
-                setGoogleLink({ token: undefined, expiresAt: undefined, email: undefined, lastSyncAt: undefined, lastCount: undefined });
+                void disconnectGoogle();
                 setMsg(null);
               }}
               className="min-h-11 px-4 rounded-xl bg-[#f5f5f7] border border-[#d2d2d7] text-sm font-semibold inline-flex items-center gap-2"
@@ -120,13 +123,20 @@ export const GoogleCalendarSettings: React.FC<{ ar: boolean; onSync?: SyncFn }> 
           <div>
             {link.scopeV !== 2
               ? ar ? 'لتفعيل المزامنة في الاتجاهين اضغط "مزامنة الآن" ووافق على الصلاحية الجديدة (تعديل المواعيد).' : 'To turn on two-way sync, tap "Sync now" and approve the new permission (edit events).'
+              : link.serverLinked
+              ? ar ? 'دخول دائم: يتجدد تلقائياً دون أي ضغط، والمزامنة تعمل باستمرار في الاتجاهين.' : 'Permanent sign-in: it renews by itself with no taps, and two-way sync keeps running.'
               : tokenIsValid(link)
-              ? ar ? 'المزامنة في الاتجاهين نشطة: التغييرات هنا تصل Google خلال ثوانٍ، وتتجدد مواعيد Google كل ١٠ دقائق.' : 'Two-way sync is active: changes here reach Google within seconds, and Google events refresh every 10 minutes.'
-              : ar ? 'انتهى الدخول (يدوم ساعة). اضغط "مزامنة الآن" لتجديده بضغطة، وحتى ذلك الحين تُرسل تغييراتك عند التجديد.' : 'Sign-in expired (it lasts an hour). Tap "Sync now" to renew it in one tap; changes made meanwhile are sent then.'}
+              ? ar ? 'المزامنة نشطة، لكن الدخول يدوم ساعة فقط (الدخول الدائم غير مُفعّل بعد).' : 'Sync is active, but this sign-in lasts only an hour (permanent sign-in is not set up yet).'
+              : ar ? 'انتهى الدخول (يدوم ساعة). اضغط "مزامنة الآن" لتجديده.' : 'Sign-in expired (it lasts an hour). Tap "Sync now" to renew it.'}
           </div>
         </div>
       )}
 
+      {server === 'unavailable' && (
+        <p className="mt-3 text-xs rounded-xl px-3 py-2 border border-amber-200 bg-amber-50 text-amber-800">
+          {ar ? 'الدخول الدائم يحتاج إعداداً لمرة واحدة على الخادم (وظيفة Supabase). حتى يتم، يلزم تجديد الدخول كل ساعة.' : 'Permanent sign-in needs a one-time server setup (a Supabase function). Until then the sign-in has to be renewed every hour.'}
+        </p>
+      )}
       {msg && <p className={`mt-3 text-sm rounded-xl px-3 py-2 border break-words ${msg.ok ? 'text-emerald-700 bg-emerald-50 border-emerald-200' : 'text-rose-700 bg-rose-50 border-rose-200'}`}>{msg.text}</p>}
     </Fold>
   );

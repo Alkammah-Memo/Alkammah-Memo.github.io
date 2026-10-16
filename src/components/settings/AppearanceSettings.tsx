@@ -9,6 +9,7 @@ const WALLPAPERS: { id: Wallpaper; en: string; ar: string; css: string }[] = [
   { id: 'sunset', en: 'Sunset', ar: 'غروب', css: 'linear-gradient(135deg,#ffc38a,#ff9db8 55%,#b79bff)' },
   { id: 'ocean', en: 'Ocean', ar: 'محيط', css: 'linear-gradient(135deg,#7fe0ff,#7fa8ff 55%,#7ff0d4)' },
   { id: 'graphite', en: 'Graphite', ar: 'جرافيت', css: 'linear-gradient(135deg,#c9d3e6,#d9d2ee 55%,#cfdde0)' },
+  { id: 'dark', en: 'Dark', ar: 'داكن', css: 'linear-gradient(135deg,#1c3f78,#43266f 55%,#12101d)' },
 ];
 
 export const AppearanceSettings: React.FC<{ ar: boolean }> = ({ ar }) => {
