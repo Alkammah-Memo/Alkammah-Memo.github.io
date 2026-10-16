@@ -54,6 +54,9 @@ interface LiveVoiceModalProps {
 }
 
 // On phones the fixed bottom tab bar occupies the lower edge; keep the floating bubble above it
+// Device speech recognition is tried first on every visit; only if it fails in this visit do we record clips instead
+let srBlockedThisVisit = false;
+
 function bottomNavInset(): number {
   return typeof window !== 'undefined' && window.innerWidth < 640 ? 72 : 0;
 }
@@ -817,13 +820,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
   // Economy voice: the phone listens and speaks (free); Gemini only sees short text. Lasts for hours.
   // ---------------------------------------------------------------------------------------------
   // Some browsers (for example Chrome on iPhone) have no usable device speech recognition: remember that and use Live voice there
-  const srBlocked = () => {
-    try {
-      return localStorage.getItem('alkammah_sr_blocked') === '1';
-    } catch {
-      return false;
-    }
-  };
+  const srBlocked = () => srBlockedThisVisit;
 
   const speakEconomy = (text: string) => {
     const resume = () => {
@@ -1057,11 +1054,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       rec.onerror = (e: any) => {
         if (e?.error === 'not-allowed' || e?.error === 'service-not-allowed' || e?.error === 'language-not-supported') {
           // Device speech recognition is not available here: record short clips and transcribe them instead
-          try {
-            localStorage.setItem('alkammah_sr_blocked', '1');
-          } catch {
-            /* ignore */
-          }
+          srBlockedThisVisit = true;
           recognitionRef.current = null;
         }
       };
