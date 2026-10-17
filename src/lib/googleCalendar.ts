@@ -26,6 +26,8 @@ export interface GoogleLink {
   scopeV?: number;
   /** true once the long-lived (server-side) sign-in is set up, so tokens renew by themselves */
   serverLinked?: boolean;
+  /** the "Synced from Alkammah Memo system" note has been added to events pushed earlier */
+  footerDone?: boolean;
   /** task id -> the Google event that shows it, and a signature of what was last sent */
   taskEvents?: Record<string, { eventId: string; sig: string }>;
   /** Google event ids that were mirrored at the last sync (used to notice what was deleted here) */
@@ -319,7 +321,7 @@ export function eventsToMeetings(events: GoogleEvent[]): Meeting[] {
       id: `${GOOGLE_ID_PREFIX}${e.id}`,
       workspaceId: 'default-ws',
       title: e.summary || 'Google Calendar event',
-      description: e.description || '',
+      description: stripFooter(e.description || ''),
       start,
       end,
       timezone: 'Africa/Cairo',
@@ -337,6 +339,11 @@ export function eventsToMeetings(events: GoogleEvent[]): Meeting[] {
   }
   return meetings;
 }
+
+/** Added to the description of every event the app writes into Google, so it is clear where it came from (and removed again on the way back). */
+export const SYNC_FOOTER = '— Synced from Alkammah Memo system';
+const stripFooter = (d: string) => d.replace(/\n*—\s*Synced from Alkammah Memo system\s*$/i, '').trim();
+const withFooter = (d?: string) => `${(d || '').trim()}${d && d.trim() ? '\n\n' : ''}${SYNC_FOOTER}`;
 
 const SAME_FIELDS: (keyof Meeting)[] = ['title', 'description', 'start', 'end', 'location'];
 
@@ -393,7 +400,7 @@ export function planSync(
 function eventBody(m: Meeting) {
   return {
     summary: m.title,
-    description: m.description || undefined,
+    description: withFooter(m.description),
     location: m.location || undefined,
     start: { dateTime: m.start, timeZone: 'Africa/Cairo' },
     end: { dateTime: m.end, timeZone: 'Africa/Cairo' },
@@ -446,7 +453,7 @@ function taskBody(t: Task) {
     .join('\n');
   return {
     summary: `Task: ${t.title}`,
-    description: details,
+    description: withFooter(details),
     colorId: '5',
     ...(timed
       ? { start: { dateTime: start, timeZone: 'Africa/Cairo' }, end: { dateTime: new Date(Date.parse(start) + 30 * 60_000).toISOString(), timeZone: 'Africa/Cairo' } }
