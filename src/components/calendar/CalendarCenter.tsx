@@ -248,8 +248,8 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
         </div>
       </div>
 
-      {/* Month / Week / Day Navigation Strip */}
-      <div className="flex items-center justify-between bg-white px-3 sm:px-6 py-2 sm:py-3 rounded-2xl border border-stone-200 shadow-xs">
+      {/* Month / Week / Day Navigation Strip (the agenda has no date steps) */}
+      <div className={`${viewMode === 'agenda' ? 'hidden' : 'flex'} items-center justify-between bg-white px-3 sm:px-6 py-2 sm:py-3 rounded-2xl border border-stone-200 shadow-xs`}>
         <button
           onClick={prevDate}
           aria-label={ar ? 'السابق' : 'Previous'}

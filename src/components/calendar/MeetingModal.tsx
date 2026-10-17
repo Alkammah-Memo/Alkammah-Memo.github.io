@@ -3,7 +3,8 @@ import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Meeting } from '../../types';
 import { Locale, translations } from '../../lib/translations';
 import { checkMeetingConflicts, cairoDateOf, cairoTimeOf, cairoLocalToIso, getCairoDateString } from '../../lib/cairoTime';
-import { X, Calendar, Clock, MapPin, Users, AlertTriangle } from 'lucide-react';
+import { X, Calendar, Clock, MapPin, Users, AlertTriangle, CalendarDays } from 'lucide-react';
+import { getGoogleLink } from '../../lib/googleCalendar';
 
 interface MeetingModalProps {
   meeting: Meeting | null;
@@ -166,6 +167,20 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-3 sm:p-5 space-y-2.5 sm:space-y-3.5 max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain">
+          {/* Where this meeting is mirrored */}
+          {meeting?.googleEventId && (
+            <div className="bg-sky-50 border border-sky-200 text-sky-900 text-xs rounded-xl px-3 py-2 flex items-start gap-2">
+              <CalendarDays className="w-4 h-4 text-sky-700 shrink-0 mt-0.5" />
+              <span>
+                {meeting.id.startsWith('gcal_')
+                  ? ar ? 'مزامَن من تقويم Google' : 'Synced from Google Calendar'
+                  : ar ? 'مُرسَل إلى تقويم Google (مزامنة في الاتجاهين)' : 'Mirrored to Google Calendar (two-way sync)'}
+                {getGoogleLink().email ? <span dir="ltr"> · {getGoogleLink().email}</span> : null}
+                {meeting.googleSyncedAt ? <span className="opacity-70"> · {new Date(meeting.googleSyncedAt).toLocaleString(ar ? 'ar-EG' : 'en-GB', { timeZone: 'Africa/Cairo', dateStyle: 'medium', timeStyle: 'short' })}</span> : null}
+              </span>
+            </div>
+          )}
+
           {/* Conflict warning banner */}
           {conflicts.length > 0 && (
             <div className="bg-amber-50 border border-amber-300 p-3 rounded-xl text-xs text-amber-900 flex items-start gap-2">
@@ -244,7 +259,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
             </div>
           </div>
 
-          <div className="grid grid-cols-2 landscape:grid-cols-4 gap-2.5">
+          <div className="grid grid-cols-1 min-[520px]:grid-cols-2 gap-2.5">
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {locale === 'en' ? 'Location / Video URL' : 'المكان / رابط الاتصال'}
