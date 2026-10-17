@@ -1,4 +1,5 @@
 import React, { useState } from 'react';
+import { useSortable } from './useSortable';
 import { ConfirmDialog } from '../common/ConfirmDialog';
 import { Task, Workstream, TaskStatus } from '../../types';
 import { Locale, translations } from '../../lib/translations';
@@ -20,6 +21,8 @@ import {
   Archive,
   Trash2,
   ArrowUpDown,
+  GripVertical,
+  ChevronUp,
 } from 'lucide-react';
 
 interface TaskCenterProps {
@@ -29,8 +32,55 @@ interface TaskCenterProps {
   onUpdateTaskStatus: (taskId: string, newStatus: TaskStatus) => void;
   onToggleArchive: (taskId: string) => void;
   onDeleteTask: (taskId: string) => void;
+  /** the full new order of every task id (first = top); the app stores it so the order survives reloads and syncs */
+  onReorderTasks?: (orderedIds: string[]) => void;
   departments?: string[];
 }
+
+/** Serial number with a drag handle and tiny up / down arrows: drag or tap to move a task up or down the list. */
+const RowControls: React.FC<{
+  sort: ReturnType<typeof useSortable>;
+  id: string;
+  index: number;
+  total: number;
+  ar: boolean;
+  vertical?: boolean;
+}> = ({ sort, id, index, total, ar, vertical }) => (
+  <div className={`flex items-center ${vertical ? 'flex-col gap-0.5' : 'gap-0.5'} select-none`} onClick={(e) => e.stopPropagation()}>
+    <button
+      type="button"
+      onPointerDown={sort.startDrag(id)}
+      aria-label={ar ? 'اسحب لإعادة الترتيب' : 'Drag to reorder'}
+      title={ar ? 'اسحب لإعادة الترتيب' : 'Drag to reorder'}
+      className="touch-none cursor-grab active:cursor-grabbing p-0.5 rounded text-stone-300 hover:text-stone-600 active:text-stone-800"
+    >
+      <GripVertical className="w-3.5 h-3.5" />
+    </button>
+    <span className="min-w-5 text-center font-mono font-bold text-[11px] tabular-nums text-stone-700">{index + 1}</span>
+    <div className={`flex ${vertical ? 'flex-row' : 'flex-col'}`}>
+      <button
+        type="button"
+        disabled={index === 0}
+        onClick={() => sort.move(id, -1)}
+        aria-label={ar ? 'نقل لأعلى' : 'Move up'}
+        title={ar ? 'نقل لأعلى' : 'Move up'}
+        className="h-4 w-4 inline-flex items-center justify-center rounded text-stone-400 hover:text-stone-800 active:bg-stone-100 disabled:opacity-25"
+      >
+        <ChevronUp className="w-3 h-3" />
+      </button>
+      <button
+        type="button"
+        disabled={index === total - 1}
+        onClick={() => sort.move(id, 1)}
+        aria-label={ar ? 'نقل لأسفل' : 'Move down'}
+        title={ar ? 'نقل لأسفل' : 'Move down'}
+        className="h-4 w-4 inline-flex items-center justify-center rounded text-stone-400 hover:text-stone-800 active:bg-stone-100 disabled:opacity-25"
+      >
+        <ChevronDown className="w-3 h-3" />
+      </button>
+    </div>
+  </div>
+);
 
 type TabFilter = 'all' | 'today' | 'upcoming' | 'overdue' | 'waiting' | 'no_owner' | 'archived';
 
@@ -41,6 +91,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
   onUpdateTaskStatus,
   onToggleArchive,
   onDeleteTask,
+  onReorderTasks,
   departments = INITIAL_DEPARTMENTS,
 }) => {
   const t = translations[locale];
@@ -138,6 +189,31 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
 
     return true;
   });
+
+  // Manual order: tasks you have moved keep their stored position; tasks never moved sit on top in their usual order
+  const stored = tasks.filter((x) => x.sortOrder !== undefined).map((x) => x.sortOrder as number);
+  const baseKey = stored.length ? Math.min(...stored) : 0;
+  const keyMap = new Map(tasks.map((x, i) => [x.id, x.sortOrder ?? baseKey - tasks.length + i]));
+  const byKey = (a: Task, b: Task) => (keyMap.get(a.id) as number) - (keyMap.get(b.id) as number);
+  const orderedFiltered = [...filteredTasks].sort(byKey);
+  const orderedIds = orderedFiltered.map((x) => x.id);
+  const fullOrder = [...tasks].sort(byKey).map((x) => x.id);
+  const commitOrder = (visibleOrder: string[]) => {
+    // the moved rows swap places only among the slots they already occupied, so hidden (filtered-out) tasks keep their place
+    const visible = new Set(visibleOrder);
+    const slots = fullOrder.map((id, i) => (visible.has(id) ? i : -1)).filter((i) => i >= 0);
+    const next = [...fullOrder];
+    slots.forEach((slot, k) => {
+      next[slot] = visibleOrder[k];
+    });
+    onReorderTasks?.(next);
+  };
+  const tableSort = useSortable(orderedIds, commitOrder);
+  const cardSort = useSortable(orderedIds, commitOrder);
+  const byId = new Map(filteredTasks.map((x) => [x.id, x]));
+  const rowsOf = (sort: ReturnType<typeof useSortable>) => sort.order.map((id) => byId.get(id)).filter((x): x is Task => !!x);
+  const tableRows = rowsOf(tableSort);
+  const cardRows = rowsOf(cardSort);
 
   const KANBAN_STATUSES: TaskStatus[] = [
     'Pending',
@@ -339,19 +415,25 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
         /* Phone: one card per task (a wide table forces sideways scrolling), table from tablet width up */
         <>
         <div className="sm:hidden space-y-2.5">
-          {filteredTasks.length === 0 ? (
+          {cardRows.length === 0 ? (
             <div className="bg-white rounded-2xl border border-stone-200 py-10 text-center text-xs text-stone-400">
               {locale === 'en' ? 'No tasks found matching criteria.' : 'لم يتم العثور على مهام مطابقة.'}
             </div>
           ) : (
-            filteredTasks.map((task) => {
+            cardRows.map((task, idx) => {
               const overdue = isTaskOverdue(task.dueDate, task.dueTime, task.status);
               return (
                 <div
                   key={task.id}
+                  ref={cardSort.ref(task.id)}
                   onClick={() => onOpenTaskModal(task)}
-                  className="bg-white rounded-2xl border border-stone-200 shadow-xs p-3.5 active:bg-stone-50"
+                  className={`relative rounded-2xl border p-3 active:bg-stone-50 ${
+                    cardSort.dragId === task.id ? 'bg-amber-50 border-amber-300 shadow-xl z-20' : 'bg-white border-stone-200 shadow-xs'
+                  }`}
                 >
+                  <div className="flex items-start gap-2">
+                  <RowControls sort={cardSort} id={task.id} index={idx} total={cardRows.length} ar={ar} vertical />
+                  <div className="min-w-0 flex-1">
                   <div className="flex items-start justify-between gap-2">
                     <div className="min-w-0">
                       <div className="text-sm font-bold text-stone-900 break-words">{task.title}</div>
@@ -401,6 +483,8 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                     )}
                   </div>
                   {task.nextAction && <div className="mt-2 text-xs text-stone-600 break-words">→ {task.nextAction}</div>}
+                  </div>
+                  </div>
                 </div>
               );
             })
@@ -411,6 +495,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
             <table className="w-full text-start border-collapse text-xs">
               <thead>
                 <tr className="bg-stone-50/80 border-b border-stone-200 text-stone-600 font-semibold uppercase tracking-wider">
+                  <th className="py-3 ps-3 pe-1 w-24 text-center">#</th>
                   <th className="py-3 px-4">{t.status}</th>
                   <th className="py-3 px-4">{locale === 'en' ? 'Title & Project' : 'العنوان والمشروع'}</th>
                   <th className="py-3 px-4">{t.workstream}</th>
@@ -421,22 +506,30 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                 </tr>
               </thead>
               <tbody className="divide-y divide-stone-100">
-                {filteredTasks.length === 0 ? (
+                {tableRows.length === 0 ? (
                   <tr>
-                    <td colSpan={7} className="text-center py-12 text-stone-400">
+                    <td colSpan={8} className="text-center py-12 text-stone-400">
                       {locale === 'en' ? 'No tasks found matching criteria.' : 'لم يتم العثور على مهام مطابقة.'}
                     </td>
                   </tr>
                 ) : (
-                  filteredTasks.map((task) => {
+                  tableRows.map((task, idx) => {
                     const overdue = isTaskOverdue(task.dueDate, task.dueTime, task.status);
 
                     return (
                       <tr
                         key={task.id}
+                        ref={tableSort.ref(task.id)}
                         onClick={() => onOpenTaskModal(task)}
-                        className="hover:bg-amber-50/40 transition-colors cursor-pointer group"
+                        className={`transition-colors cursor-pointer group ${
+                          tableSort.dragId === task.id ? 'bg-amber-100 relative z-20 shadow-lg' : 'hover:bg-amber-50/40'
+                        }`}
                       >
+                        {/* Serial number + drag handle + up / down */}
+                        <td className="py-2 ps-3 pe-1">
+                          <RowControls sort={tableSort} id={task.id} index={idx} total={tableRows.length} ar={ar} />
+                        </td>
+
                         {/* Status Select */}
                         <td className="py-3 px-4" onClick={(e) => e.stopPropagation()}>
                           <select
@@ -550,7 +643,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
         /* Kanban Board View */
         <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 overflow-x-auto pb-4">
           {KANBAN_STATUSES.map((statusCol) => {
-            const colTasks = filteredTasks.filter((t) => t.status === statusCol);
+            const colTasks = orderedFiltered.filter((t) => t.status === statusCol);
 
             return (
               <div
