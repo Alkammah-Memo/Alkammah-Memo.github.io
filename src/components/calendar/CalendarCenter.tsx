@@ -1,5 +1,6 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Meeting, Task } from '../../types';
+import { GOOGLE_ID_PREFIX } from '../../lib/googleCalendar';
 import { Locale, translations } from '../../lib/translations';
 import { formatCairoDateDisplay, getCairoDateString, cairoDateOf, cairoTimeOf } from '../../lib/cairoTime';
 import { buildIcs } from '../../lib/exporters';
@@ -29,14 +30,42 @@ interface CalendarCenterProps {
 
 type CalendarViewMode = 'year' | 'month' | 'week' | 'day' | 'agenda';
 
+type SourceFilter = 'all' | 'system' | 'google';
+const SOURCE_KEY = 'alkammah_calendar_source_v1';
+const readSource = (): SourceFilter => {
+  try {
+    const v = localStorage.getItem(SOURCE_KEY);
+    return v === 'system' || v === 'google' ? v : 'all';
+  } catch {
+    return 'all';
+  }
+};
+
 export const CalendarCenter: React.FC<CalendarCenterProps> = ({
-  meetings,
-  tasks,
+  meetings: allMeetings,
+  tasks: allTasks,
   locale,
   onOpenMeetingModal,
   onOpenTaskModal,
 }) => {
   const t = translations[locale];
+  // where a meeting came from: events that arrived from Google (phone calendar etc.) vs. ones created in this system
+  const [source, setSourceState] = useState<SourceFilter>(readSource);
+  const setSource = (v: SourceFilter) => {
+    setSourceState(v);
+    try {
+      localStorage.setItem(SOURCE_KEY, v);
+    } catch {
+      /* ignore */
+    }
+  };
+  const isFromGoogle = (m: Meeting) => m.id.startsWith(GOOGLE_ID_PREFIX);
+  const googleCount = useMemo(() => allMeetings.filter(isFromGoogle).length, [allMeetings]);
+  const meetings = useMemo(
+    () => (source === 'all' ? allMeetings : allMeetings.filter((m) => (source === 'google') === isFromGoogle(m))),
+    [allMeetings, source]
+  );
+  const tasks = source === 'google' ? [] : allTasks;
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const ar = locale === 'ar';
   const { today: todayCairo, time: nowCairoTime } = useCairoClock();
@@ -246,6 +275,24 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
             <span>{t.addMeeting}</span>
           </button>
         </div>
+      </div>
+
+      {/* Source filter: everything, only what was created in this system, or only what came from Google */}
+      <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl text-xs self-start max-w-full overflow-x-auto" role="group" aria-label={ar ? 'مصدر المواعيد' : 'Meeting source'}>
+        {([
+          ['all', ar ? 'الكل' : 'All', allMeetings.length],
+          ['system', ar ? 'من النظام' : 'From system', allMeetings.length - googleCount],
+          ['google', ar ? 'من Google (التقويم)' : 'From Google calendar', googleCount],
+        ] as [SourceFilter, string, number][]).map(([k, label, n]) => (
+          <button
+            key={k}
+            onClick={() => setSource(k)}
+            aria-pressed={source === k}
+            className={`px-3 py-1.5 rounded-lg font-medium whitespace-nowrap transition-all ${source === k ? 'bg-white text-stone-900 shadow-xs' : 'text-stone-500 hover:text-stone-900'}`}
+          >
+            {label} <span className="opacity-60">{n}</span>
+          </button>
+        ))}
       </div>
 
       {/* Month / Week / Day Navigation Strip (the agenda has no date steps) */}
