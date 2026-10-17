@@ -74,6 +74,9 @@ html[data-theme='glass'] [class~='bg-stone-100/80'],
 html[data-theme='glass'] [class~='bg-stone-100/70'],
 html[data-theme='glass'] [class~='bg-[#e8e8ed]'],
 html[data-theme='glass'] [class~='bg-[#FAF8F5]'],
+html[data-theme='glass'] [class~='bg-[#fafafa]'],
+html[data-theme='glass'] [class~='bg-[#FCFBF9]'],
+html[data-theme='glass'] [class~='bg-[#ececf0]'],
 html[data-theme='glass'] [class~='bg-[#e5e5ea]/80'] {
   background-color: var(--g-sub) !important;
 }
@@ -137,7 +140,9 @@ html[data-theme='glass'] [class~='border-[#d2d2d7]/70'],
 html[data-theme='glass'] [class~='border-[#d2d2d7]/80'],
 html[data-theme='glass'] [class~='border-stone-100'],
 html[data-theme='glass'] [class~='border-stone-200'],
-html[data-theme='glass'] [class~='border-[#ececf0]'] {
+html[data-theme='glass'] [class~='border-[#ececf0]'],
+html[data-theme='glass'] [class~='border-[#e5e5ea]'],
+html[data-theme='glass'] [class~='border-[#c7c7cc]'] {
   border-color: var(--g-edge) !important;
 }
 
@@ -272,3 +277,223 @@ html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-[#1d1d1f]'] {
 html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-white'][class~='rounded-full']:not([class~='border']) {
   background-color: #fff !important;
 }
+
+/* pastel chips and banners: tinted dark glass with light tinted text, so nothing is light-on-light */
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-blue-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-blue-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-blue-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-blue-50/40'] { background-color: rgba(10,132,255,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-blue-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-blue-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-blue-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-blue-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-blue-900'] { color: #7cc0ff !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-blue-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-blue-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-blue-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-blue-400'] { border-color: rgba(10,132,255,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-sky-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-sky-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-sky-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-sky-50/40'] { background-color: rgba(10,132,255,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-sky-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-sky-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-sky-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-sky-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-sky-900'] { color: #7cc0ff !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-sky-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-sky-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-sky-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-sky-400'] { border-color: rgba(10,132,255,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-indigo-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-indigo-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-indigo-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-indigo-50/40'] { background-color: rgba(94,92,230,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-indigo-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-indigo-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-indigo-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-indigo-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-indigo-900'] { color: #b3b1ff !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-indigo-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-indigo-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-indigo-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-indigo-400'] { border-color: rgba(94,92,230,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-emerald-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-emerald-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-emerald-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-emerald-50/40'] { background-color: rgba(48,209,88,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-emerald-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-emerald-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-emerald-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-emerald-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-emerald-900'] { color: #6fe39a !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-emerald-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-emerald-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-emerald-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-emerald-400'] { border-color: rgba(48,209,88,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-green-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-green-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-green-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-green-50/40'] { background-color: rgba(48,209,88,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-green-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-green-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-green-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-green-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-green-900'] { color: #6fe39a !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-green-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-green-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-green-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-green-400'] { border-color: rgba(48,209,88,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-teal-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-teal-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-teal-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-teal-50/40'] { background-color: rgba(64,200,224,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-teal-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-teal-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-teal-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-teal-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-teal-900'] { color: #7fe3f0 !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-teal-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-teal-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-teal-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-teal-400'] { border-color: rgba(64,200,224,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-cyan-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-cyan-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-cyan-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-cyan-50/40'] { background-color: rgba(64,200,224,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-cyan-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-cyan-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-cyan-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-cyan-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-cyan-900'] { color: #7fe3f0 !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-cyan-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-cyan-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-cyan-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-cyan-400'] { border-color: rgba(64,200,224,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-amber-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-amber-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-amber-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-amber-50/40'] { background-color: rgba(255,159,10,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-amber-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-amber-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-amber-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-amber-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-amber-900'] { color: #ffc766 !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-amber-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-amber-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-amber-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-amber-400'] { border-color: rgba(255,159,10,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-yellow-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-yellow-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-yellow-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-yellow-50/40'] { background-color: rgba(255,214,10,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-yellow-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-yellow-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-yellow-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-yellow-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-yellow-900'] { color: #ffe066 !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-yellow-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-yellow-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-yellow-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-yellow-400'] { border-color: rgba(255,214,10,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-orange-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-orange-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-orange-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-orange-50/40'] { background-color: rgba(255,159,10,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-orange-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-orange-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-orange-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-orange-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-orange-900'] { color: #ffb86b !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-orange-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-orange-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-orange-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-orange-400'] { border-color: rgba(255,159,10,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-rose-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-rose-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-rose-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-rose-50/40'] { background-color: rgba(255,69,58,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-rose-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-rose-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-rose-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-rose-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-rose-900'] { color: #ff8f89 !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-rose-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-rose-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-rose-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-rose-400'] { border-color: rgba(255,69,58,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-red-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-red-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-red-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-red-50/40'] { background-color: rgba(255,69,58,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-red-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-red-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-red-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-red-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-red-900'] { color: #ff8f89 !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-red-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-red-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-red-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-red-400'] { border-color: rgba(255,69,58,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-violet-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-violet-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-violet-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-violet-50/40'] { background-color: rgba(191,90,242,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-violet-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-violet-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-violet-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-violet-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-violet-900'] { color: #dba8ff !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-violet-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-violet-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-violet-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-violet-400'] { border-color: rgba(191,90,242,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-purple-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-purple-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-purple-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-purple-50/40'] { background-color: rgba(191,90,242,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-purple-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-purple-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-purple-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-purple-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-purple-900'] { color: #dba8ff !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-purple-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-purple-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-purple-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-purple-400'] { border-color: rgba(191,90,242,0.38) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-pink-50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-pink-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-pink-50/50'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-pink-50/40'] { background-color: rgba(255,55,95,0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-pink-500'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-pink-600'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-pink-700'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-pink-800'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-pink-900'] { color: #ff9ab5 !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-pink-100'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-pink-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-pink-300'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='border-pink-400'] { border-color: rgba(255,55,95,0.38) !important; }
+
+/* translucent pastel backgrounds (for example /30, /60) */
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-blue-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-blue-100/'] { background-color: rgba(10,132,255,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-sky-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-sky-100/'] { background-color: rgba(10,132,255,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-indigo-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-indigo-100/'] { background-color: rgba(94,92,230,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-emerald-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-emerald-100/'] { background-color: rgba(48,209,88,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-green-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-green-100/'] { background-color: rgba(48,209,88,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-teal-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-teal-100/'] { background-color: rgba(64,200,224,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-cyan-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-cyan-100/'] { background-color: rgba(64,200,224,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-amber-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-amber-100/'] { background-color: rgba(255,159,10,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-yellow-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-yellow-100/'] { background-color: rgba(255,214,10,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-orange-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-orange-100/'] { background-color: rgba(255,159,10,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-rose-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-rose-100/'] { background-color: rgba(255,69,58,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-red-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-red-100/'] { background-color: rgba(255,69,58,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-violet-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-violet-100/'] { background-color: rgba(191,90,242,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-purple-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-purple-100/'] { background-color: rgba(191,90,242,0.12) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-pink-50/'], html[data-theme='glass'][data-wallpaper='dark'] [class*='bg-pink-100/'] { background-color: rgba(255,55,95,0.12) !important; }
+
+/* dark: grey disabled buttons / tracks */
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-stone-200'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-[#d2d2d7]'],
+html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-[#c7c7cc]'] { background-color: rgba(255, 255, 255, 0.16) !important; }
+html[data-theme='glass'][data-wallpaper='dark'] [class~='text-stone-300'] { color: #6e6e75 !important; }

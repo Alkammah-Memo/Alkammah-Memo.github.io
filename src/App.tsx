@@ -515,10 +515,15 @@ export default function App() {
 
       // 2) new or changed here -> Google
       const pushed = new Map<string, Meeting>();
-      for (const m of plan.push) {
+      // one time: events the app pushed before the "Synced from Alkammah Memo system" note existed get it too
+      const pushIds = new Set(plan.push.map((m) => m.id));
+      const backfill = getGoogleLink().footerDone ? [] : current.filter((m) => !!m.googleEventId && !m.id.startsWith('gcal_') && !pushIds.has(m.id));
+      for (const m of [...plan.push, ...backfill]) {
         const r = await pushMeeting(token, m);
         pushed.set(m.id, { ...m, googleEventId: r.id, googleSyncedAt: r.updated, syncState: 'synced' });
       }
+
+      if (!getGoogleLink().footerDone) setGoogleLink({ footerDone: true });
 
       // 3) apply everything to the local meetings
       const removeIds = new Set(plan.removeLocal.map((m) => m.id));
