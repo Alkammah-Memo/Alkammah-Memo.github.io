@@ -497,3 +497,25 @@ html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-stone-200'],
 html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-[#d2d2d7]'],
 html[data-theme='glass'][data-wallpaper='dark'] [class~='bg-[#c7c7cc]'] { background-color: rgba(255, 255, 255, 0.16) !important; }
 html[data-theme='glass'][data-wallpaper='dark'] [class~='text-stone-300'] { color: #6e6e75 !important; }
+
+/* Typed notes on the paper: the box you type in must always show what you type, whatever the app theme does to other fields */
+html textarea.nb-text-input,
+html[data-theme] textarea.nb-text-input,
+html[data-theme][data-wallpaper] textarea.nb-text-input {
+  background-color: #ffffff !important;
+  color: #1c1917 !important;
+  caret-color: #1c1917;
+  border-color: #f59e0b !important;
+}
+html textarea.nb-text-input::placeholder,
+html[data-theme][data-wallpaper] textarea.nb-text-input::placeholder { color: #a8a29e; }
+html textarea.nb-text-input-dark,
+html[data-theme] textarea.nb-text-input-dark,
+html[data-theme][data-wallpaper] textarea.nb-text-input-dark {
+  background-color: #27272a !important;
+  color: #fafafa !important;
+  caret-color: #fafafa;
+  border-color: #f59e0b !important;
+}
+html textarea.nb-text-input-dark::placeholder,
+html[data-theme][data-wallpaper] textarea.nb-text-input-dark::placeholder { color: #a1a1aa; }
