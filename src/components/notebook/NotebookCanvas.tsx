@@ -1954,17 +1954,17 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
 
       {/* Paper zoom: only the paper changes size, scrolling inside its frame */}
       <div
-        className="absolute z-30 bottom-3 end-3 flex items-center gap-0.5 rounded-full bg-white/90 backdrop-blur border border-stone-200 shadow-lg p-0.5 text-stone-700"
+        className="absolute z-30 bottom-2 end-2 flex items-center rounded-full bg-white/80 backdrop-blur border border-stone-200 shadow-sm text-stone-700 opacity-80"
         style={{ touchAction: 'manipulation' }}
         dir="ltr"
       >
-        <button type="button" aria-label={locale === 'ar' ? 'تصغير الورقة' : 'Zoom out'} disabled={zoom <= 1.001} onClick={() => applyZoom(zoom / 1.25)} className="w-8 h-8 rounded-full inline-flex items-center justify-center text-base font-bold disabled:opacity-30 active:bg-stone-100">
+        <button type="button" aria-label={locale === 'ar' ? 'تصغير الورقة' : 'Zoom out'} disabled={zoom <= 1.001} onClick={() => applyZoom(zoom / 1.25)} className="w-6 h-6 rounded-full inline-flex items-center justify-center text-xs leading-none font-bold disabled:opacity-30 active:bg-stone-100">
           −
         </button>
-        <button type="button" aria-label={locale === 'ar' ? 'ملاءمة العرض' : 'Fit to width'} onClick={() => applyZoom(1)} className="min-w-11 h-8 px-1 rounded-full text-[11px] font-semibold tabular-nums active:bg-stone-100">
+        <button type="button" aria-label={locale === 'ar' ? 'ملاءمة العرض' : 'Fit to width'} onClick={() => applyZoom(1)} className="min-w-8 h-6 px-0.5 rounded-full text-[9px] font-semibold tabular-nums active:bg-stone-100">
           {Math.round(zoom * 100)}%
         </button>
-        <button type="button" aria-label={locale === 'ar' ? 'تكبير الورقة' : 'Zoom in'} disabled={zoom >= ZOOM_MAX - 0.001} onClick={() => applyZoom(zoom * 1.25)} className="w-8 h-8 rounded-full inline-flex items-center justify-center text-base font-bold disabled:opacity-30 active:bg-stone-100">
+        <button type="button" aria-label={locale === 'ar' ? 'تكبير الورقة' : 'Zoom in'} disabled={zoom >= ZOOM_MAX - 0.001} onClick={() => applyZoom(zoom * 1.25)} className="w-6 h-6 rounded-full inline-flex items-center justify-center text-xs leading-none font-bold disabled:opacity-30 active:bg-stone-100">
           +
         </button>
       </div>
