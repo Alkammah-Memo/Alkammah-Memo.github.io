@@ -118,8 +118,10 @@ async function callAuth(body: Record<string, unknown>): Promise<{ data: Record<s
 /** Finds out (once per visit) whether the server side is set up. Call it early: a later tap must start Google's popup without waiting. */
 export async function probeServer(): Promise<ServerState> {
   const r = await callAuth({ action: 'status' });
-  serverState = r.data && r.data.configured ? 'ready' : 'unavailable';
+  if (r.data || r.error !== 'not_signed_in') serverState = r.data && r.data.configured ? 'ready' : 'unavailable';
   if (r.data && r.data.linked === false && getGoogleLink().serverLinked) setGoogleLink({ serverLinked: false });
+  // the permanent sign-in lives on the server for the whole account, so any device that signs in to the app picks it up
+  if (r.data && r.data.linked === true && !getGoogleLink().serverLinked) setGoogleLink({ serverLinked: true });
   return serverState;
 }
 
