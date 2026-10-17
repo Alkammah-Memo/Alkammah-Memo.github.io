@@ -426,14 +426,26 @@ async function googleWrite(method: 'POST' | 'PATCH' | 'DELETE', path: string, to
     } catch {
       /* ignore */
     }
-    throw new Error(mapScopeError(res.status, msg));
+    throw Object.assign(new Error(mapScopeError(res.status, msg)), { status: res.status });
   }
   return res.json();
 }
 
 /** Creates or updates the event in Google; returns its id and Google's own "updated" time. */
 export async function pushMeeting(token: string, m: Meeting): Promise<{ id: string; updated: string }> {
-  const r = m.googleEventId ? await googleWrite('PATCH', `/${encodeURIComponent(m.googleEventId)}`, token, eventBody(m)) : await googleWrite('POST', '', token, eventBody(m));
+  let r: { id?: string; updated?: string } | null;
+  if (m.googleEventId) {
+    try {
+      r = await googleWrite('PATCH', `/${encodeURIComponent(m.googleEventId)}`, token, eventBody(m));
+    } catch (e) {
+      // the event does not exist in this Google account (another account was linked before, or it was deleted there): create it again
+      const st = (e as { status?: number }).status;
+      if (st !== 404 && st !== 410) throw e;
+      r = await googleWrite('POST', '', token, eventBody(m));
+    }
+  } else {
+    r = await googleWrite('POST', '', token, eventBody(m));
+  }
   return { id: (r?.id || m.googleEventId) as string, updated: r?.updated ? new Date(r.updated).toISOString() : new Date().toISOString() };
 }
 
