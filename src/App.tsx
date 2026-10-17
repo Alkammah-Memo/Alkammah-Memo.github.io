@@ -58,7 +58,7 @@ import { mergeRemote } from './lib/merge';
 import { keyManager } from './lib/ai/keyManager';
 import { usage } from './lib/ai/modelQueue';
 import { NotificationCenter } from './components/notifications/NotificationCenter';
-import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planSync, pushMeeting, deleteGoogleEvent, syncTasksToGoogle, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid } from './lib/googleCalendar';
+import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planSync, pushMeeting, deleteGoogleEvent, syncTasksToGoogle, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid, probeServer } from './lib/googleCalendar';
 import { chatWithAssistant } from './lib/ai/gemini';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { SettingsView } from './components/settings/SettingsView';
@@ -576,10 +576,12 @@ export default function App() {
 
   // Quietly refresh from Google when the app opens and every 10 minutes, as long as the sign-in is still valid
   useEffect(() => {
-    const run = () => {
+    const run = async () => {
+      // the account may already be linked from another device: find out before deciding
+      if (!getGoogleLink().serverLinked) await probeServer().catch(() => undefined);
       const l = getGoogleLink();
       // with the permanent link the token renews by itself; otherwise only while the browser sign-in is still valid
-      if (l.autoSync && l.clientId && l.lastSyncAt && (l.serverLinked || tokenIsValid(l))) syncGoogleCalendar(false).catch(() => undefined);
+      if (l.autoSync && l.clientId && (l.serverLinked || (l.lastSyncAt && tokenIsValid(l)))) syncGoogleCalendar(false).catch(() => undefined);
     };
     const first = setTimeout(run, 4000);
     const t = setInterval(run, 10 * 60_000);
