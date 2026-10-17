@@ -64,6 +64,8 @@ export interface Task {
   closureReason?: string;
   completionDate?: string;
   closureDate?: string;
+  /** manual position in the task list (smaller = higher); set when the user drags or moves a task */
+  sortOrder?: number;
   isArchived: boolean;
   version: number;
   createdAt: string;
