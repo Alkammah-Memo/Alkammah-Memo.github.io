@@ -43,6 +43,10 @@ import {
   Square,
   Palette,
   SlidersHorizontal,
+  Copy,
+  ClipboardPaste,
+  ListChecks,
+  X,
 } from 'lucide-react';
 
 export const PAPER_THEMES: Record<
@@ -437,12 +441,19 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   const zoomMaxRef = useRef(ZOOM_MAX);
   zoomMaxRef.current = ZOOM_MAX;
   const zoomWrapRef = useRef<HTMLDivElement | null>(null);
-  const zoomAnchorRef = useRef<{ fx: number; fy: number; mx: number; my: number } | null>(null);
   const zoomRef = useRef(1);
-  zoomRef.current = zoom;
+  const fitRef = useRef(1);
+  fitRef.current = fit;
+  const dirtyZoomRef = useRef(false);
+  const commitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const headerOverlayRef = useRef<HTMLDivElement | null>(null);
+  const layoutRef = useRef({ baseW: 0, headerH: 0 });
+  const pinchedRef = useRef(false);
+  const fitUpdateRef = useRef<() => void>(() => undefined);
   const cancelInkRef = useRef<() => void>(() => undefined);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [headerH, setHeaderH] = useState<number>(56);
+  layoutRef.current = { baseW: canvasWidth + 2, headerH };
   const [paperH, setPaperH] = useState<number | null>(null);
   const paperRef = useRef<HTMLDivElement | null>(null);
   const toolbarRef = useRef<HTMLDivElement | null>(null);
@@ -592,6 +603,15 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   // Lasso & Selection State
   const [lassoBox, setLassoBox] = useState<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
   const lassoBoxRef = useRef<{ startX: number; startY: number; endX: number; endY: number } | null>(null);
+  // what the lasso picked up (ink strokes and typed notes inside the frame) and what can be moved / cut / copied / pasted
+  interface Selection { strokeIds: string[]; noteIds: string[]; x0: number; y0: number; x1: number; y1: number }
+  const [selection, setSelection] = useState<Selection | null>(null);
+  const selectionRef = useRef<Selection | null>(null);
+  selectionRef.current = selection;
+  const [selDrag, setSelDrag] = useState<{ dx: number; dy: number } | null>(null);
+  const clipboardRef = useRef<{ strokes: InkStroke[]; notes: CanvasTextItem[]; n: number } | null>(null);
+  const [hasClip, setHasClip] = useState(false);
+  const makeSelectionRef = useRef<(box: { startX: number; startY: number; endX: number; endY: number }) => void>(() => undefined);
 
   // Version Control State
   const [isVersionModalOpen, setIsVersionModalOpen] = useState<boolean>(false);
@@ -873,6 +893,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
     setCanRedo(false);
     setLassoBox(null);
     lassoBoxRef.current = null;
+    setSelection(null);
     setSelectedPreviewVersion(null);
     setHeaderText(pageTitle || formatCairoHeaderDateTime(new Date(), locale));
     renderBackgroundCanvas(strokesRef.current);
@@ -883,12 +904,22 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   useLayoutEffect(() => {
     const container = containerRef.current;
     if (!container) return;
+    let lastW = container.clientWidth;
     const update = () => {
       const cs = getComputedStyle(container);
-      const avail =
-        container.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
+      const w = container.clientWidth;
+      const avail = w - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
       const s = Math.max(0.2, Math.min(1, avail / (canvasWidth + 2)));
-      setFit((prev) => (Math.abs(prev - s) < 0.001 ? prev : s));
+      // while zoomed, a scrollbar appearing must not re-fit the paper (that made the zoom jump); a real resize / rotation drops back to fit
+      if (zoomRef.current > 1.0005 && Math.abs(w - lastW) > 40) {
+        zoomRef.current = 1;
+        setZoom(1);
+      }
+      if (zoomRef.current <= 1.0005) {
+        lastW = w;
+        setFit((prev) => (Math.abs(prev - s) < 0.001 ? prev : s));
+      }
+      fitUpdateRef.current = update;
       const p = paperRef.current;
       if (p) setPaperH((prev) => (prev === p.offsetHeight ? prev : p.offsetHeight));
       const nd = getDpr();
@@ -906,31 +937,50 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   }, [canvasWidth]);
 
   // Zoom the paper inside its own frame: two-finger pinch, Ctrl/trackpad pinch, or the +/- buttons. Keeps the point under the fingers in place.
-  const applyZoom = useCallback((next: number, mx?: number, my?: number) => {
+  const applyZoom = useCallback((next: number, mx?: number, my?: number, commit = true) => {
     const z = Math.max(1, Math.min(zoomMaxRef.current, next));
-    if (Math.abs(z - zoomRef.current) < 0.001) return;
+    if (Math.abs(z - zoomRef.current) < 0.0005) return;
     const c = containerRef.current;
     const w = zoomWrapRef.current;
-    if (c && w) {
+    const pp = paperRef.current;
+    if (c && w && pp) {
+      // resize the paper straight in the DOM (no React re-render per finger move: that was the glitch), keeping the point under the fingers still
       const r = w.getBoundingClientRect();
       const cr = c.getBoundingClientRect();
       const x = mx ?? cr.left + cr.width / 2;
       const y = my ?? cr.top + cr.height / 2;
-      zoomAnchorRef.current = { fx: (x - r.left) / (r.width || 1), fy: (y - r.top) / (r.height || 1), mx: x, my: y };
+      const fx = (x - r.left) / (r.width || 1);
+      const fy = (y - r.top) / (r.height || 1);
+      const sc = fitRef.current * z;
+      w.style.width = `${layoutRef.current.baseW * sc}px`;
+      w.style.height = `${pp.offsetHeight * sc}px`;
+      pp.style.transform = `scale(${sc})`;
+      if (headerOverlayRef.current) headerOverlayRef.current.style.height = `${layoutRef.current.headerH * sc}px`;
+      const r2 = w.getBoundingClientRect();
+      c.scrollLeft += r2.left + fx * r2.width - x;
+      c.scrollTop += r2.top + fy * r2.height - y;
     }
-    setZoom(z);
+    zoomRef.current = z;
+    if (commitTimerRef.current) clearTimeout(commitTimerRef.current);
+    if (commit) {
+      dirtyZoomRef.current = false;
+      setZoom(z);
+    } else {
+      dirtyZoomRef.current = true;
+      commitTimerRef.current = setTimeout(() => {
+        if (dirtyZoomRef.current) {
+          dirtyZoomRef.current = false;
+          setZoom(zoomRef.current);
+        }
+      }, 250);
+    }
   }, []);
-  useLayoutEffect(() => {
-    const a = zoomAnchorRef.current;
-    zoomAnchorRef.current = null;
-    const c = containerRef.current;
-    const w = zoomWrapRef.current;
-    if (!a || !c || !w) return;
-    const r = w.getBoundingClientRect();
-    c.scrollLeft += r.left + a.fx * r.width - a.mx;
-    c.scrollTop += r.top + a.fy * r.height - a.my;
+  useEffect(() => {
+    zoomRef.current = zoom;
+    if (zoom <= 1.0005) fitUpdateRef.current(); // back to fit: pick up any size change that happened while zoomed
   }, [zoom]);
   useEffect(() => {
+    zoomRef.current = 1;
     setZoom(1);
   }, [pageId]);
   // after a rotation or resize the allowed zoom changes: never stay above it
@@ -947,11 +997,12 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
     const onStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
         cancelInkRef.current();
+        pinchedRef.current = true;
         pan = null;
         const m = mid(e.touches);
         pinch = { d0: dist(e.touches) || 1, z0: zoomRef.current, mx: m.x, my: m.y };
-      } else if (e.touches.length === 1 && zoomRef.current > 1.001 && interactionModeRef.current === 'stylus' && toolRef.current !== 'text' && toolRef.current !== 'lasso') {
-        // a finger only moves the zoomed paper here (the pen does the writing), so drag to pan
+      } else if (e.touches.length === 1 && zoomRef.current > 1.001 && interactionModeRef.current === 'stylus' && toolRef.current !== 'lasso') {
+        // a finger only moves the zoomed paper here (the pen does the writing), so drag to pan; a plain tap still reaches the tool
         pan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       }
     };
@@ -968,16 +1019,22 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       c.scrollBy(pinch.mx - m.x, pinch.my - m.y); // two fingers also drag the paper around
       pinch.mx = m.x;
       pinch.my = m.y;
-      applyZoom(pinch.z0 * (dist(e.touches) / pinch.d0), m.x, m.y);
+      applyZoom(pinch.z0 * (dist(e.touches) / pinch.d0), m.x, m.y, false);
     };
     const onEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) pinch = null;
-      if (e.touches.length === 0) pan = null;
+      if (e.touches.length === 0) {
+        pan = null;
+        if (dirtyZoomRef.current) {
+          dirtyZoomRef.current = false;
+          setZoom(zoomRef.current);
+        }
+      }
     };
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return; // plain scrolling stays normal
       e.preventDefault();
-      applyZoom(zoomRef.current * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
+      applyZoom(zoomRef.current * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY, false);
     };
     const block = (e: Event) => e.preventDefault(); // iOS Safari's own page pinch
     c.addEventListener('touchstart', onStart, { passive: true });
@@ -1198,6 +1255,8 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
           setLassoBox(null);
         } else {
           setLassoBox(lassoBoxRef.current);
+          const b = lassoBoxRef.current;
+          if (b) makeSelectionRef.current(b);
         }
         return;
       }
@@ -1298,20 +1357,43 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       const p = toPoint(e, rect);
 
       if (tool === 'text') {
-        const newNote: CanvasTextItem = {
-          id: `txt-${Date.now()}`,
-          x: p.x,
-          y: p.y,
-          text: '',
-          fontSize: fontSizeRef.current,
-          fontFamily: fontFamilyRef.current,
-          color: penColorRef.current,
+        const place = () => {
+          const newNote: CanvasTextItem = {
+            id: `txt-${Date.now()}`,
+            x: p.x,
+            y: p.y,
+            text: '',
+            fontSize: fontSizeRef.current,
+            fontFamily: fontFamilyRef.current,
+            color: penColorRef.current,
+          };
+          const updated = [...textNotesRef.current, newNote];
+          textNotesRef.current = updated;
+          setTextNotes(updated);
+          setActiveTextId(newNote.id);
+          scheduleSave(strokesRef.current, updated);
         };
-        const updated = [...textNotesRef.current, newNote];
-        textNotesRef.current = updated;
-        setTextNotes(updated);
-        setActiveTextId(newNote.id);
-        scheduleSave(strokesRef.current, updated);
+        if (!isTouch) {
+          place();
+          return;
+        }
+        // finger: only a real tap (no drag, no pinch) starts a note, so panning or zooming never leaves empty notes or pops the keyboard
+        const sx = e.clientX;
+        const sy = e.clientY;
+        let moved = false;
+        pinchedRef.current = false;
+        const mv = (ev: PointerEvent) => {
+          if (Math.hypot(ev.clientX - sx, ev.clientY - sy) > 10) moved = true;
+        };
+        const end = (ev: PointerEvent) => {
+          window.removeEventListener('pointermove', mv);
+          window.removeEventListener('pointerup', end);
+          window.removeEventListener('pointercancel', end);
+          if (ev.type === 'pointerup' && !moved && !pinchedRef.current) place();
+        };
+        window.addEventListener('pointermove', mv);
+        window.addEventListener('pointerup', end);
+        window.addEventListener('pointercancel', end);
         return;
       }
 
@@ -1320,6 +1402,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
         const box = { startX: p.x, startY: p.y, endX: p.x, endY: p.y };
         lassoBoxRef.current = box;
         setLassoBox(box);
+        setSelection(null);
         attach();
         return;
       }
@@ -1372,6 +1455,235 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   }, [pageId, renderBackgroundCanvas, scheduleSave, pushHistory]);
 
   // Undo / Redo handlers (arrays are never mutated in place, so no copies needed)
+  // ---- Lasso: pick up the ink and typed notes inside the box, then move, cut, copy, paste or delete them
+  const noteBox = (n: CanvasTextItem) => {
+    const lines = (n.text || ' ').split('\n');
+    const w = Math.max(40, Math.max(...lines.map((l) => l.length)) * n.fontSize * 0.55 + 16);
+    return { x0: n.x, y0: n.y, x1: n.x + w, y1: n.y + lines.length * n.fontSize * 1.4 + 12 };
+  };
+  const strokeBounds = (st: InkStroke) => {
+    let x0 = Infinity;
+    let y0 = Infinity;
+    let x1 = -Infinity;
+    let y1 = -Infinity;
+    for (const pt of st.points) {
+      if (pt.x < x0) x0 = pt.x;
+      if (pt.y < y0) y0 = pt.y;
+      if (pt.x > x1) x1 = pt.x;
+      if (pt.y > y1) y1 = pt.y;
+    }
+    const r = st.width / 2 + 1;
+    return { x0: x0 - r, y0: y0 - r, x1: x1 + r, y1: y1 + r };
+  };
+  const boundsOf = (strokes: InkStroke[], notes: CanvasTextItem[]): { x0: number; y0: number; x1: number; y1: number } | null => {
+    const all = [...strokes.map(strokeBounds), ...notes.map(noteBox)];
+    if (!all.length) return null;
+    return {
+      x0: Math.min(...all.map((b) => b.x0)),
+      y0: Math.min(...all.map((b) => b.y0)),
+      x1: Math.max(...all.map((b) => b.x1)),
+      y1: Math.max(...all.map((b) => b.y1)),
+    };
+  };
+  const clearSelection = () => {
+    setSelection(null);
+    setSelDrag(null);
+    setLassoBox(null);
+    lassoBoxRef.current = null;
+  };
+  const makeSelection = (box: { startX: number; startY: number; endX: number; endY: number }) => {
+    const bx0 = Math.min(box.startX, box.endX);
+    const bx1 = Math.max(box.startX, box.endX);
+    const by0 = Math.min(box.startY, box.endY);
+    const by1 = Math.max(box.startY, box.endY);
+    if (bx1 - bx0 < 6 && by1 - by0 < 6) {
+      clearSelection();
+      return;
+    }
+    const inside = (x: number, y: number) => x >= bx0 && x <= bx1 && y >= by0 && y <= by1;
+    const strokes = strokesRef.current.filter((st) => {
+      if (st.tool === 'eraser' || !st.points.length) return false;
+      const n = st.points.filter((pt) => inside(pt.x, pt.y)).length;
+      return n / st.points.length >= 0.5;
+    });
+    const notes = textNotesRef.current.filter((n) => {
+      const b = noteBox(n);
+      return inside((b.x0 + b.x1) / 2, (b.y0 + b.y1) / 2);
+    });
+    const b = boundsOf(strokes, notes);
+    if (!b) {
+      setSelection(null); // nothing inside: keep the plain box (still usable to turn the area into tasks)
+      return;
+    }
+    setSelection({ strokeIds: strokes.map((st) => st.id), noteIds: notes.map((n) => n.id), ...b });
+  };
+  makeSelectionRef.current = makeSelection;
+
+  const selectedItems = () => {
+    const sel = selectionRef.current;
+    if (!sel) return { strokes: [] as InkStroke[], notes: [] as CanvasTextItem[] };
+    const ids = new Set(sel.strokeIds);
+    const nids = new Set(sel.noteIds);
+    return { strokes: strokesRef.current.filter((st) => ids.has(st.id)), notes: textNotesRef.current.filter((n) => nids.has(n.id)) };
+  };
+  const selCopy = () => {
+    const { strokes, notes } = selectedItems();
+    if (!strokes.length && !notes.length) return;
+    clipboardRef.current = { strokes: JSON.parse(JSON.stringify(strokes)), notes: JSON.parse(JSON.stringify(notes)), n: 0 };
+    setHasClip(true);
+    showNotice(locale === 'ar' ? 'تم النسخ' : 'Copied');
+  };
+  const selDelete = () => {
+    const sel = selectionRef.current;
+    if (!sel) return;
+    const ids = new Set(sel.strokeIds);
+    const nids = new Set(sel.noteIds);
+    if (sel.strokeIds.length) {
+      pushHistory(strokesRef.current);
+      strokesRef.current = strokesRef.current.filter((st) => !ids.has(st.id));
+      renderBackgroundCanvas(strokesRef.current);
+    }
+    if (sel.noteIds.length) {
+      textNotesRef.current = textNotesRef.current.filter((n) => !nids.has(n.id));
+      setTextNotes(textNotesRef.current);
+    }
+    scheduleSave(strokesRef.current, textNotesRef.current);
+    clearSelection();
+  };
+  const selCut = () => {
+    selCopy();
+    selDelete();
+  };
+  const selPaste = () => {
+    const clip = clipboardRef.current;
+    if (!clip) return;
+    clip.n += 1;
+    const off = 28 * clip.n;
+    const W = logicalRef.current.w;
+    const H = logicalRef.current.h;
+    const b0 = boundsOf(clip.strokes, clip.notes);
+    // keep the pasted copy on the paper
+    const dx = b0 ? Math.max(-b0.x0, Math.min(off, W - b0.x1)) : off;
+    const dy = b0 ? Math.max(-b0.y0, Math.min(off, H - b0.y1)) : off;
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 6)}`;
+    const strokes: InkStroke[] = clip.strokes.map((st, i) => ({
+      ...st,
+      id: `stroke-${stamp}-${i}`,
+      pageId,
+      timestamp: Date.now(),
+      points: st.points.map((pt) => ({ ...pt, x: pt.x + dx, y: pt.y + dy })),
+    }));
+    const notes: CanvasTextItem[] = clip.notes.map((n, i) => ({ ...n, id: `txt-${stamp}-${i}`, x: n.x + dx, y: n.y + dy }));
+    if (strokes.length) {
+      pushHistory(strokesRef.current);
+      strokesRef.current = [...strokesRef.current, ...strokes];
+      renderBackgroundCanvas(strokesRef.current);
+    }
+    if (notes.length) {
+      textNotesRef.current = [...textNotesRef.current, ...notes];
+      setTextNotes(textNotesRef.current);
+    }
+    scheduleSave(strokesRef.current, textNotesRef.current);
+    const b = boundsOf(strokes, notes);
+    if (b) setSelection({ strokeIds: strokes.map((st) => st.id), noteIds: notes.map((n) => n.id), ...b });
+    setLassoBox(null);
+    lassoBoxRef.current = null;
+  };
+
+  // drag inside the frame to move what is selected: the moving ink is drawn live on the top canvas, committed when released
+  const onFramePointerDown = (e: React.PointerEvent) => {
+    const sel = selectionRef.current;
+    const active = activeCanvasRef.current;
+    if (!sel || !active || previewRef.current) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const frame = e.currentTarget as HTMLElement;
+    try {
+      frame.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    const rect = active.getBoundingClientRect();
+    const ratio = logicalRef.current.w / (rect.width || 1);
+    const W = logicalRef.current.w;
+    const H = logicalRef.current.h;
+    const ids = new Set(sel.strokeIds);
+    const moving = strokesRef.current.filter((st) => ids.has(st.id));
+    const rest = strokesRef.current.filter((st) => !ids.has(st.id));
+    const theme = PAPER_THEMES[paperColorRef.current] || PAPER_THEMES.cream;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let dx = 0;
+    let dy = 0;
+    let raf: number | null = null;
+    let started = false;
+    const drawMoving = () => {
+      raf = null;
+      const ctx = active.getContext('2d');
+      if (!ctx) return;
+      const d = dprRef.current;
+      ctx.setTransform(1, 0, 0, 1, 0, 0);
+      ctx.clearRect(0, 0, active.width, active.height);
+      ctx.setTransform(d, 0, 0, d, d * dx, d * dy);
+      for (const st of moving) paintStroke(ctx, st, theme);
+      setSelDrag({ dx, dy });
+    };
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== e.pointerId) return;
+      ev.preventDefault();
+      const rdx = (ev.clientX - sx) * ratio;
+      const rdy = (ev.clientY - sy) * ratio;
+      if (!started && Math.hypot(rdx, rdy) < 3) return;
+      if (!started) {
+        started = true;
+        if (moving.length) renderBackgroundCanvas(rest); // lift the selected ink off the paper while it moves
+      }
+      dx = Math.max(-sel.x0, Math.min(rdx, W - sel.x1));
+      dy = Math.max(-sel.y0, Math.min(rdy, H - sel.y1));
+      if (raf === null) raf = requestAnimationFrame(drawMoving);
+    };
+    const finishMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== e.pointerId) return;
+      frame.removeEventListener('pointermove', onMove);
+      frame.removeEventListener('pointerup', finishMove);
+      frame.removeEventListener('pointercancel', finishMove);
+      try {
+        frame.releasePointerCapture(e.pointerId);
+      } catch {
+        /* ignore */
+      }
+      if (raf !== null) cancelAnimationFrame(raf);
+      const ctx = active.getContext('2d');
+      if (ctx) {
+        ctx.setTransform(1, 0, 0, 1, 0, 0);
+        ctx.clearRect(0, 0, active.width, active.height);
+      }
+      setSelDrag(null);
+      if (!started || ev.type === 'pointercancel' || (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5)) {
+        if (started) renderBackgroundCanvas(strokesRef.current);
+        return;
+      }
+      if (moving.length) {
+        pushHistory(strokesRef.current);
+        strokesRef.current = strokesRef.current.map((st) =>
+          ids.has(st.id) ? { ...st, points: st.points.map((pt) => ({ ...pt, x: pt.x + dx, y: pt.y + dy })) } : st
+        );
+        renderBackgroundCanvas(strokesRef.current);
+      }
+      if (sel.noteIds.length) {
+        const nids = new Set(sel.noteIds);
+        textNotesRef.current = textNotesRef.current.map((n) => (nids.has(n.id) ? { ...n, x: n.x + dx, y: n.y + dy } : n));
+        setTextNotes(textNotesRef.current);
+      }
+      setSelection({ ...sel, x0: sel.x0 + dx, y0: sel.y0 + dy, x1: sel.x1 + dx, y1: sel.y1 + dy });
+      scheduleSave(strokesRef.current, textNotesRef.current);
+    };
+    frame.addEventListener('pointermove', onMove, { passive: false });
+    frame.addEventListener('pointerup', finishMove);
+    frame.addEventListener('pointercancel', finishMove);
+  };
+
   const handleUndo = () => {
     if (previewRef.current) return;
     const last = historyRef.current.pop();
@@ -1382,6 +1694,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
     canRedoRef.current = true;
     setCanUndo(canUndoRef.current);
     setCanRedo(true);
+    setSelection(null);
     renderBackgroundCanvas(last);
     scheduleSave(last, textNotesRef.current);
   };
@@ -1393,6 +1706,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
     historyRef.current.push(strokesRef.current);
     if (historyRef.current.length > 100) historyRef.current.shift();
     strokesRef.current = next;
+    setSelection(null);
     canUndoRef.current = true;
     canRedoRef.current = redoHistoryRef.current.length > 0;
     setCanUndo(true);
@@ -1446,6 +1760,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
     setActiveTextId(null);
     setLassoBox(null);
     lassoBoxRef.current = null;
+    setSelection(null);
     if (version) {
       renderBackgroundCanvas(version.strokes || []);
       setTextNotes(version.textNotes || []);
@@ -1809,6 +2124,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                     if (id !== 'lasso') {
                       setLassoBox(null);
                       lassoBoxRef.current = null;
+                      setSelection(null);
                     }
                   }}
                   title={label}
@@ -1952,6 +2268,40 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
         </div>
       )}
 
+      {/* Selection actions (lasso): cut, copy, paste, delete, make tasks, done */}
+      {tool === 'lasso' && (selection || hasClip) && (
+        <div className="absolute z-30 bottom-2 left-1/2 -translate-x-1/2 flex items-center gap-0.5 rounded-full bg-white/95 backdrop-blur border border-stone-200 shadow-lg p-0.5 text-stone-700" dir="ltr" style={{ touchAction: 'manipulation' }}>
+          {selection && (
+            <>
+              <button type="button" onClick={selCut} aria-label={locale === 'ar' ? 'قص' : 'Cut'} title={locale === 'ar' ? 'قص' : 'Cut'} className="w-8 h-8 rounded-full inline-flex items-center justify-center active:bg-stone-100">
+                <Scissors className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={selCopy} aria-label={locale === 'ar' ? 'نسخ' : 'Copy'} title={locale === 'ar' ? 'نسخ' : 'Copy'} className="w-8 h-8 rounded-full inline-flex items-center justify-center active:bg-stone-100">
+                <Copy className="w-4 h-4" />
+              </button>
+            </>
+          )}
+          {hasClip && (
+            <button type="button" onClick={selPaste} aria-label={locale === 'ar' ? 'لصق' : 'Paste'} title={locale === 'ar' ? 'لصق' : 'Paste'} className="w-8 h-8 rounded-full inline-flex items-center justify-center active:bg-stone-100">
+              <ClipboardPaste className="w-4 h-4" />
+            </button>
+          )}
+          {selection && (
+            <>
+              <button type="button" onClick={selDelete} aria-label={locale === 'ar' ? 'حذف' : 'Delete'} title={locale === 'ar' ? 'حذف' : 'Delete'} className="w-8 h-8 rounded-full inline-flex items-center justify-center text-rose-600 active:bg-rose-50">
+                <Trash2 className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={handleExtractSelection} aria-label={locale === 'ar' ? 'تحويل إلى مهام' : 'Make tasks'} title={locale === 'ar' ? 'تحويل إلى مهام' : 'Make tasks'} className="w-8 h-8 rounded-full inline-flex items-center justify-center text-[#0071e3] active:bg-blue-50">
+                <ListChecks className="w-4 h-4" />
+              </button>
+              <button type="button" onClick={clearSelection} aria-label={locale === 'ar' ? 'إنهاء' : 'Done'} title={locale === 'ar' ? 'إنهاء' : 'Done'} className="w-8 h-8 rounded-full inline-flex items-center justify-center active:bg-stone-100">
+                <X className="w-4 h-4" />
+              </button>
+            </>
+          )}
+        </div>
+      )}
+
       {/* Paper zoom: only the paper changes size, scrolling inside its frame */}
       <div
         className="absolute z-30 bottom-2 end-2 flex items-center rounded-full bg-white/80 backdrop-blur border border-stone-200 shadow-sm text-stone-700 opacity-80"
@@ -2000,6 +2350,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
         {/* Page controls live inside the paper's header row, next to the title: no extra bar above the paper */}
         {!hideTools && (
           <div
+            ref={headerOverlayRef}
             className="absolute z-20 flex items-center"
             style={{ top: 0, height: headerH * scale, [locale === 'ar' ? 'left' : 'right']: 8 }}
           >
@@ -2306,8 +2657,29 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
               }`}
             />
 
+            {/* Selection frame: drag it to move what is inside */}
+            {selection && tool === 'lasso' && (
+              <div
+                onPointerDown={onFramePointerDown}
+                style={{
+                  position: 'absolute',
+                  left: `${selection.x0 - 6}px`,
+                  top: `${selection.y0 - 6}px`,
+                  width: `${selection.x1 - selection.x0 + 12}px`,
+                  height: `${selection.y1 - selection.y0 + 12}px`,
+                  transform: selDrag ? `translate(${selDrag.dx}px, ${selDrag.dy}px)` : undefined,
+                  border: `${Math.max(2, 2 / scale)}px dashed #2563EB`,
+                  borderRadius: `${Math.max(4, 4 / scale)}px`,
+                  backgroundColor: 'rgba(37, 99, 235, 0.07)',
+                  cursor: selDrag ? 'grabbing' : 'move',
+                  touchAction: 'none',
+                  zIndex: 25,
+                }}
+              />
+            )}
+
             {/* Lasso Selection Box Render */}
-            {lassoBox && (
+            {lassoBox && !selection && (
               <div
                 style={{
                   position: 'absolute',
@@ -2340,6 +2712,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                     fontSize: `${note.fontSize}px`,
                     color: displayColor,
                     zIndex: 20,
+                    transform: selDrag && selection?.noteIds.includes(note.id) ? `translate(${selDrag.dx}px, ${selDrag.dy}px)` : undefined,
                     pointerEvents:
                       !selectedPreviewVersion && (tool === 'text' || activeTextId === note.id) ? 'auto' : 'none',
                   }}
@@ -2416,7 +2789,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       {notice && (
         <div
           role="status"
-          className="fixed bottom-6 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-stone-900/90 text-white text-xs font-semibold shadow-xl"
+          className="fixed bottom-16 left-1/2 -translate-x-1/2 z-50 px-4 py-2 rounded-xl bg-stone-900/90 text-white text-xs font-semibold shadow-xl"
         >
           {notice}
         </div>
