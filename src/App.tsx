@@ -453,6 +453,26 @@ export default function App() {
     });
   };
 
+  // Manual task order (drag / arrows in the Task Center): store each task's rank so it survives reloads and syncs to other devices
+  const handleReorderTasks = async (orderedIds: string[]) => {
+    const rank = new Map(orderedIds.map((id, i) => [id, i]));
+    const now = new Date().toISOString();
+    const changed: Task[] = [];
+    const next = tasks.map((t) => {
+      const r = rank.get(t.id);
+      if (r === undefined || t.sortOrder === r) return t;
+      const u: Task = { ...t, sortOrder: r, updatedAt: now };
+      changed.push(u);
+      return u;
+    });
+    if (!changed.length) return;
+    setTasks(next);
+    for (const u of changed) {
+      await localDB.put('tasks', u);
+      syncTaskToCloud(u).catch(console.warn);
+    }
+  };
+
   const handleDeleteTask = async (taskId: string) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
@@ -1662,6 +1682,7 @@ export default function App() {
           onUpdateTaskStatus={handleUpdateTaskStatus}
           onToggleArchive={handleToggleArchiveTask}
           onDeleteTask={handleDeleteTask}
+          onReorderTasks={handleReorderTasks}
           departments={departments}
         />
       )}
