@@ -1002,7 +1002,13 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
         pan = null;
         const m = mid(e.touches);
         pinch = { d0: dist(e.touches) || 1, z0: zoomRef.current, mx: m.x, my: m.y };
-      } else if (e.touches.length === 1 && zoomRef.current > 1.001 && interactionModeRef.current === 'stylus' && toolRef.current !== 'lasso') {
+      } else if (
+        e.touches.length === 1 &&
+        zoomRef.current > 1.001 &&
+        interactionModeRef.current === 'stylus' &&
+        toolRef.current !== 'lasso' &&
+        !(e.target as HTMLElement | null)?.closest?.('[data-nb-nopan]') // dragging a text box or a selection must not scroll the paper
+      ) {
         // a finger only moves the zoomed paper here (the pen does the writing), so drag to pan; a plain tap still reaches the tool
         pan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       }
@@ -2709,6 +2715,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
             {/* Selection frame: drag it to move what is inside */}
             {selection && tool === 'lasso' && (
               <div
+                data-nb-nopan
                 onPointerDown={onFramePointerDown}
                 style={{
                   position: 'absolute',
@@ -2769,6 +2776,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                 >
                   {tool === 'text' && !selectedPreviewVersion && (
                     <div
+                      data-nb-nopan
                       onPointerDown={onNoteDragStart(note.id)}
                       title={locale === 'ar' ? 'اسحب لتحريك المربع' : 'Drag to move this box'}
                       aria-label={locale === 'ar' ? 'تحريك' : 'Move'}
