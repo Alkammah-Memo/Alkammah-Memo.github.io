@@ -428,7 +428,19 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   dprRef.current = dpr;
   const logicalRef = useRef({ w: canvasWidth, h: canvasHeight });
   logicalRef.current = { w: canvasWidth, h: canvasHeight };
-  const [scale, setScale] = useState<number>(1);
+  const [fit, setFit] = useState<number>(1);
+  // Pinch / button zoom of the paper only (1 = fit to width). The page, bars and tabs never move: the paper scrolls inside its own frame.
+  const [zoom, setZoom] = useState<number>(1);
+  const scale = fit * zoom;
+  // how far you can zoom depends on the screen: a small phone (paper shrunk a lot) may zoom further than an iPad, up to about 160% of the paper's real size
+  const ZOOM_MAX = Math.min(6, Math.max(2, 1.6 / fit));
+  const zoomMaxRef = useRef(ZOOM_MAX);
+  zoomMaxRef.current = ZOOM_MAX;
+  const zoomWrapRef = useRef<HTMLDivElement | null>(null);
+  const zoomAnchorRef = useRef<{ fx: number; fy: number; mx: number; my: number } | null>(null);
+  const zoomRef = useRef(1);
+  zoomRef.current = zoom;
+  const cancelInkRef = useRef<() => void>(() => undefined);
   const headerRef = useRef<HTMLDivElement | null>(null);
   const [headerH, setHeaderH] = useState<number>(56);
   const [paperH, setPaperH] = useState<number | null>(null);
@@ -876,7 +888,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       const avail =
         container.clientWidth - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
       const s = Math.max(0.2, Math.min(1, avail / (canvasWidth + 2)));
-      setScale((prev) => (Math.abs(prev - s) < 0.001 ? prev : s));
+      setFit((prev) => (Math.abs(prev - s) < 0.001 ? prev : s));
       const p = paperRef.current;
       if (p) setPaperH((prev) => (prev === p.offsetHeight ? prev : p.offsetHeight));
       const nd = getDpr();
@@ -892,6 +904,83 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       window.removeEventListener('resize', update);
     };
   }, [canvasWidth]);
+
+  // Zoom the paper inside its own frame: two-finger pinch, Ctrl/trackpad pinch, or the +/- buttons. Keeps the point under the fingers in place.
+  const applyZoom = useCallback((next: number, mx?: number, my?: number) => {
+    const z = Math.max(1, Math.min(zoomMaxRef.current, next));
+    if (Math.abs(z - zoomRef.current) < 0.001) return;
+    const c = containerRef.current;
+    const w = zoomWrapRef.current;
+    if (c && w) {
+      const r = w.getBoundingClientRect();
+      const cr = c.getBoundingClientRect();
+      const x = mx ?? cr.left + cr.width / 2;
+      const y = my ?? cr.top + cr.height / 2;
+      zoomAnchorRef.current = { fx: (x - r.left) / (r.width || 1), fy: (y - r.top) / (r.height || 1), mx: x, my: y };
+    }
+    setZoom(z);
+  }, []);
+  useLayoutEffect(() => {
+    const a = zoomAnchorRef.current;
+    zoomAnchorRef.current = null;
+    const c = containerRef.current;
+    const w = zoomWrapRef.current;
+    if (!a || !c || !w) return;
+    const r = w.getBoundingClientRect();
+    c.scrollLeft += r.left + a.fx * r.width - a.mx;
+    c.scrollTop += r.top + a.fy * r.height - a.my;
+  }, [zoom]);
+  useEffect(() => {
+    setZoom(1);
+  }, [pageId]);
+  // after a rotation or resize the allowed zoom changes: never stay above it
+  useEffect(() => {
+    setZoom((z) => Math.min(z, ZOOM_MAX));
+  }, [ZOOM_MAX]);
+  useEffect(() => {
+    const c = containerRef.current;
+    if (!c) return;
+    let pinch: { d0: number; z0: number } | null = null;
+    const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
+    const mid = (t: TouchList) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
+    const onStart = (e: TouchEvent) => {
+      if (e.touches.length === 2) {
+        cancelInkRef.current();
+        pinch = { d0: dist(e.touches) || 1, z0: zoomRef.current };
+      }
+    };
+    const onMove = (e: TouchEvent) => {
+      if (!pinch || e.touches.length !== 2) return;
+      e.preventDefault();
+      const m = mid(e.touches);
+      applyZoom(pinch.z0 * (dist(e.touches) / pinch.d0), m.x, m.y);
+    };
+    const onEnd = (e: TouchEvent) => {
+      if (e.touches.length < 2) pinch = null;
+    };
+    const onWheel = (e: WheelEvent) => {
+      if (!e.ctrlKey) return; // plain scrolling stays normal
+      e.preventDefault();
+      applyZoom(zoomRef.current * Math.exp(-e.deltaY * 0.01), e.clientX, e.clientY);
+    };
+    const block = (e: Event) => e.preventDefault(); // iOS Safari's own page pinch
+    c.addEventListener('touchstart', onStart, { passive: true });
+    c.addEventListener('touchmove', onMove, { passive: false });
+    c.addEventListener('touchend', onEnd, { passive: true });
+    c.addEventListener('touchcancel', onEnd, { passive: true });
+    c.addEventListener('wheel', onWheel, { passive: false });
+    c.addEventListener('gesturestart', block, { passive: false });
+    c.addEventListener('gesturechange', block, { passive: false });
+    return () => {
+      c.removeEventListener('touchstart', onStart);
+      c.removeEventListener('touchmove', onMove);
+      c.removeEventListener('touchend', onEnd);
+      c.removeEventListener('touchcancel', onEnd);
+      c.removeEventListener('wheel', onWheel);
+      c.removeEventListener('gesturestart', block);
+      c.removeEventListener('gesturechange', block);
+    };
+  }, [applyZoom]);
 
   // NATIVE POINTER BINDINGS (zero-latency ink, coalesced events, no React state per move)
   useEffect(() => {
@@ -931,6 +1020,11 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       lassoRaf: number | null;
     }
     let session = null as Session | null;
+    let sessionIsTouch = false;
+    // a second finger means pinch-zoom: drop a half-drawn finger stroke instead of leaving a stray mark
+    cancelInkRef.current = () => {
+      if (session && sessionIsTouch) finish({ pointerId: session.pointerId, preventDefault: () => undefined } as PointerEvent, true);
+    };
     const ERASER_RADIUS = 16;
 
     const toPoint = (e: PointerEvent, rect: Rect): InkPoint => ({
@@ -1147,6 +1241,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       const mode = interactionModeRef.current;
       const tool = toolRef.current;
       const isTouch = e.pointerType === 'touch';
+      sessionIsTouch = isTouch;
       // Palm rejection: touch only inks in none of the ink tools; allowed for text & lasso
       if (isTouch && mode === 'stylus' && tool !== 'text' && tool !== 'lasso') return;
 
@@ -1841,6 +1936,23 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
         </div>
       )}
 
+      {/* Paper zoom: only the paper changes size, scrolling inside its frame */}
+      <div
+        className="absolute z-30 bottom-3 end-3 flex items-center gap-0.5 rounded-full bg-white/90 backdrop-blur border border-stone-200 shadow-lg p-0.5 text-stone-700"
+        style={{ touchAction: 'manipulation' }}
+        dir="ltr"
+      >
+        <button type="button" aria-label={locale === 'ar' ? 'تصغير الورقة' : 'Zoom out'} disabled={zoom <= 1.001} onClick={() => applyZoom(zoom / 1.25)} className="w-8 h-8 rounded-full inline-flex items-center justify-center text-base font-bold disabled:opacity-30 active:bg-stone-100">
+          −
+        </button>
+        <button type="button" aria-label={locale === 'ar' ? 'ملاءمة العرض' : 'Fit to width'} onClick={() => applyZoom(1)} className="min-w-11 h-8 px-1 rounded-full text-[11px] font-semibold tabular-nums active:bg-stone-100">
+          {Math.round(zoom * 100)}%
+        </button>
+        <button type="button" aria-label={locale === 'ar' ? 'تكبير الورقة' : 'Zoom in'} disabled={zoom >= ZOOM_MAX - 0.001} onClick={() => applyZoom(zoom * 1.25)} className="w-8 h-8 rounded-full inline-flex items-center justify-center text-base font-bold disabled:opacity-30 active:bg-stone-100">
+          +
+        </button>
+      </div>
+
       {/* Paper Canvas Viewport */}
       <div
         ref={containerRef}
@@ -1862,6 +1974,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
         }}
       >
         <div
+          ref={zoomWrapRef}
           className="relative shrink-0"
           style={{
             width: (canvasWidth + 2) * scale,
