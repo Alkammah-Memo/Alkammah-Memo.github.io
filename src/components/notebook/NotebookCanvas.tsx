@@ -1972,7 +1972,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       {/* Paper Canvas Viewport */}
       <div
         ref={containerRef}
-        className={`flex-1 overflow-auto p-2 sm:p-4 lg:p-5 flex flex-col items-center select-none transition-colors duration-200 ${
+        className={`flex-1 overflow-auto p-2 sm:p-4 lg:p-5 flex flex-col select-none transition-colors duration-200 ${
           currentTheme.isDark ? 'bg-[#0e0f12]' : 'bg-[#e5e5ea]/80'
         }`}
         style={{
@@ -1991,7 +1991,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       >
         <div
           ref={zoomWrapRef}
-          className="relative shrink-0"
+          className="relative shrink-0 mx-auto"
           style={{
             width: (canvasWidth + 2) * scale,
             height: paperH != null ? paperH * scale : undefined,
