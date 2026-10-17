@@ -940,23 +940,39 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
   useEffect(() => {
     const c = containerRef.current;
     if (!c) return;
-    let pinch: { d0: number; z0: number } | null = null;
+    let pinch: { d0: number; z0: number; mx: number; my: number } | null = null;
+    let pan: { x: number; y: number } | null = null;
     const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
     const mid = (t: TouchList) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
     const onStart = (e: TouchEvent) => {
       if (e.touches.length === 2) {
         cancelInkRef.current();
-        pinch = { d0: dist(e.touches) || 1, z0: zoomRef.current };
+        pan = null;
+        const m = mid(e.touches);
+        pinch = { d0: dist(e.touches) || 1, z0: zoomRef.current, mx: m.x, my: m.y };
+      } else if (e.touches.length === 1 && zoomRef.current > 1.001 && interactionModeRef.current === 'stylus' && toolRef.current !== 'text' && toolRef.current !== 'lasso') {
+        // a finger only moves the zoomed paper here (the pen does the writing), so drag to pan
+        pan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
       }
     };
     const onMove = (e: TouchEvent) => {
+      if (pan && e.touches.length === 1) {
+        e.preventDefault();
+        c.scrollBy(pan.x - e.touches[0].clientX, pan.y - e.touches[0].clientY);
+        pan = { x: e.touches[0].clientX, y: e.touches[0].clientY };
+        return;
+      }
       if (!pinch || e.touches.length !== 2) return;
       e.preventDefault();
       const m = mid(e.touches);
+      c.scrollBy(pinch.mx - m.x, pinch.my - m.y); // two fingers also drag the paper around
+      pinch.mx = m.x;
+      pinch.my = m.y;
       applyZoom(pinch.z0 * (dist(e.touches) / pinch.d0), m.x, m.y);
     };
     const onEnd = (e: TouchEvent) => {
       if (e.touches.length < 2) pinch = null;
+      if (e.touches.length === 0) pan = null;
     };
     const onWheel = (e: WheelEvent) => {
       if (!e.ctrlKey) return; // plain scrolling stays normal
