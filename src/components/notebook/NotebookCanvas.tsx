@@ -44,6 +44,7 @@ import {
   Palette,
   SlidersHorizontal,
   Copy,
+  Move,
   ClipboardPaste,
   ListChecks,
   X,
@@ -1590,6 +1591,54 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
     lassoBoxRef.current = null;
   };
 
+  // drag a typed box anywhere on the paper by its handle
+  const onNoteDragStart = (noteId: string) => (e: React.PointerEvent) => {
+    const active = activeCanvasRef.current;
+    const note = textNotesRef.current.find((n) => n.id === noteId);
+    if (!active || !note || previewRef.current) return;
+    if (e.pointerType === 'mouse' && e.button !== 0) return;
+    e.preventDefault();
+    e.stopPropagation();
+    const handle = e.currentTarget as HTMLElement;
+    const box = handle.parentElement as HTMLElement;
+    try {
+      handle.setPointerCapture(e.pointerId);
+    } catch {
+      /* ignore */
+    }
+    const ratio = logicalRef.current.w / (active.getBoundingClientRect().width || 1);
+    const W = logicalRef.current.w;
+    const H = logicalRef.current.h;
+    const bw = box.offsetWidth;
+    const bh = box.offsetHeight;
+    const sx = e.clientX;
+    const sy = e.clientY;
+    let dx = 0;
+    let dy = 0;
+    const onMove = (ev: PointerEvent) => {
+      if (ev.pointerId !== e.pointerId) return;
+      ev.preventDefault();
+      dx = Math.max(-note.x, Math.min((ev.clientX - sx) * ratio, W - bw - note.x));
+      dy = Math.max(-note.y, Math.min((ev.clientY - sy) * ratio, H - bh - note.y));
+      box.style.transform = `translate(${dx}px, ${dy}px)`;
+    };
+    const finishDrag = (ev: PointerEvent) => {
+      if (ev.pointerId !== e.pointerId) return;
+      handle.removeEventListener('pointermove', onMove);
+      handle.removeEventListener('pointerup', finishDrag);
+      handle.removeEventListener('pointercancel', finishDrag);
+      box.style.transform = '';
+      if (ev.type === 'pointercancel' || (Math.abs(dx) < 0.5 && Math.abs(dy) < 0.5)) return;
+      const updated = textNotesRef.current.map((n) => (n.id === noteId ? { ...n, x: n.x + dx, y: n.y + dy } : n));
+      textNotesRef.current = updated;
+      setTextNotes(updated);
+      scheduleSave(strokesRef.current, updated);
+    };
+    handle.addEventListener('pointermove', onMove, { passive: false });
+    handle.addEventListener('pointerup', finishDrag);
+    handle.addEventListener('pointercancel', finishDrag);
+  };
+
   // drag inside the frame to move what is selected: the moving ink is drawn live on the top canvas, committed when released
   const onFramePointerDown = (e: React.PointerEvent) => {
     const sel = selectionRef.current;
@@ -2719,6 +2768,23 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                   className="group select-text"
                 >
                   {tool === 'text' && !selectedPreviewVersion && (
+                    <div
+                      onPointerDown={onNoteDragStart(note.id)}
+                      title={locale === 'ar' ? 'اسحب لتحريك المربع' : 'Drag to move this box'}
+                      aria-label={locale === 'ar' ? 'تحريك' : 'Move'}
+                      className="absolute z-10 flex items-center justify-center rounded-full bg-amber-500 text-white shadow cursor-grab active:cursor-grabbing"
+                      style={{
+                        width: Math.min(56, Math.max(20, 24 / scale)),
+                        height: Math.min(56, Math.max(20, 24 / scale)),
+                        left: -Math.min(56, Math.max(20, 24 / scale)) * 0.6,
+                        top: -Math.min(56, Math.max(20, 24 / scale)) * 0.9,
+                        touchAction: 'none',
+                      }}
+                    >
+                      <Move style={{ width: '60%', height: '60%' }} />
+                    </div>
+                  )}
+                  {tool === 'text' && !selectedPreviewVersion && (
                     <button
                       type="button"
                       onPointerDown={(e) => e.stopPropagation()}
@@ -2762,8 +2828,8 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
                       placeholder={locale === 'ar' ? 'اكتب ملاحظتك هنا...' : 'Type note here...'}
                       className={`p-1.5 rounded border focus:outline-none min-w-[200px] resize ${
                         currentTheme.isDark
-                          ? 'bg-zinc-800 text-white border-amber-500 shadow-lg'
-                          : 'bg-white/90 text-stone-900 border-amber-500 shadow-sm'
+                          ? 'nb-text-input-dark bg-zinc-800 text-white border-amber-500 shadow-lg'
+                          : 'nb-text-input bg-white/90 text-stone-900 border-amber-500 shadow-sm'
                       }`}
                     />
                   ) : (
