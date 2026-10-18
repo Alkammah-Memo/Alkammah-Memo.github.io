@@ -637,7 +637,13 @@ export default function App() {
       document.removeEventListener('visibilitychange', vis);
     };
   }, [feed.url, user]);
-  const shownMeetings = useMemo(() => (feedMeetings.length ? [...meetings, ...feedMeetings] : meetings), [meetings, feedMeetings]);
+  // a meeting made here and invited to the work e-mail comes back through the Outlook link: show it once (same title, same start)
+  const shownMeetings = useMemo(() => {
+    if (!feedMeetings.length) return meetings;
+    const key = (m: Meeting) => `${m.title.trim().toLowerCase()}|${Math.round(Date.parse(m.start) / 60000)}`;
+    const own = new Set(meetings.map(key));
+    return [...meetings, ...feedMeetings.filter((f) => !own.has(key(f)))];
+  }, [meetings, feedMeetings]);
 
   // Quietly refresh from Google when the app opens and every 10 minutes, as long as the sign-in is still valid
   useEffect(() => {
