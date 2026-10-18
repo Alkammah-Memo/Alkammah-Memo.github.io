@@ -218,6 +218,7 @@ export function isTaskOverdue(
   if (status === 'Done' || status === 'Closed') return false;
 
   const todayCairo = getCairoDateString();
+  dueDate = dueDate.slice(0, 10); // tolerate full ISO strings
   if (dueDate < todayCairo) return true;
 
   if (dueDate === todayCairo && dueTime) {

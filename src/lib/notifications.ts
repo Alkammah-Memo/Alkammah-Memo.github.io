@@ -2,13 +2,14 @@
  * In-app notifications. They are derived from the live meetings and tasks (nothing is stored but what the user has read),
  * so they can never go stale or invent anything:
  *  - a meeting starting within the lead time (default 15 minutes), or already in progress,
- *  - a task past its due date (or due time today),
+ *  - a task past its due date (or due time today); it comes back as a fresh unread alert every day until it is done,
+ *  - a task due today or tomorrow, and the rest of today's meetings,
  *  - a follow-up reminder that has come due.
  */
 import type { Meeting, Task } from '../types';
-import { cairoDateOf, cairoTimeOf } from './cairoTime';
+import { addDaysToDateString, cairoDateOf, cairoTimeOf } from './cairoTime';
 
-export type NotifKind = 'meeting' | 'overdue' | 'followup';
+export type NotifKind = 'meeting' | 'overdue' | 'today' | 'soon' | 'followup';
 
 export interface AppNotification {
   id: string;
@@ -18,7 +19,11 @@ export interface AppNotification {
   minutes?: number;
   /** YYYY-MM-DD for tasks */
   date?: string;
+  /** HH:mm (due time of a task, or the start of a meeting later today) */
+  time?: string;
   refId: string;
+  /** a summary pop-up for several items at once */
+  digest?: boolean;
 }
 
 export interface NotifPrefs {
@@ -26,10 +31,12 @@ export interface NotifPrefs {
   meetings: boolean;
   overdue: boolean;
   followups: boolean;
+  /** tasks due today / tomorrow and the rest of today's meetings */
+  dueSoon: boolean;
   system: boolean;
 }
 
-export const DEFAULT_PREFS: NotifPrefs = { leadMinutes: 15, meetings: true, overdue: true, followups: true, system: false };
+export const DEFAULT_PREFS: NotifPrefs = { leadMinutes: 15, meetings: true, overdue: true, followups: true, dueSoon: true, system: false };
 const PREFS_KEY = 'alkammah_notif_prefs';
 const READ_KEY = 'alkammah_notif_read';
 const SEEN_KEY = 'alkammah_notif_seen';
@@ -48,28 +55,41 @@ export function buildNotifications(meetings: Meeting[], tasks: Task[], prefs: No
       const minutes = Math.ceil((start - nowMs) / 60_000);
       const inProgress = start <= nowMs && (Number.isNaN(end) || nowMs < end);
       if (inProgress || (minutes > 0 && minutes <= prefs.leadMinutes)) {
-        out.push({ id: `m:${m.id}:${m.start}`, kind: 'meeting', title: m.title, minutes: inProgress ? Math.min(0, minutes) : minutes, refId: m.id });
+        out.push({ id: `m:${m.id}:${m.start}`, kind: 'meeting', title: m.title, minutes: inProgress ? Math.min(0, minutes) : minutes, time: cairoTimeOf(m.start), refId: m.id });
+      } else if (prefs.dueSoon && minutes > prefs.leadMinutes && cairoDateOf(m.start) === today) {
+        out.push({ id: `mt:${m.id}:${m.start}`, kind: 'meeting', title: m.title, minutes, time: cairoTimeOf(m.start), refId: m.id });
       }
     }
     out.sort((a, b) => (a.minutes ?? 0) - (b.minutes ?? 0));
   }
 
   const open = tasks.filter((t) => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed');
+  const dayOf = (t: Task) => (t.dueDate || '').slice(0, 10);
+  const isOverdueNow = (t: Task) => {
+    const d = dayOf(t);
+    return !!d && (d < today || (d === today && !!t.dueTime && t.dueTime < nowTime));
+  };
+  const byDue = (a: Task, b: Task) => `${dayOf(a)} ${a.dueTime || ''}`.localeCompare(`${dayOf(b)} ${b.dueTime || ''}`);
   if (prefs.overdue) {
-    const rows = open
-      .filter((t) => {
-        const d = (t.dueDate || '').slice(0, 10);
-        return !!d && (d < today || (d === today && !!t.dueTime && t.dueTime < nowTime));
-      })
-      .sort((a, b) => (b.dueDate || '').localeCompare(a.dueDate || ''))
-      .slice(0, 25);
-    for (const t of rows) out.push({ id: `o:${t.id}:${(t.dueDate || '').slice(0, 10)}`, kind: 'overdue', title: t.title, date: (t.dueDate || '').slice(0, 10), refId: t.id });
+    // the id carries today's date, so a task that is still overdue tomorrow rings again as a new unread reminder
+    for (const t of open.filter(isOverdueNow).sort(byDue).slice(0, 100)) {
+      out.push({ id: `o:${t.id}:${dayOf(t)}:${today}`, kind: 'overdue', title: t.title, date: dayOf(t), time: t.dueTime, refId: t.id });
+    }
+  }
+  if (prefs.dueSoon) {
+    const tomorrow = addDaysToDateString(today, 1);
+    for (const t of open.filter((x) => !isOverdueNow(x) && dayOf(x) === today).sort(byDue).slice(0, 100)) {
+      out.push({ id: `d0:${t.id}:${today}`, kind: 'today', title: t.title, date: today, time: t.dueTime, refId: t.id });
+    }
+    for (const t of open.filter((x) => dayOf(x) === tomorrow).sort(byDue).slice(0, 100)) {
+      out.push({ id: `d1:${t.id}:${tomorrow}`, kind: 'soon', title: t.title, date: tomorrow, time: t.dueTime, refId: t.id });
+    }
   }
   if (prefs.followups) {
     const rows = open
       .filter((t) => !!t.followUpDate && t.followUpDate.slice(0, 10) <= today)
       .sort((a, b) => (b.followUpDate || '').localeCompare(a.followUpDate || ''))
-      .slice(0, 25);
+      .slice(0, 100);
     for (const t of rows) out.push({ id: `f:${t.id}:${(t.followUpDate || '').slice(0, 10)}`, kind: 'followup', title: t.title, date: (t.followUpDate || '').slice(0, 10), refId: t.id });
   }
   return out;
