@@ -106,6 +106,10 @@ function readJson<T>(key: string, fallback: T): T {
 }
 
 let prefsCache: NotifPrefs | null = null;
+let accountSaver: ((p: Omit<NotifPrefs, 'system'>) => void) | null = null;
+export const setNotifPrefsAccountSaver = (f: typeof accountSaver) => {
+  accountSaver = f;
+};
 const listeners = new Set<() => void>();
 
 export const notifPrefs = {
@@ -113,7 +117,7 @@ export const notifPrefs = {
     if (!prefsCache) prefsCache = readJson(PREFS_KEY, DEFAULT_PREFS);
     return prefsCache;
   },
-  set(patch: Partial<NotifPrefs>) {
+  set(patch: Partial<NotifPrefs>, fromAccount = false) {
     prefsCache = { ...notifPrefs.get(), ...patch };
     try {
       localStorage.setItem(PREFS_KEY, JSON.stringify(prefsCache));
@@ -121,6 +125,12 @@ export const notifPrefs = {
       /* ignore */
     }
     listeners.forEach((l) => l());
+    if (!fromAccount && accountSaver) accountSaver(notifPrefs.shared());
+  },
+  /** the choices that follow the account to every device (not the browser-alert switch: that depends on each device's permission) */
+  shared(): Omit<NotifPrefs, 'system'> {
+    const { system: _system, ...rest } = notifPrefs.get();
+    return rest;
   },
   subscribe(l: () => void) {
     listeners.add(l);
