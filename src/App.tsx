@@ -52,6 +52,7 @@ import {
   syncSharedQuota,
   clearCloudCollections,
   flushRetryQueue,
+  OPENED_FROM_RECOVERY_LINK,
 } from './lib/cloud';
 import type { CollectionName } from './lib/cloud';
 import { mergeRemote } from './lib/merge';
@@ -60,7 +61,9 @@ import { usage } from './lib/ai/modelQueue';
 import { NotificationCenter } from './components/notifications/NotificationCenter';
 import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planSync, pushMeeting, deleteGoogleEvent, syncTasksToGoogle, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid, probeServer } from './lib/googleCalendar';
 import { chatWithAssistant } from './lib/ai/gemini';
+import { disableLock } from './lib/appLock';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { ResetPasswordScreen } from './components/auth/ResetPasswordScreen';
 import { SettingsView } from './components/settings/SettingsView';
 import type { User } from '@supabase/supabase-js';
 import { AppShell } from './components/layout/AppShell';
@@ -132,6 +135,8 @@ export default function App() {
   // Auth gate (only when Supabase is configured)
   const [authReady, setAuthReady] = useState<boolean>(!isCloudConfigured);
   const [user, setUser] = useState<User | null>(null);
+  // opened from the "reset my password" e-mail: ask for a new password before anything else
+  const [recovering, setRecovering] = useState<boolean>(OPENED_FROM_RECOVERY_LINK);
 
   useEffect(() => {
     if (!isCloudConfigured) return;
@@ -142,7 +147,11 @@ export default function App() {
         setUser(session?.user ?? null);
       })
       .finally(() => alive && setAuthReady(true));
-    const off = onAuthChange((u) => alive && setUser(u));
+    const off = onAuthChange((u, ev) => {
+      if (!alive) return;
+      if (ev === 'PASSWORD_RECOVERY') setRecovering(true);
+      setUser(u);
+    });
     return () => {
       alive = false;
       off();
@@ -1534,6 +1543,10 @@ export default function App() {
     );
   }
 
+  if (isCloudConfigured && recovering && user) {
+    return <ResetPasswordScreen onDone={() => setRecovering(false)} />;
+  }
+
   if (isCloudConfigured && !user) {
     return <LoginScreen />;
   }
@@ -1757,7 +1770,10 @@ export default function App() {
           isCloudConnected={isCloudConnected}
           isCloudConfigured={isCloudConfigured}
           userEmail={user?.email}
-          onSignOut={() => void signOutUser()}
+          onSignOut={() => {
+            disableLock();
+            void signOutUser();
+          }}
           onSyncGoogle={syncGoogleCalendar}
         />
       )}
