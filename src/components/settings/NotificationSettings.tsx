@@ -59,6 +59,7 @@ export const NotificationSettings: React.FC<{ ar: boolean }> = ({ ar }) => {
           </div>
         )}
         <Switch on={prefs.overdue} onChange={(v) => notifPrefs.set({ overdue: v })} label={ar ? 'المهام المتأخرة' : 'Overdue tasks'} hint={ar ? 'عند تجاوز تاريخ الاستحقاق' : 'When a task passes its due date'} />
+        <Switch on={prefs.dueSoon} onChange={(v) => notifPrefs.set({ dueSoon: v })} label={ar ? 'المستحق اليوم وغداً' : 'Due today and tomorrow'} hint={ar ? 'المهام المستحقة اليوم أو غداً وباقي اجتماعات اليوم' : 'Tasks due today or tomorrow, and the rest of today\'s meetings'} />
         <Switch on={prefs.followups} onChange={(v) => notifPrefs.set({ followups: v })} label={ar ? 'تذكيرات المتابعة' : 'Follow-up reminders'} hint={ar ? 'عند حلول تاريخ المتابعة في المهمة' : 'When a task follow-up date arrives'} />
         <div className="py-3">
           <Switch
