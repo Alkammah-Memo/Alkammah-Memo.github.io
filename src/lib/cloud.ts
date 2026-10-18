@@ -286,31 +286,41 @@ export async function syncSharedQuota(): Promise<void> {
   if (writeError) console.warn('Could not share quota status:', writeError.message);
 }
 
-/** the work calendar e-mail is kept in the user's private settings row, so every device invites the same address */
-export async function loadWorkEmailRemote(): Promise<string | null> {
-  if (!supabase || !currentUser) return null;
+/** small private settings kept next to the AI settings row, so every device shares them */
+const EXTRA_KEYS = ['workCalendarEmail', 'outlookFeedUrl'] as const;
+type ExtraKey = (typeof EXTRA_KEYS)[number];
+
+async function loadExtras(): Promise<Partial<Record<ExtraKey, string>>> {
+  if (!supabase || !currentUser) return {};
   const { data } = await supabase.from('user_settings').select('gemini').eq('user_id', currentUser.id).maybeSingle();
-  const w = (data?.gemini as Record<string, unknown> | undefined)?.workCalendarEmail;
-  return typeof w === 'string' && w ? w : null;
+  const g = (data?.gemini as Record<string, unknown> | undefined) || {};
+  const out: Partial<Record<ExtraKey, string>> = {};
+  for (const k of EXTRA_KEYS) if (typeof g[k] === 'string' && g[k]) out[k] = g[k] as string;
+  return out;
 }
 
-export async function saveWorkEmailRemote(email: string): Promise<void> {
+async function saveExtra(key: ExtraKey, value: string): Promise<void> {
   if (!supabase || !currentUser) return;
   const { data } = await supabase.from('user_settings').select('gemini').eq('user_id', currentUser.id).maybeSingle();
-  const gemini = { ...((data?.gemini as Record<string, unknown> | undefined) || {}), workCalendarEmail: email };
+  const gemini = { ...((data?.gemini as Record<string, unknown> | undefined) || {}), [key]: value };
   const { error } = await supabase.from('user_settings').upsert({ user_id: currentUser.id, gemini, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
-  if (error) console.warn('Could not save the work calendar e-mail:', error.message);
+  if (error) console.warn(`Could not save ${key}:`, error.message);
 }
+
+export const loadWorkEmailRemote = async (): Promise<string | null> => (await loadExtras()).workCalendarEmail ?? null;
+export const saveWorkEmailRemote = (email: string) => saveExtra('workCalendarEmail', email);
+export const loadFeedUrlRemote = async (): Promise<string | null> => (await loadExtras()).outlookFeedUrl ?? null;
+export const saveFeedUrlRemote = (url: string) => saveExtra('outlookFeedUrl', url);
 
 export async function saveRemoteGeminiSettings(settings: GeminiSettings): Promise<void> {
   if (!supabase || !currentUser) return;
-  const keepWork = await loadWorkEmailRemote().catch(() => null);
+  const keep = await loadExtras().catch(() => ({}));
   // never persist transient health state (cooldowns); only keys, labels and models
   const sanitized = {
     ...settings,
     slots: settings.slots.map((s) => ({ ...s, cooldownUntil: undefined })),
     quota: usage.exportShared(),
-    ...(keepWork ? { workCalendarEmail: keepWork } : {}),
+    ...keep,
   };
   const { error } = await supabase.from('user_settings').upsert(
     { user_id: currentUser.id, gemini: sanitized, updated_at: new Date().toISOString() },
