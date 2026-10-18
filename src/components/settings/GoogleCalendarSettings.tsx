@@ -150,7 +150,7 @@ export const GoogleCalendarSettings: React.FC<{ ar: boolean; onSync?: SyncFn }> 
           </button>
         </div>
         {workBad && <p className="text-[11px] text-rose-600 mt-1">{ar ? 'اكتب بريداً صحيحاً.' : 'Enter a valid e-mail address.'}</p>}
-        {link.workEmail && link.workEmailDone === link.workEmail && <p className="text-[11px] text-emerald-700 mt-1">{ar ? 'مفعّل: الاجتماعات القادمة مدعوّة.' : 'Active: upcoming meetings are invited.'}</p>}
+        {link.workEmail && link.workEmailDone === `${link.workEmail}|month-start` && <p className="text-[11px] text-emerald-700 mt-1">{ar ? 'مفعّل: اجتماعات هذا الشهر وما بعده مدعوّة.' : 'Active: this month\'s meetings and later ones are invited.'}</p>}
       </div>
 
       {connected && (
