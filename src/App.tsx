@@ -49,8 +49,8 @@ import {
   subscribeToWorkspaceCollection,
   loadRemoteGeminiSettings,
   saveRemoteGeminiSettings,
-  loadWorkEmailRemote,
-  loadFeedUrlRemote,
+  loadAllPrefs,
+  savePref,
   syncSharedQuota,
   clearCloudCollections,
   flushRetryQueue,
@@ -64,6 +64,8 @@ import { NotificationCenter } from './components/notifications/NotificationCente
 import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planSync, pushMeeting, deleteGoogleEvent, syncTasksToGoogle, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid, probeServer } from './lib/googleCalendar';
 import { chatWithAssistant } from './lib/ai/gemini';
 import { disableLock } from './lib/appLock';
+import { notifPrefs, setNotifPrefsAccountSaver } from './lib/notifications';
+import type { NotifPrefs } from './lib/notifications';
 import { cachedFeedMeetings, getFeedState, refreshFeed, setFeedUrl, subscribeFeed } from './lib/outlookFeed';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ResetPasswordScreen } from './components/auth/ResetPasswordScreen';
@@ -264,13 +266,32 @@ export default function App() {
     const unsubs: (() => void)[] = [];
     const LAST_SYNC_KEY = `alkammah_last_cloud_sync_${user.id}`;
 
+    // remote wins when it has a value; a value that only this device has is sent up (first time after this was added)
+    async function pullAccountPrefs() {
+      const remote = await loadAllPrefs();
+      if (cancelled) return;
+      const feedRemote = remote.outlookFeedUrl;
+      const feedLocal = getFeedState().url;
+      if (typeof feedRemote === 'string') {
+        if (feedRemote !== feedLocal) setFeedUrl(feedRemote);
+      } else if (feedLocal) void savePref('outlookFeedUrl', feedLocal);
+      const workRemote = remote.workCalendarEmail;
+      const workLocal = getGoogleLink().workEmail || '';
+      if (typeof workRemote === 'string') {
+        if (workRemote !== workLocal) setGoogleLink({ workEmail: workRemote, workEmailDone: undefined });
+      } else if (workLocal) void savePref('workCalendarEmail', workLocal);
+      const np = remote.notifPrefs;
+      if (np && typeof np === 'object') notifPrefs.set(np as Partial<NotifPrefs>, true);
+      else void savePref('notifPrefs', notifPrefs.shared());
+    }
+
     async function startSync() {
       // Gemini keys follow the user across devices
       keyManager.setRemoteSaver(saveRemoteGeminiSettings);
       keyManager.hydrateFromRemote(await loadRemoteGeminiSettings());
-      // the work-calendar e-mail follows the user across devices
-      void loadFeedUrlRemote().then((u) => u && !getFeedState().url && setFeedUrl(u)).catch(console.warn);
-      void loadWorkEmailRemote().then((w) => w && !getGoogleLink().workEmail && setGoogleLink({ workEmail: w })).catch(console.warn);
+      // links and choices follow the account: the Outlook link, the work e-mail and the notification switches are the same on every device
+      setNotifPrefsAccountSaver((p) => void savePref('notifPrefs', p));
+      void pullAccountPrefs();
       // every device shows the same real quota status: share what each one learns
       usage.setShareHook(() => void syncSharedQuota().catch(console.warn));
       await syncSharedQuota().catch(console.warn);
@@ -335,7 +356,18 @@ export default function App() {
     }
 
     startSync().catch((err) => console.warn('Cloud sync start failed:', err));
+    // coming back to the app picks up what was changed on another device
+    let lastPull = Date.now();
+    const onVisible = () => {
+      if (document.visibilityState === 'visible' && Date.now() - lastPull > 60_000) {
+        lastPull = Date.now();
+        void pullAccountPrefs();
+      }
+    };
+    document.addEventListener('visibilitychange', onVisible);
     return () => {
+      document.removeEventListener('visibilitychange', onVisible);
+      setNotifPrefsAccountSaver(null);
       cancelled = true;
       unsubs.forEach((u) => u());
       keyManager.setRemoteSaver(null);
