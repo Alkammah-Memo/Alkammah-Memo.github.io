@@ -29,6 +29,7 @@ import { SecuritySettings } from './SecuritySettings';
 import { NotificationSettings } from './NotificationSettings';
 import { AppearanceSettings } from './AppearanceSettings';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
+import { WorkCalendarSettings } from './WorkCalendarSettings';
 import { getVoiceEngine, setVoiceEngine } from '../../lib/ai/voiceEngine';
 import type { VoiceEngine } from '../../lib/ai/voiceEngine';
 import type { KeyTestResult } from '../../lib/ai/gemini';
@@ -549,6 +550,7 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
       </Fold>
 
       <GoogleCalendarSettings ar={ar} onSync={onSyncGoogle} />
+      <WorkCalendarSettings ar={ar} />
 
       <NotificationSettings ar={ar} />
 
