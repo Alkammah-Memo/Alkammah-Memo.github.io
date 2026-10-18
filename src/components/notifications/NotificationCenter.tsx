@@ -1,10 +1,11 @@
 import React, { useEffect, useMemo, useRef, useState, useSyncExternalStore } from 'react';
 import { createPortal } from 'react-dom';
-import { Bell, CalendarClock, AlertTriangle, BellRing, CheckCheck, X } from 'lucide-react';
+import { Bell, CalendarClock, AlertTriangle, BellRing, CheckCheck, Clock, Hourglass, X } from 'lucide-react';
 import type { Meeting, Task } from '../../types';
 import type { Locale } from '../../lib/translations';
 import { buildNotifications, notifPrefs, loadRead, saveRead, loadSeen, saveSeen } from '../../lib/notifications';
 import type { AppNotification } from '../../lib/notifications';
+import { formatDateLabel, formatTimeLabel } from '../common/DateTimeField';
 
 interface Props {
   meetings: Meeting[];
@@ -17,6 +18,8 @@ interface Props {
 const KIND_STYLE = {
   meeting: { icon: CalendarClock, tone: 'text-[#0071e3] bg-[#0071e3]/10', bar: 'bg-[#0071e3]' },
   overdue: { icon: AlertTriangle, tone: 'text-rose-600 bg-rose-50', bar: 'bg-rose-500' },
+  today: { icon: Clock, tone: 'text-orange-600 bg-orange-50', bar: 'bg-orange-500' },
+  soon: { icon: Hourglass, tone: 'text-sky-600 bg-sky-50', bar: 'bg-sky-500' },
   followup: { icon: BellRing, tone: 'text-amber-600 bg-amber-50', bar: 'bg-amber-500' },
 } as const;
 
@@ -40,13 +43,22 @@ export const NotificationCenter: React.FC<Props> = ({ meetings, tasks, locale, o
 
   const describe = (n: AppNotification): string => {
     if (n.kind === 'meeting') {
+      if ((n.minutes ?? 0) > prefs.leadMinutes) return ar ? `اليوم الساعة ${formatTimeLabel(n.time, 'ar')}` : `Today at ${formatTimeLabel(n.time, 'en')}`;
       if ((n.minutes ?? 0) > 0) return ar ? `يبدأ خلال ${n.minutes} دقيقة` : `Starts in ${n.minutes} min`;
       return ar ? 'الاجتماع جارٍ الآن' : 'In progress now';
     }
-    if (n.kind === 'overdue') return ar ? `متأخرة · موعدها ${n.date}` : `Overdue · was due ${n.date}`;
+    const when = `${formatDateLabel(n.date, locale, false)}${n.time ? ` · ${formatTimeLabel(n.time, locale)}` : ''}`;
+    if (n.kind === 'overdue') return ar ? `متأخرة · موعدها ${when}` : `Overdue · was due ${when}`;
+    if (n.kind === 'today') return ar ? `مستحقة اليوم${n.time ? ` · ${formatTimeLabel(n.time, locale)}` : ''}` : `Due today${n.time ? ` · ${formatTimeLabel(n.time, locale)}` : ''}`;
+    if (n.kind === 'soon') return ar ? `مستحقة غداً${n.time ? ` · ${formatTimeLabel(n.time, locale)}` : ''}` : `Due tomorrow${n.time ? ` · ${formatTimeLabel(n.time, locale)}` : ''}`;
     return ar ? `تذكير متابعة · ${n.date}` : `Follow-up reminder · ${n.date}`;
   };
-  const kindLabel = (k: AppNotification['kind']) => (k === 'meeting' ? (ar ? 'اجتماع' : 'Meeting') : k === 'overdue' ? (ar ? 'مهمة متأخرة' : 'Overdue task') : ar ? 'تذكير' : 'Reminder');
+  const kindLabel = (k: AppNotification['kind']) =>
+    k === 'meeting' ? (ar ? 'اجتماع' : 'Meeting')
+    : k === 'overdue' ? (ar ? 'مهمة متأخرة' : 'Overdue task')
+    : k === 'today' ? (ar ? 'مستحقة اليوم' : 'Due today')
+    : k === 'soon' ? (ar ? 'مستحقة غداً' : 'Due tomorrow')
+    : ar ? 'تذكير' : 'Reminder';
 
   // Pop up when something new appears while the app is open (what was already there on load only fills the bell)
   useEffect(() => {
@@ -56,12 +68,19 @@ export const NotificationCenter: React.FC<Props> = ({ meetings, tasks, locale, o
     if (fresh.length === 0) return;
     fresh.forEach((n) => seen.current!.add(n.id));
     saveSeen(seen.current!);
-    const loud = fresh.filter((n) => !read.has(n.id) && (n.kind === 'meeting' || !first));
+    // on opening the app, unread overdue / due-today items and meetings pop up too (not the "tomorrow" or follow-up background ones)
+    const loud = fresh.filter((n) => !read.has(n.id) && (!first || n.kind === 'meeting' || n.kind === 'overdue' || n.kind === 'today') && !(n.kind === 'meeting' && (n.minutes ?? 0) > prefs.leadMinutes));
     if (loud.length === 0) return;
-    setToast(loud[0]);
+    const rank = (n: AppNotification) => (n.kind === 'overdue' ? 0 : n.kind === 'meeting' ? 1 : n.kind === 'today' ? 2 : 3);
+    loud.sort((a, b) => rank(a) - rank(b));
+    const shown: AppNotification =
+      loud.length === 1
+        ? loud[0]
+        : { ...loud[0], id: `digest:${loud.map((x) => x.id).join('|').slice(0, 60)}`, title: ar ? `${loud.length} عناصر تحتاج انتباهك` : `${loud.length} items need your attention`, digest: true };
+    setToast(shown);
     if (prefs.system && typeof Notification !== 'undefined' && Notification.permission === 'granted') {
       try {
-        new Notification(loud[0].title, { body: describe(loud[0]), tag: loud[0].id });
+        new Notification(shown.title, { body: shown.digest ? loud.slice(0, 4).map((x) => x.title).join(' · ') : describe(shown), tag: shown.id });
       } catch {
         /* some browsers only allow this from a service worker */
       }
@@ -83,9 +102,13 @@ export const NotificationCenter: React.FC<Props> = ({ meetings, tasks, locale, o
   };
 
   const go = (n: AppNotification) => {
+    setToast(null);
+    if (n.digest) {
+      setOpen(true);
+      return;
+    }
     markRead([n.id]);
     setOpen(false);
-    setToast(null);
     if (n.kind === 'meeting') {
       const m = meetings.find((x) => x.id === n.refId);
       if (m) onOpenMeeting(m);
@@ -190,7 +213,7 @@ export const NotificationCenter: React.FC<Props> = ({ meetings, tasks, locale, o
             <span className="min-w-0 flex-1">
               <span className="block text-[10px] font-bold uppercase tracking-wide text-[#6e6e73]">{kindLabel(toast.kind)}</span>
               <span className="block text-sm font-bold text-[#1d1d1f] truncate">{toast.title}</span>
-              <span className="block text-xs text-[#515154]">{describe(toast)}</span>
+              <span className="block text-xs text-[#515154]">{toast.digest ? (ar ? 'اضغط لعرض الكل' : 'Tap to see them all') : describe(toast)}</span>
             </span>
             <span
               role="button"
