@@ -6,6 +6,7 @@ import { Locale, translations } from '../../lib/translations';
 import { INITIAL_WORKSTREAMS, INITIAL_DEPARTMENTS } from '../../lib/referenceData';
 import { isTaskOverdue } from '../../lib/cairoTime';
 import { useCairoClock } from '../../lib/useCairoClock';
+import { DateTimeField, formatDateLabel, formatTimeLabel } from '../common/DateTimeField';
 import {
   Table,
   Kanban,
@@ -113,6 +114,9 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
   const [selectedProject, setSelectedProject] = useState<string>('all');
   const [selectedOwner, setSelectedOwner] = useState<string>('all');
+  // date-only filters (the time of day never takes part, so a 9:00 or 17:00 task on the same day is always the same match)
+  const [dueFrom, setDueFrom] = useState('');
+  const [dueTo, setDueTo] = useState('');
   const [pending, setPending] = useState<{ kind: 'archive' | 'delete'; task: Task } | null>(null);
   // Names typed in different ways ("yara adel", "Yara ADEL ") are one person/project: group by a normalised key
   const keyOf = (v: string) => v.trim().replace(/\s+/g, ' ').toLowerCase();
@@ -164,11 +168,18 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
       if (!splitOwners(task.ownerAlias || '').some((o) => keyOf(o) === selectedOwner)) return false;
     }
 
+    // Date filter: by day only
+    {
+      const day = (task.dueDate || '').slice(0, 10);
+      if (dueFrom && (!day || day < dueFrom)) return false;
+      if (dueTo && (!day || day > dueTo)) return false;
+    }
+
     // Tab filter
     if (tabFilter === 'today') {
-      if (task.dueDate !== todayCairo || task.status === 'Done' || task.status === 'Closed') return false;
+      if ((task.dueDate || '').slice(0, 10) !== todayCairo || task.status === 'Done' || task.status === 'Closed') return false;
     } else if (tabFilter === 'upcoming') {
-      if (!task.dueDate || task.dueDate <= todayCairo || task.status === 'Done' || task.status === 'Closed') return false;
+      if (!task.dueDate || task.dueDate.slice(0, 10) <= todayCairo || task.status === 'Done' || task.status === 'Closed') return false;
     } else if (tabFilter === 'overdue') {
       if (!isTaskOverdue(task.dueDate, task.dueTime, task.status)) return false;
     } else if (tabFilter === 'waiting') {
@@ -333,6 +344,22 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           </button>
         </div>
 
+        {/* Due date range: by day only */}
+        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-100">
+          <span className="text-xs font-semibold text-stone-500">{locale === 'en' ? 'Due date (day only):' : 'تاريخ الاستحقاق (اليوم فقط):'}</span>
+          <div className="w-40 max-w-[46%]">
+            <DateTimeField mode="date" locale={locale} date={dueFrom} clearable placeholder={locale === 'en' ? 'From any day' : 'من أي يوم'} onChange={(v) => setDueFrom(v.date)} title={locale === 'en' ? 'From date' : 'من تاريخ'} ariaLabel={locale === 'en' ? 'Due from' : 'من'} />
+          </div>
+          <div className="w-40 max-w-[46%]">
+            <DateTimeField mode="date" locale={locale} date={dueTo} clearable placeholder={locale === 'en' ? 'To any day' : 'إلى أي يوم'} onChange={(v) => setDueTo(v.date)} title={locale === 'en' ? 'To date' : 'إلى تاريخ'} ariaLabel={locale === 'en' ? 'Due to' : 'إلى'} />
+          </div>
+          {(dueFrom || dueTo) && (
+            <button type="button" onClick={() => { setDueFrom(''); setDueTo(''); }} className="min-h-9 px-2.5 text-xs font-semibold text-rose-600 rounded-lg hover:bg-rose-50">
+              {locale === 'en' ? 'Clear dates' : 'مسح التواريخ'}
+            </button>
+          )}
+        </div>
+
         {/* Search & Dropdown Selectors */}
         <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5 pt-2 border-t border-stone-100">
           <div className="relative col-span-2 sm:col-span-1">
@@ -428,7 +455,11 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                   ref={cardSort.ref(task.id)}
                   onClick={() => onOpenTaskModal(task)}
                   className={`relative rounded-2xl border p-3 active:bg-stone-50 ${
-                    cardSort.dragId === task.id ? 'bg-amber-50 border-amber-300 shadow-xl z-20' : 'bg-white border-stone-200 shadow-xs'
+                    cardSort.dragId === task.id
+                      ? 'bg-amber-50 border-amber-300 shadow-xl z-20'
+                      : overdue
+                      ? 'bg-red-50 border-red-300 shadow-xs'
+                      : 'bg-white border-stone-200 shadow-xs'
                   }`}
                 >
                   <div className="flex items-start gap-2">
@@ -477,8 +508,9 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                     )}
                     {task.dueDate && (
                       <span className={`font-mono text-[11px] tabular-nums ${overdue ? 'text-red-600 font-bold' : 'text-stone-600'}`}>
-                        {overdue ? '⚠ ' : ''}
-                        {task.dueDate}
+                        {overdue ? (ar ? '⚠ متأخرة · ' : '⚠ Overdue · ') : ''}
+                        {formatDateLabel(task.dueDate, locale, false)}
+                        {task.dueTime ? ` · ${formatTimeLabel(task.dueTime, locale)}` : ''}
                       </span>
                     )}
                   </div>
@@ -522,7 +554,11 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                         ref={tableSort.ref(task.id)}
                         onClick={() => onOpenTaskModal(task)}
                         className={`transition-colors cursor-pointer group ${
-                          tableSort.dragId === task.id ? 'bg-amber-100 relative z-20 shadow-lg' : 'hover:bg-amber-50/40'
+                          tableSort.dragId === task.id
+                            ? 'bg-amber-100 relative z-20 shadow-lg'
+                            : overdue
+                            ? 'bg-red-50 hover:bg-red-100/80 shadow-[inset_3px_0_0_#dc2626]'
+                            : 'hover:bg-amber-50/40'
                         }`}
                       >
                         {/* Serial number + drag handle + up / down */}
@@ -597,8 +633,10 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                             <div className="flex items-center gap-1.5">
                               {overdue && <AlertTriangle className="w-3.5 h-3.5 text-red-600" />}
                               <span className={overdue ? 'text-red-600 font-bold' : 'text-stone-700'}>
-                                {task.dueDate}
+                                {formatDateLabel(task.dueDate, locale, false)}
+                                {task.dueTime ? ` · ${formatTimeLabel(task.dueTime, locale)}` : ''}
                               </span>
+                              {overdue && <span className="text-[10px] font-bold uppercase text-red-700 bg-red-100 rounded px-1.5 py-0.5 font-sans">{ar ? 'متأخرة' : 'Overdue'}</span>}
                             </div>
                           ) : (
                             <span className="text-stone-400 italic">
@@ -662,7 +700,9 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                     <div
                       key={task.id}
                       onClick={() => onOpenTaskModal(task)}
-                      className="bg-white p-3 rounded-xl border border-stone-200 hover:border-amber-400 transition-all cursor-pointer shadow-xs space-y-2"
+                      className={`p-3 rounded-xl border transition-all cursor-pointer shadow-xs space-y-2 ${
+                        isTaskOverdue(task.dueDate, task.dueTime, task.status) ? 'bg-red-50 border-red-300 hover:border-red-500' : 'bg-white border-stone-200 hover:border-amber-400'
+                      }`}
                     >
                       <div className="flex items-center justify-between text-[10px] text-stone-400">
                         <span className="font-semibold text-stone-600">{task.workstream.split(' ')[0]}</span>

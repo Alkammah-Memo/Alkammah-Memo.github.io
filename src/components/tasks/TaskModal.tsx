@@ -3,6 +3,7 @@ import { Task, Workstream, TaskStatus, TaskPriority } from '../../types';
 import { Locale, translations } from '../../lib/translations';
 import { INITIAL_WORKSTREAMS, INITIAL_DEPARTMENTS } from '../../lib/referenceData';
 import { ConfirmDialog } from '../common/ConfirmDialog';
+import { DateTimeField } from '../common/DateTimeField';
 import { X, Calendar, User, Building2, Flag, AlertCircle, FileText, CheckCircle2 } from 'lucide-react';
 
 interface TaskModalProps {
@@ -260,26 +261,21 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
               />
             </div>
-            <div className="min-w-0">
+            <div className="min-w-0 min-[520px]:col-span-2">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                {t.dueDate}
+                {locale === 'en' ? 'Due date & time (Cairo)' : 'موعد الاستحقاق (توقيت القاهرة)'}
               </label>
-              <input
-                type="date"
-                value={dueDate}
-                onChange={(e) => setDueDate(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
-              />
-            </div>
-            <div className="min-w-0">
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
-                {locale === 'en' ? 'Due Time (Cairo)' : 'وقت الاستحقاق'}
-              </label>
-              <input
-                type="time"
-                value={dueTime}
-                onChange={(e) => setDueTime(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
+              <DateTimeField
+                locale={locale}
+                date={dueDate}
+                time={dueTime}
+                timeOptional
+                clearable
+                placeholder={locale === 'en' ? 'Set due date & time' : 'حدد التاريخ والوقت'}
+                onChange={(v) => {
+                  setDueDate(v.date);
+                  setDueTime(v.date ? v.time : '');
+                }}
               />
             </div>
           </div>
@@ -290,11 +286,13 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {locale === 'en' ? 'Next Follow-up Date' : 'تاريخ المتابعة'}
               </label>
-              <input
-                type="date"
-                value={followUpDate}
-                onChange={(e) => setFollowUpDate(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
+              <DateTimeField
+                mode="date"
+                locale={locale}
+                date={followUpDate}
+                clearable
+                placeholder={locale === 'en' ? 'Set follow-up date' : 'حدد تاريخ المتابعة'}
+                onChange={(v) => setFollowUpDate(v.date)}
               />
             </div>
           </div>
