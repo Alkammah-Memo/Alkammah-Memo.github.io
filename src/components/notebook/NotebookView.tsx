@@ -30,6 +30,7 @@ import {
 } from '../../lib/planner';
 import type { PlannerPageRequest } from '../../lib/planner';
 import { PLANNER_CANVAS } from '../../lib/planner';
+import { DateTimeField } from '../common/DateTimeField';
 import {
   BookOpen,
   FileText,
@@ -1128,42 +1129,23 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                         <div className="grid grid-cols-2 gap-2 [&>*:first-child]:col-span-2">
                           <div className="col-span-1">
                             <label className="font-semibold text-stone-700 block mb-1">
-                              {locale === 'en' ? 'Date' : 'التاريخ'}
+                              {locale === 'en' ? 'Starts (date & time)' : 'يبدأ (التاريخ والوقت)'}
                             </label>
-                            <input
-                              type="date"
-                              value={cand.suggestedMeetingDate || cand.suggestedDueDate || ''}
-                              onChange={(e) =>
-                                handleCandidateFieldChange(cand.id, 'suggestedMeetingDate', e.target.value)
-                              }
-                              className="w-full px-2 py-1.5 rounded-lg border border-stone-300 text-xs bg-white text-stone-900 focus:outline-none"
-                            />
-                          </div>
-                          <div>
-                            <label className="font-semibold text-stone-700 block mb-1">
-                              {locale === 'en' ? 'Start Time' : 'وقت البدء'}
-                            </label>
-                            <input
-                              type="time"
-                              value={cand.suggestedStartTime || '10:00'}
-                              onChange={(e) =>
-                                handleCandidateFieldChange(cand.id, 'suggestedStartTime', e.target.value)
-                              }
-                              className="w-full px-2 py-1.5 rounded-lg border border-stone-300 text-xs bg-white text-stone-900 focus:outline-none font-mono"
+                            <DateTimeField
+                              locale={locale}
+                              date={cand.suggestedMeetingDate || cand.suggestedDueDate || ''}
+                              time={cand.suggestedStartTime || '10:00'}
+                              onChange={(v) => {
+                                handleCandidateFieldChange(cand.id, 'suggestedMeetingDate', v.date);
+                                handleCandidateFieldChange(cand.id, 'suggestedStartTime', v.time);
+                              }}
                             />
                           </div>
                           <div>
                             <label className="font-semibold text-stone-700 block mb-1">
                               {locale === 'en' ? 'End Time' : 'وقت الانتهاء'}
                             </label>
-                            <input
-                              type="time"
-                              value={cand.suggestedEndTime || '11:00'}
-                              onChange={(e) =>
-                                handleCandidateFieldChange(cand.id, 'suggestedEndTime', e.target.value)
-                              }
-                              className="w-full px-2 py-1.5 rounded-lg border border-stone-300 text-xs bg-white text-stone-900 focus:outline-none font-mono"
-                            />
+                            <DateTimeField mode="time" locale={locale} time={cand.suggestedEndTime || '11:00'} onChange={(v) => handleCandidateFieldChange(cand.id, 'suggestedEndTime', v.time)} />
                           </div>
                         </div>
 
@@ -1254,14 +1236,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
                             <label className="font-semibold text-stone-700 block mb-1">
                               {t.dueDate}
                             </label>
-                            <input
-                              type="date"
-                              value={cand.suggestedDueDate || ''}
-                              onChange={(e) =>
-                                handleCandidateFieldChange(cand.id, 'suggestedDueDate', e.target.value)
-                              }
-                              className="w-full px-2 py-1.5 rounded-lg border border-stone-300 text-xs bg-white text-stone-900 focus:outline-none"
-                            />
+                            <DateTimeField mode="date" locale={locale} date={cand.suggestedDueDate || ''} clearable onChange={(v) => handleCandidateFieldChange(cand.id, 'suggestedDueDate', v.date)} />
                           </div>
 
                           <div>
