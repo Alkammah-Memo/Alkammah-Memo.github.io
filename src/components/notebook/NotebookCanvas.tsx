@@ -910,7 +910,10 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       const cs = getComputedStyle(container);
       const w = container.clientWidth;
       const avail = w - (parseFloat(cs.paddingLeft) || 0) - (parseFloat(cs.paddingRight) || 0);
-      const s = Math.max(0.2, Math.min(1, avail / (canvasWidth + 2)));
+      const hs = container.clientHeight - (parseFloat(cs.paddingTop) || 0) - (parseFloat(cs.paddingBottom) || 0);
+      const ph = paperRef.current?.offsetHeight || 0;
+      // 100% = the whole paper fits the frame (width and height), so nothing needs scrolling; hiding bars gives more room and it re-fits
+      const s = Math.max(0.2, Math.min(1, avail / (canvasWidth + 2), ph > 0 && hs > 50 ? hs / ph : 1));
       // while zoomed, a scrollbar appearing must not re-fit the paper (that made the zoom jump); a real resize / rotation drops back to fit
       if (zoomRef.current > 1.0005 && Math.abs(w - lastW) > 40) {
         zoomRef.current = 1;
@@ -996,7 +999,8 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
     const dist = (t: TouchList) => Math.hypot(t[0].clientX - t[1].clientX, t[0].clientY - t[1].clientY);
     const mid = (t: TouchList) => ({ x: (t[0].clientX + t[1].clientX) / 2, y: (t[0].clientY + t[1].clientY) / 2 });
     const onStart = (e: TouchEvent) => {
-      if (e.touches.length === 2) {
+      const isPen = Array.from(e.touches).some((t) => (t as Touch & { touchType?: string }).touchType === 'stylus');
+      if (e.touches.length === 2 && !isPen) {
         cancelInkRef.current();
         pinchedRef.current = true;
         pan = null;
@@ -1004,7 +1008,8 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
         pinch = { d0: dist(e.touches) || 1, z0: zoomRef.current, mx: m.x, my: m.y };
       } else if (
         e.touches.length === 1 &&
-        zoomRef.current > 1.001 &&
+        (e.touches[0] as Touch & { touchType?: string }).touchType !== 'stylus' && // the Apple Pencil writes, it never scrolls the paper
+        (zoomRef.current > 1.001 || c.scrollHeight > c.clientHeight + 2 || c.scrollWidth > c.clientWidth + 2) &&
         interactionModeRef.current === 'stylus' &&
         toolRef.current !== 'lasso' &&
         !(e.target as HTMLElement | null)?.closest?.('[data-nb-nopan]') // dragging a text box or a selection must not scroll the paper
