@@ -3,7 +3,7 @@
  * @license Apache-2.0
  */
 
-import React, { useState, useEffect, useRef, useCallback } from 'react';
+import React, { useState, useEffect, useMemo, useRef, useCallback, useSyncExternalStore } from 'react';
 import {
   Task,
   Meeting,
@@ -50,6 +50,7 @@ import {
   loadRemoteGeminiSettings,
   saveRemoteGeminiSettings,
   loadWorkEmailRemote,
+  loadFeedUrlRemote,
   syncSharedQuota,
   clearCloudCollections,
   flushRetryQueue,
@@ -63,6 +64,7 @@ import { NotificationCenter } from './components/notifications/NotificationCente
 import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planSync, pushMeeting, deleteGoogleEvent, syncTasksToGoogle, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid, probeServer } from './lib/googleCalendar';
 import { chatWithAssistant } from './lib/ai/gemini';
 import { disableLock } from './lib/appLock';
+import { cachedFeedMeetings, getFeedState, refreshFeed, setFeedUrl, subscribeFeed } from './lib/outlookFeed';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ResetPasswordScreen } from './components/auth/ResetPasswordScreen';
 import { SettingsView } from './components/settings/SettingsView';
@@ -267,6 +269,7 @@ export default function App() {
       keyManager.setRemoteSaver(saveRemoteGeminiSettings);
       keyManager.hydrateFromRemote(await loadRemoteGeminiSettings());
       // the work-calendar e-mail follows the user across devices
+      void loadFeedUrlRemote().then((u) => u && !getFeedState().url && setFeedUrl(u)).catch(console.warn);
       void loadWorkEmailRemote().then((w) => w && !getGoogleLink().workEmail && setGoogleLink({ workEmail: w })).catch(console.warn);
       // every device shows the same real quota status: share what each one learns
       usage.setShareHook(() => void syncSharedQuota().catch(console.warn));
@@ -613,6 +616,28 @@ export default function App() {
     return () => clearTimeout(t);
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [meetings, tasks]);
+
+  // Work calendar (Outlook link): read-only meetings shown next to the others, refreshed when the app opens, every 15 minutes and on return
+  const feed = useSyncExternalStore(subscribeFeed, getFeedState);
+  const [feedMeetings, setFeedMeetings] = useState<Meeting[]>(() => cachedFeedMeetings());
+  useEffect(() => {
+    setFeedMeetings(feed.url ? cachedFeedMeetings() : []);
+  }, [feed.url, feed.fetchedAt]);
+  useEffect(() => {
+    if (!feed.url || !user) return;
+    const run = () => void refreshFeed().catch(() => undefined);
+    run();
+    const t = setInterval(run, 15 * 60_000);
+    const vis = () => {
+      if (document.visibilityState === 'visible' && Date.now() - Date.parse(getFeedState().fetchedAt || '1970-01-01') > 5 * 60_000) run();
+    };
+    document.addEventListener('visibilitychange', vis);
+    return () => {
+      clearInterval(t);
+      document.removeEventListener('visibilitychange', vis);
+    };
+  }, [feed.url, user]);
+  const shownMeetings = useMemo(() => (feedMeetings.length ? [...meetings, ...feedMeetings] : meetings), [meetings, feedMeetings]);
 
   // Quietly refresh from Google when the app opens and every 10 minutes, as long as the sign-in is still valid
   useEffect(() => {
@@ -1591,7 +1616,7 @@ export default function App() {
       onOpenBackupModal={() => setIsBackupModalOpen(true)}
       headerExtras={
         <NotificationCenter
-          meetings={meetings}
+          meetings={shownMeetings}
           tasks={tasks}
           locale={locale}
           onOpenMeeting={(m) => {
@@ -1613,7 +1638,7 @@ export default function App() {
       {currentTab === 'today' && (
         <TodayBriefing
           tasks={tasks}
-          meetings={meetings}
+          meetings={shownMeetings}
           locale={locale}
           onNavigateToTab={setCurrentTab}
           onOpenTaskModal={(task) => {
@@ -1713,7 +1738,7 @@ export default function App() {
 
       {currentTab === 'calendar' && (
         <CalendarCenter
-          meetings={meetings}
+          meetings={shownMeetings}
           tasks={tasks}
           locale={locale}
           onOpenMeetingModal={(meeting, initialDate, initialStartTime) => {
@@ -1793,7 +1818,7 @@ export default function App() {
         <ExecutiveAssistant
           messages={messages}
           tasks={tasks}
-          meetings={meetings}
+          meetings={shownMeetings}
           locale={locale}
           onSendMessage={handleSendMessage}
           onExecuteToolAction={handleExecuteToolAction}
@@ -1820,7 +1845,7 @@ export default function App() {
         meeting={selectedMeetingForModal}
         initialDate={selectedMeetingInitialDate}
         initialStartTime={selectedMeetingInitialTime}
-        allMeetings={meetings}
+        allMeetings={shownMeetings}
         isOpen={isMeetingModalOpen}
         locale={locale}
         onClose={() => {
@@ -1872,7 +1897,7 @@ export default function App() {
       <LiveVoiceModal
         isOpen={isLiveVoiceModalOpen}
         locale={locale}
-        meetings={meetings}
+        meetings={shownMeetings}
         tasks={tasks}
         onExecuteToolAction={handleExecuteToolAction}
         hideBubble={currentTab === 'assistant'}
