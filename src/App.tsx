@@ -49,6 +49,7 @@ import {
   subscribeToWorkspaceCollection,
   loadRemoteGeminiSettings,
   saveRemoteGeminiSettings,
+  loadWorkEmailRemote,
   syncSharedQuota,
   clearCloudCollections,
   flushRetryQueue,
@@ -265,6 +266,8 @@ export default function App() {
       // Gemini keys follow the user across devices
       keyManager.setRemoteSaver(saveRemoteGeminiSettings);
       keyManager.hydrateFromRemote(await loadRemoteGeminiSettings());
+      // the work-calendar e-mail follows the user across devices
+      void loadWorkEmailRemote().then((w) => w && !getGoogleLink().workEmail && setGoogleLink({ workEmail: w })).catch(console.warn);
       // every device shows the same real quota status: share what each one learns
       usage.setShareHook(() => void syncSharedQuota().catch(console.warn));
       await syncSharedQuota().catch(console.warn);
@@ -547,12 +550,20 @@ export default function App() {
       // one time: events the app pushed before the "Synced from Alkammah Memo system" note existed get it too
       const pushIds = new Set(plan.push.map((m) => m.id));
       const backfill = getGoogleLink().footerDone ? [] : current.filter((m) => !!m.googleEventId && !m.id.startsWith('gcal_') && !pushIds.has(m.id));
-      for (const m of [...plan.push, ...backfill]) {
+      // the work e-mail was just set or changed: invite it to the meetings still to come (once)
+      const work = getGoogleLink().workEmail?.trim() || '';
+      const nowIso = new Date().toISOString();
+      const inviteBackfill =
+        work && getGoogleLink().workEmailDone !== work
+          ? current.filter((m) => !!m.googleEventId && !m.id.startsWith('gcal_') && m.start >= nowIso && !pushIds.has(m.id) && !backfill.some((b) => b.id === m.id))
+          : [];
+      for (const m of [...plan.push, ...backfill, ...inviteBackfill]) {
         const r = await pushMeeting(token, m);
         pushed.set(m.id, { ...m, googleEventId: r.id, googleSyncedAt: r.updated, syncState: 'synced' });
       }
 
       if (!getGoogleLink().footerDone) setGoogleLink({ footerDone: true });
+      if (getGoogleLink().workEmailDone !== work) setGoogleLink({ workEmailDone: work });
 
       // 3) apply everything to the local meetings
       const removeIds = new Set(plan.removeLocal.map((m) => m.id));
