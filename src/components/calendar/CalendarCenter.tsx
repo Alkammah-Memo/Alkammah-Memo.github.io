@@ -1,6 +1,7 @@
 import React, { useMemo, useRef, useState } from 'react';
 import { Meeting, Task } from '../../types';
 import { GOOGLE_ID_PREFIX } from '../../lib/googleCalendar';
+import { FEED_ID_PREFIX } from '../../lib/outlookFeed';
 import { Locale, translations } from '../../lib/translations';
 import { formatCairoDateDisplay, getCairoDateString, cairoDateOf, cairoTimeOf } from '../../lib/cairoTime';
 import { buildIcs } from '../../lib/exporters';
@@ -59,7 +60,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
       /* ignore */
     }
   };
-  const isFromGoogle = (m: Meeting) => m.id.startsWith(GOOGLE_ID_PREFIX);
+  const isFromGoogle = (m: Meeting) => m.id.startsWith(GOOGLE_ID_PREFIX) || m.id.startsWith(FEED_ID_PREFIX);
   const googleCount = useMemo(() => allMeetings.filter(isFromGoogle).length, [allMeetings]);
   const meetings = useMemo(
     () => (source === 'all' ? allMeetings : allMeetings.filter((m) => (source === 'google') === isFromGoogle(m))),
@@ -282,7 +283,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
         {([
           ['all', ar ? 'الكل' : 'All', allMeetings.length],
           ['system', ar ? 'من النظام' : 'From system', allMeetings.length - googleCount],
-          ['google', ar ? 'من Google (التقويم)' : 'From Google calendar', googleCount],
+          ['google', ar ? 'من Google / العمل' : 'From Google / work calendar', googleCount],
         ] as [SourceFilter, string, number][]).map(([k, label, n]) => (
           <button
             key={k}

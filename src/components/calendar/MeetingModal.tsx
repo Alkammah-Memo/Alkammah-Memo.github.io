@@ -6,6 +6,7 @@ import { checkMeetingConflicts, cairoDateOf, cairoTimeOf, cairoLocalToIso, getCa
 import { X, Calendar, Clock, MapPin, Users, AlertTriangle, CalendarDays } from 'lucide-react';
 import { DateTimeField } from '../common/DateTimeField';
 import { getGoogleLink } from '../../lib/googleCalendar';
+import { FEED_ID_PREFIX } from '../../lib/outlookFeed';
 
 interface MeetingModalProps {
   meeting: Meeting | null;
@@ -34,6 +35,8 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
   const ar = locale === 'ar';
   const [formError, setFormError] = useState<string>('');
   const [confirmDelete, setConfirmDelete] = useState<boolean>(false);
+  // meetings that come from the work (Outlook) calendar can be read here but only changed in Outlook
+  const readOnly = !!meeting?.id?.startsWith(FEED_ID_PREFIX);
 
   const toMinutes = (hhmm: string) => {
     const [h, m] = hhmm.split(':').map(Number);
@@ -168,6 +171,12 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
         </div>
 
         <form onSubmit={handleSubmit} className="p-3 sm:p-5 space-y-2.5 sm:space-y-3.5 max-h-[calc(100dvh-5.5rem)] overflow-y-auto overscroll-contain">
+          {readOnly && (
+            <div className="bg-amber-50 border border-amber-200 text-amber-900 text-xs rounded-xl px-3 py-2">
+              {ar ? 'هذا الاجتماع من تقويم العمل (Outlook). للقراءة فقط هنا، وعدّله من Outlook.' : 'This meeting comes from your work (Outlook) calendar. It is read-only here; change it in Outlook.'}
+            </div>
+          )}
+          <fieldset disabled={readOnly} className="min-w-0 border-0 p-0 m-0 space-y-2.5 sm:space-y-3.5">
           {/* Where this meeting is mirrored */}
           {meeting?.googleEventId && (
             <div className="bg-sky-50 border border-sky-200 text-sky-900 text-xs rounded-xl px-3 py-2 flex items-start gap-2">
@@ -308,6 +317,15 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               {formError}
             </div>
           )}
+          </fieldset>
+
+          {readOnly ? (
+            <div className="flex justify-end pt-2.5 pb-1 border-t border-stone-200 sticky bottom-0 bg-white z-10">
+              <button type="button" onClick={onClose} className="px-5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs">
+                {ar ? 'إغلاق' : 'Close'}
+              </button>
+            </div>
+          ) : (
 
           <div className="flex items-center justify-between pt-2.5 pb-1 border-t border-stone-200 sticky bottom-0 bg-white z-10">
             {meeting?.id && onDelete ? (
@@ -350,6 +368,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               </button>
             </div>
           </div>
+          )}
         </form>
       </div>
     </div>
