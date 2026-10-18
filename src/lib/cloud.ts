@@ -15,6 +15,9 @@ import type { SharedQuota } from './ai/modelQueue';
 const SUPABASE_URL = (import.meta.env.VITE_SUPABASE_URL as string | undefined)?.trim();
 const SUPABASE_ANON_KEY = (import.meta.env.VITE_SUPABASE_ANON_KEY as string | undefined)?.trim();
 
+/** true when the page was opened from a "reset my password" e-mail link (read before the Supabase client clears the URL) */
+export const OPENED_FROM_RECOVERY_LINK = typeof location !== 'undefined' && /type=recovery/.test(location.hash + location.search);
+
 export const isCloudConfigured = Boolean(SUPABASE_URL && SUPABASE_ANON_KEY);
 
 export const supabase: SupabaseClient | null = isCloudConfigured
@@ -43,11 +46,11 @@ export async function getInitialSession(): Promise<Session | null> {
   return data.session;
 }
 
-export function onAuthChange(cb: (user: User | null) => void): () => void {
+export function onAuthChange(cb: (user: User | null, event?: string) => void): () => void {
   if (!supabase) return () => undefined;
-  const { data } = supabase.auth.onAuthStateChange((_event, session) => {
+  const { data } = supabase.auth.onAuthStateChange((event, session) => {
     currentUser = session?.user ?? null;
-    cb(currentUser);
+    cb(currentUser, event);
   });
   return () => data.subscription.unsubscribe();
 }
@@ -56,6 +59,30 @@ export async function signInWithPassword(email: string, password: string): Promi
   if (!supabase) throw new Error('Cloud is not configured.');
   const { error } = await supabase.auth.signInWithPassword({ email: email.trim(), password });
   if (error) throw error;
+}
+
+/** e-mail a reset link; the link returns to this site where the person chooses a new password */
+export async function sendPasswordReset(email: string): Promise<void> {
+  if (!supabase) throw new Error('Cloud is not configured.');
+  const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), { redirectTo: `${location.origin}/` });
+  if (error) throw error;
+}
+
+/** set a new password for the signed-in session (used after the e-mail reset link) */
+export async function setNewPassword(password: string): Promise<void> {
+  if (!supabase) throw new Error('Cloud is not configured.');
+  const { error } = await supabase.auth.updateUser({ password });
+  if (error) throw error;
+}
+
+/** change the password from inside the app: the current password is checked first, so a borrowed unlocked device cannot change it */
+export async function changePassword(current: string, next: string): Promise<void> {
+  if (!supabase) throw new Error('Cloud is not configured.');
+  const email = currentUser?.email;
+  if (!email) throw new Error('Not signed in.');
+  const { error: bad } = await supabase.auth.signInWithPassword({ email, password: current });
+  if (bad) throw new Error('The current password is not correct.');
+  await setNewPassword(next);
 }
 
 export async function signOutUser(): Promise<void> {
