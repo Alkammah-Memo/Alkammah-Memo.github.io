@@ -554,11 +554,13 @@ export default function App() {
       const pushIds = new Set(plan.push.map((m) => m.id));
       const backfill = getGoogleLink().footerDone ? [] : current.filter((m) => !!m.googleEventId && !m.id.startsWith('gcal_') && !pushIds.has(m.id));
       // the work e-mail was just set or changed: invite it to the meetings still to come (once)
+      // (every meeting made here from the start of this month on, so earlier ones from the same month are invited too)
       const work = getGoogleLink().workEmail?.trim() || '';
-      const nowIso = new Date().toISOString();
+      const doneTag = work ? `${work}|month-start` : '';
+      const monthStartIso = cairoLocalToIso(`${getCairoDateString().slice(0, 8)}01`, '00:00');
       const inviteBackfill =
-        work && getGoogleLink().workEmailDone !== work
-          ? current.filter((m) => !!m.googleEventId && !m.id.startsWith('gcal_') && m.start >= nowIso && !pushIds.has(m.id) && !backfill.some((b) => b.id === m.id))
+        work && getGoogleLink().workEmailDone !== doneTag
+          ? current.filter((m) => !!m.googleEventId && !m.id.startsWith('gcal_') && m.start >= monthStartIso && !pushIds.has(m.id) && !backfill.some((b) => b.id === m.id))
           : [];
       for (const m of [...plan.push, ...backfill, ...inviteBackfill]) {
         const r = await pushMeeting(token, m);
@@ -566,7 +568,7 @@ export default function App() {
       }
 
       if (!getGoogleLink().footerDone) setGoogleLink({ footerDone: true });
-      if (getGoogleLink().workEmailDone !== work) setGoogleLink({ workEmailDone: work });
+      if (getGoogleLink().workEmailDone !== doneTag) setGoogleLink({ workEmailDone: doneTag });
 
       // 3) apply everything to the local meetings
       const removeIds = new Set(plan.removeLocal.map((m) => m.id));
