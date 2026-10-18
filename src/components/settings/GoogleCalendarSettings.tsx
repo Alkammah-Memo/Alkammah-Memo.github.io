@@ -1,7 +1,8 @@
 import React, { useEffect, useState, useSyncExternalStore } from 'react';
 import { CalendarDays, Loader2, RefreshCw, LogOut } from 'lucide-react';
 import { Fold } from './Fold';
-import { getGoogleLink, setGoogleLink, subscribeGoogleLink, loadGoogleIdentity, tokenIsValid, probeServer, getServerState, disconnectGoogle } from '../../lib/googleCalendar';
+import { saveWorkEmailRemote } from '../../lib/cloud';
+import { isEmail, getGoogleLink, setGoogleLink, subscribeGoogleLink, loadGoogleIdentity, tokenIsValid, probeServer, getServerState, disconnectGoogle } from '../../lib/googleCalendar';
 import type { ServerState } from '../../lib/googleCalendar';
 
 type SyncFn = (interactive: boolean) => Promise<{ added: number; updated: number; removed: number; email: string }>;
@@ -50,6 +51,17 @@ export const GoogleCalendarSettings: React.FC<{ ar: boolean; onSync?: SyncFn }> 
     }
   };
 
+  const [workDraft, setWorkDraft] = useState(link.workEmail || '');
+  useEffect(() => setWorkDraft(link.workEmail || ''), [link.workEmail]);
+  const workBad = workDraft.trim() !== '' && !isEmail(workDraft);
+  const saveWork = () => {
+    const v = workDraft.trim();
+    if (workBad) return;
+    setGoogleLink({ workEmail: v, workEmailDone: undefined });
+    void saveWorkEmailRemote(v);
+    setMsg({ ok: true, text: v ? (ar ? 'تم الحفظ. ستُرسل الدعوات للاجتماعات القادمة عند المزامنة التالية.' : 'Saved. Invites for the upcoming meetings go out on the next sync.') : ar ? 'تمت إزالة بريد العمل.' : 'Work e-mail removed.' });
+    if (v && connected) void run(false);
+  };
   const saveClient = () => setGoogleLink({ clientId: clientDraft.trim() });
 
   return (
@@ -110,6 +122,35 @@ export const GoogleCalendarSettings: React.FC<{ ar: boolean; onSync?: SyncFn }> 
             </button>
           </>
         )}
+      </div>
+
+      <div className="mt-4 rounded-2xl border border-[#e5e5ea] p-3">
+        <label className="block text-xs font-bold text-[#1d1d1f]" htmlFor="gwork">
+          {ar ? 'أضف اجتماعاتي إلى تقويم العمل (Outlook)' : 'Also put my meetings on my work calendar (Outlook)'}
+        </label>
+        <p className="text-[11px] text-[#6e6e73] mt-0.5">
+          {ar
+            ? 'أدخل بريد العمل. يُضاف كمدعو لكل اجتماع يُنشأ هنا، فيصل إلى Outlook كدعوة عادية وتظهر في تقويم العمل. ويُحدَّث عند تعديل الاجتماع هنا.'
+            : 'Enter the work e-mail. It is added as a guest to every meeting made here, so it reaches Outlook as a normal invite and shows on the work calendar, and it updates when you edit the meeting here.'}
+        </p>
+        <div className="flex gap-2 mt-2">
+          <input
+            id="gwork"
+            type="email"
+            dir="ltr"
+            inputMode="email"
+            autoComplete="off"
+            value={workDraft}
+            onChange={(e) => setWorkDraft(e.target.value)}
+            placeholder="name@company.com"
+            className={`flex-1 min-w-0 h-11 px-3 rounded-xl border bg-white text-sm outline-none focus:ring-2 focus:ring-[#0071e3]/20 ${workBad ? 'border-rose-400' : 'border-[#d2d2d7] focus:border-[#0071e3]'}`}
+          />
+          <button type="button" onClick={saveWork} disabled={workBad || workDraft.trim() === (link.workEmail || '')} className="min-h-11 px-4 rounded-xl bg-[#0071e3] text-white text-sm font-bold disabled:opacity-40">
+            {ar ? 'حفظ' : 'Save'}
+          </button>
+        </div>
+        {workBad && <p className="text-[11px] text-rose-600 mt-1">{ar ? 'اكتب بريداً صحيحاً.' : 'Enter a valid e-mail address.'}</p>}
+        {link.workEmail && link.workEmailDone === link.workEmail && <p className="text-[11px] text-emerald-700 mt-1">{ar ? 'مفعّل: الاجتماعات القادمة مدعوّة.' : 'Active: upcoming meetings are invited.'}</p>}
       </div>
 
       {connected && (
