@@ -32,6 +32,10 @@ export interface GoogleLink {
   taskEvents?: Record<string, { eventId: string; sig: string }>;
   /** Google event ids that were mirrored at the last sync (used to notice what was deleted here) */
   known?: string[];
+  /** a second (work) e-mail that is invited to every meeting made here, so it lands on that calendar (Outlook) too */
+  workEmail?: string;
+  /** the work e-mail the existing upcoming meetings were already invited with */
+  workEmailDone?: string;
 }
 
 // The Client ID is public (it only names this app to Google), so it ships as the default and every device is ready to sign in
@@ -399,8 +403,18 @@ export function planSync(
   return { upsert, removeLocal, push, deleteRemote };
 }
 
+export const isEmail = (s: string | undefined): boolean => !!s && /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(s.trim());
+
+/** the work e-mail to invite, for a meeting that was made here (never for events that came from Google) */
+function inviteFor(m: Meeting): string | undefined {
+  const w = getGoogleLink().workEmail?.trim();
+  return isEmail(w) && !m.id.startsWith(GOOGLE_ID_PREFIX) && w!.toLowerCase() !== (getGoogleLink().email || '').toLowerCase() ? w : undefined;
+}
+
 function eventBody(m: Meeting) {
+  const invite = inviteFor(m);
   return {
+    ...(invite ? { attendees: [{ email: invite }] } : {}),
     summary: m.title,
     description: withFooter(m.description),
     location: m.location || undefined,
@@ -436,17 +450,19 @@ async function googleWrite(method: 'POST' | 'PATCH' | 'DELETE', path: string, to
 /** Creates or updates the event in Google; returns its id and Google's own "updated" time. */
 export async function pushMeeting(token: string, m: Meeting): Promise<{ id: string; updated: string }> {
   let r: { id?: string; updated?: string } | null;
+  // with a work e-mail on the guest list, Google e-mails the invite (that is what puts the meeting on the Outlook calendar)
+  const qs = inviteFor(m) ? '?sendUpdates=all' : '';
   if (m.googleEventId) {
     try {
-      r = await googleWrite('PATCH', `/${encodeURIComponent(m.googleEventId)}`, token, eventBody(m));
+      r = await googleWrite('PATCH', `/${encodeURIComponent(m.googleEventId)}${qs}`, token, eventBody(m));
     } catch (e) {
       // the event does not exist in this Google account (another account was linked before, or it was deleted there): create it again
       const st = (e as { status?: number }).status;
       if (st !== 404 && st !== 410) throw e;
-      r = await googleWrite('POST', '', token, eventBody(m));
+      r = await googleWrite('POST', qs, token, eventBody(m));
     }
   } else {
-    r = await googleWrite('POST', '', token, eventBody(m));
+    r = await googleWrite('POST', qs, token, eventBody(m));
   }
   return { id: (r?.id || m.googleEventId) as string, updated: r?.updated ? new Date(r.updated).toISOString() : new Date().toISOString() };
 }

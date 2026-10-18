@@ -286,13 +286,31 @@ export async function syncSharedQuota(): Promise<void> {
   if (writeError) console.warn('Could not share quota status:', writeError.message);
 }
 
+/** the work calendar e-mail is kept in the user's private settings row, so every device invites the same address */
+export async function loadWorkEmailRemote(): Promise<string | null> {
+  if (!supabase || !currentUser) return null;
+  const { data } = await supabase.from('user_settings').select('gemini').eq('user_id', currentUser.id).maybeSingle();
+  const w = (data?.gemini as Record<string, unknown> | undefined)?.workCalendarEmail;
+  return typeof w === 'string' && w ? w : null;
+}
+
+export async function saveWorkEmailRemote(email: string): Promise<void> {
+  if (!supabase || !currentUser) return;
+  const { data } = await supabase.from('user_settings').select('gemini').eq('user_id', currentUser.id).maybeSingle();
+  const gemini = { ...((data?.gemini as Record<string, unknown> | undefined) || {}), workCalendarEmail: email };
+  const { error } = await supabase.from('user_settings').upsert({ user_id: currentUser.id, gemini, updated_at: new Date().toISOString() }, { onConflict: 'user_id' });
+  if (error) console.warn('Could not save the work calendar e-mail:', error.message);
+}
+
 export async function saveRemoteGeminiSettings(settings: GeminiSettings): Promise<void> {
   if (!supabase || !currentUser) return;
+  const keepWork = await loadWorkEmailRemote().catch(() => null);
   // never persist transient health state (cooldowns); only keys, labels and models
   const sanitized = {
     ...settings,
     slots: settings.slots.map((s) => ({ ...s, cooldownUntil: undefined })),
     quota: usage.exportShared(),
+    ...(keepWork ? { workCalendarEmail: keepWork } : {}),
   };
   const { error } = await supabase.from('user_settings').upsert(
     { user_id: currentUser.id, gemini: sanitized, updated_at: new Date().toISOString() },
