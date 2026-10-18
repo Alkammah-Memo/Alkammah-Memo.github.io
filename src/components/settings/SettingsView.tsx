@@ -25,6 +25,7 @@ import { testGeminiKey, economyVoiceTurn, speedTestModels } from '../../lib/ai/g
 import type { SpeedRow } from '../../lib/ai/gemini';
 import { ModelQueuePanel } from './ModelQueuePanel';
 import { Fold } from './Fold';
+import { SecuritySettings } from './SecuritySettings';
 import { NotificationSettings } from './NotificationSettings';
 import { AppearanceSettings } from './AppearanceSettings';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
@@ -646,6 +647,8 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
           </div>
         )}
       </section>
+
+      <SecuritySettings ar={ar} userEmail={userEmail} />
 
       {/* Account */}
       <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-5 sm:p-6 flex flex-wrap items-center justify-between gap-3">
