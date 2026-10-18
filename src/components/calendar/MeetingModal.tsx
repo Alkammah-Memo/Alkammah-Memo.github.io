@@ -4,6 +4,7 @@ import { Meeting } from '../../types';
 import { Locale, translations } from '../../lib/translations';
 import { checkMeetingConflicts, cairoDateOf, cairoTimeOf, cairoLocalToIso, getCairoDateString } from '../../lib/cairoTime';
 import { X, Calendar, Clock, MapPin, Users, AlertTriangle, CalendarDays } from 'lucide-react';
+import { DateTimeField } from '../common/DateTimeField';
 import { getGoogleLink } from '../../lib/googleCalendar';
 
 interface MeetingModalProps {
@@ -219,29 +220,24 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
           </div>
 
           <div className="grid grid-cols-1 min-[520px]:grid-cols-3 gap-2.5">
-            <div className="min-w-0">
+            <div className="min-w-0 min-[520px]:col-span-2">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                {locale === 'en' ? 'Date (Cairo)' : 'التاريخ'}
+                {locale === 'en' ? 'Starts (Cairo date & time)' : 'يبدأ (التاريخ والوقت بتوقيت القاهرة)'}
               </label>
-              <input
-                type="date"
-                required
-                value={startDate}
-                onChange={(e) => setStartDate(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3]"
-              />
-            </div>
-
-            <div className="min-w-0">
-              <label className="block text-xs font-semibold text-stone-700 mb-1">
-                {locale === 'en' ? 'Start Time' : 'وقت البدء'}
-              </label>
-              <input
-                type="time"
-                required
-                value={startTime}
-                onChange={(e) => setStartTime(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
+              <DateTimeField
+                locale={locale}
+                date={startDate}
+                time={startTime}
+                onChange={(v) => {
+                  setStartDate(v.date);
+                  setStartTime(v.time);
+                  // keep the end after the start: if it is not, give the meeting one hour
+                  if (endTime <= v.time) {
+                    const [h, m] = v.time.split(':').map(Number);
+                    const t = Math.min(h * 60 + m + 60, 23 * 60 + 59);
+                    setEndTime(`${String(Math.floor(t / 60)).padStart(2, '0')}:${String(t % 60).padStart(2, '0')}`);
+                  }
+                }}
               />
             </div>
 
@@ -249,13 +245,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {locale === 'en' ? 'End Time' : 'وقت الانتهاء'}
               </label>
-              <input
-                type="time"
-                required
-                value={endTime}
-                onChange={(e) => setEndTime(e.target.value)}
-                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
-              />
+              <DateTimeField mode="time" locale={locale} time={endTime} onChange={(v) => setEndTime(v.time)} />
             </div>
           </div>
 
