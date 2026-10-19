@@ -26,6 +26,8 @@ import type { SpeedRow } from '../../lib/ai/gemini';
 import { ModelQueuePanel } from './ModelQueuePanel';
 import { Fold } from './Fold';
 import { SecuritySettings } from './SecuritySettings';
+import { ProfileSettings } from '../team/ProfileSettings';
+import { TeamAdmin } from '../team/TeamAdmin';
 import { NotificationSettings } from './NotificationSettings';
 import { AppearanceSettings } from './AppearanceSettings';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
@@ -272,6 +274,9 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
             : 'Manage the Gemini keys that power the voice agent. If any key hits a limit or fails, the system switches to the next key automatically and keeps retrying, so the voice agent never goes down.'}
         </p>
       </div>
+
+      {isCloudConfigured && <ProfileSettings ar={ar} />}
+      {isCloudConfigured && <TeamAdmin ar={ar} />}
 
       <AppearanceSettings ar={ar} />
 
