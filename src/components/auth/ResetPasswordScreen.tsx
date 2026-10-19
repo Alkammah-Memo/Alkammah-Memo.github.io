@@ -4,7 +4,7 @@ import { setNewPassword } from '../../lib/cloud';
 import { passwordProblem } from '../../lib/passwordRules';
 
 /** Shown after the person opens the "reset my password" e-mail link: choose a new password, then continue into the app. */
-export const ResetPasswordScreen: React.FC<{ onDone: () => void }> = ({ onDone }) => {
+export const ResetPasswordScreen: React.FC<{ onDone: () => void; welcome?: boolean }> = ({ onDone, welcome }) => {
   const [pw, setPw] = useState('');
   const [pw2, setPw2] = useState('');
   const [busy, setBusy] = useState(false);
@@ -39,8 +39,8 @@ export const ResetPasswordScreen: React.FC<{ onDone: () => void }> = ({ onDone }
           <div className="w-12 h-12 rounded-2xl bg-[#11161F] flex items-center justify-center">
             <KeyRound className="w-5 h-5 text-[#D4AF37]" />
           </div>
-          <h1 className="text-xl font-bold tracking-tight text-[#1d1d1f]">Choose a new password</h1>
-          <p className="text-xs text-[#515154]">At least 10 characters, with letters and numbers.</p>
+          <h1 className="text-xl font-bold tracking-tight text-[#1d1d1f]">{welcome ? 'Welcome! Choose your own password' : 'Choose a new password'}</h1>
+          <p className="text-xs text-[#515154]">{welcome ? 'The password you were given is temporary. ' : ''}At least 10 characters, with letters and numbers.</p>
         </div>
         <label className="block text-xs font-semibold text-[#515154]">
           New password
