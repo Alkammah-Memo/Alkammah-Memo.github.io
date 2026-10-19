@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { safeImageUrl } from '../../lib/drive';
+import { useSignedUrl } from '../../lib/files';
 import { nameOf } from '../../lib/team';
 
 const TONES = ['bg-sky-100 text-sky-800', 'bg-emerald-100 text-emerald-800', 'bg-amber-100 text-amber-800', 'bg-rose-100 text-rose-800', 'bg-violet-100 text-violet-800', 'bg-teal-100 text-teal-800'];
@@ -11,7 +11,7 @@ export const Avatar: React.FC<{
   className?: string;
 }> = ({ person, size = 36, className = '' }) => {
   const [bad, setBad] = useState<string>('');
-  const url = safeImageUrl(person?.avatar_url);
+  const url = useSignedUrl(person?.avatar_url && !/^https?:/i.test(person.avatar_url) ? person.avatar_url : undefined);
   const name = person ? nameOf(person) : '?';
   const initials = name
     .split(/\s+/)

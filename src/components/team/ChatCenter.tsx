@@ -3,9 +3,8 @@ import { ArrowLeft, ArrowRight, FileText, Loader2, MessageSquarePlus, Paperclip,
 import { Avatar } from './Avatar';
 import { broadcast, createGroup, deleteMessage, getTeam, loadMessages, markRead, nameOf, openDirect, sendMessage, subscribeTeam } from '../../lib/team';
 import type { ChatMessage, ChatThread, Profile } from '../../lib/team';
-import { DriveError, MAX_FILE_BYTES, deleteFromDrive, downloadUrl, imageUrl, shrinkImage, uploadToDrive, viewUrl } from '../../lib/drive';
-import type { Attachment } from '../../lib/drive';
-import { reconnectGoogle } from '../../lib/googleCalendar';
+import { MAX_FILE_BYTES, deleteFile, openAttachment, shrinkImage, uploadFile, useSignedUrl } from '../../lib/files';
+import type { Attachment } from '../../lib/files';
 
 const T = (ar: boolean, en: string, a: string) => (ar ? a : en);
 const input = 'w-full rounded-xl border border-[#d2d2d7] bg-white px-3 py-2.5 text-base sm:text-sm outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/20';
@@ -20,6 +19,12 @@ function timeLabel(iso: string, ar: boolean): string {
     : d.toLocaleDateString(ar ? 'ar-EG' : 'en-GB', { day: 'numeric', month: 'short', timeZone: 'Africa/Cairo' });
 }
 
+/** a stored picture (private link prepared on demand) */
+const Pic: React.FC<{ path: string; alt: string; className?: string }> = ({ path, alt, className }) => {
+  const url = useSignedUrl(path);
+  return url ? <img src={url} alt={alt} loading="lazy" referrerPolicy="no-referrer" className={className} /> : <span className={`block animate-pulse bg-black/10 ${className || ''}`} style={{ width: 160, height: 120 }} />;
+};
+
 // ------------------------------------------------------------------ one message
 const Bubble: React.FC<{ m: ChatMessage; mine: boolean; sender?: Profile; showName: boolean; ar: boolean }> = ({ m, mine, sender, showName, ar }) => {
   const [open, setOpen] = useState(false);
@@ -28,7 +33,7 @@ const Bubble: React.FC<{ m: ChatMessage; mine: boolean; sender?: Profile; showNa
     setBusy(true);
     try {
       await deleteMessage(m);
-      m.attachments.forEach((a) => void deleteFromDrive(a.id));
+      m.attachments.forEach((a) => void deleteFile(a.id));
     } finally {
       setBusy(false);
     }
@@ -44,24 +49,25 @@ const Bubble: React.FC<{ m: ChatMessage; mine: boolean; sender?: Profile; showNa
         >
           {m.attachments.map((a) =>
             a.kind === 'image' ? (
-              <a key={a.id} href={viewUrl(a.id)} target="_blank" rel="noopener noreferrer" onClick={(e) => e.stopPropagation()} className="block mb-1.5 -mx-1">
-                <img src={imageUrl(a.id, 900)} alt={a.name} loading="lazy" referrerPolicy="no-referrer" className="rounded-xl max-h-72 w-auto max-w-full object-cover bg-black/5" />
-              </a>
+              <button key={a.id} type="button" onClick={(e) => { e.stopPropagation(); void openAttachment(a); }} className="block mb-1.5 -mx-1">
+                <Pic path={a.id} alt={a.name} className="rounded-xl max-h-72 w-auto max-w-full object-cover bg-black/5" />
+              </button>
             ) : (
-              <a
+              <button
                 key={a.id}
-                href={downloadUrl(a.id)}
-                target="_blank"
-                rel="noopener noreferrer"
-                onClick={(e) => e.stopPropagation()}
-                className={`flex items-center gap-2 rounded-xl px-2.5 py-2 mb-1.5 ${mine ? 'bg-white/20' : 'bg-[#f5f5f7]'}`}
+                type="button"
+                onClick={(e) => {
+                  e.stopPropagation();
+                  void openAttachment(a);
+                }}
+                className={`flex items-center gap-2 rounded-xl px-2.5 py-2 mb-1.5 text-start ${mine ? 'bg-white/20' : 'bg-[#f5f5f7]'}`}
               >
                 <FileText className="w-5 h-5 shrink-0" />
                 <span className="min-w-0">
                   <span className="block truncate font-semibold">{a.name}</span>
                   <span className="block text-[11px] opacity-70">{prettySize(a.size)}</span>
                 </span>
-              </a>
+              </button>
             )
           )}
           {m.body}
@@ -87,7 +93,6 @@ const Composer: React.FC<{ ar: boolean; onSend: (body: string, files: Attachment
   const [uploading, setUploading] = useState(0);
   const [sending, setSending] = useState(false);
   const [err, setErr] = useState('');
-  const [needDrive, setNeedDrive] = useState<File[] | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
   const taRef = useRef<HTMLTextAreaElement>(null);
 
@@ -100,20 +105,19 @@ const Composer: React.FC<{ ar: boolean; onSend: (body: string, files: Attachment
 
   const addFiles = async (list: File[]) => {
     setErr('');
-    setNeedDrive(null);
     for (const f of list.slice(0, 5)) {
       if (f.size > MAX_FILE_BYTES) {
-        setErr(T(ar, `"${f.name}" is bigger than 25 MB.`, `"${f.name}" أكبر من 25 ميجابايت.`));
+        setErr(T(ar, `"${f.name}" is bigger than 8 MB.`, `"${f.name}" أكبر من 8 ميجابايت.`));
         continue;
       }
       setUploading((n) => n + 1);
       try {
-        const ready = f.type.startsWith('image/') ? await shrinkImage(f, 1600) : f;
-        const att = await uploadToDrive(ready, { prefix: 'chat' });
+        // photos are squeezed hard (about 100-200 KB each); other files are stored as they are, up to 8 MB
+        const ready = f.type.startsWith('image/') ? await shrinkImage(f, 1280, 0.6) : f;
+        const att = await uploadFile(ready);
         setFiles((cur) => [...cur, { ...att, name: f.name }]);
       } catch (e) {
-        if (e instanceof DriveError && (e.code === 'NOT_CONNECTED' || e.code === 'NO_PERMISSION')) setNeedDrive(list);
-        else setErr(String((e as Error).message));
+        setErr(String((e as Error).message));
         break;
       } finally {
         setUploading((n) => n - 1);
@@ -139,30 +143,13 @@ const Composer: React.FC<{ ar: boolean; onSend: (body: string, files: Attachment
 
   return (
     <div className="border-t border-[#e5e5ea] bg-white/95 p-2 sm:p-3 space-y-2">
-      {needDrive && (
-        <div className="rounded-xl border border-amber-200 bg-amber-50 p-2.5 text-sm text-amber-900 flex items-center gap-2 flex-wrap">
-          <span className="flex-1 min-w-40">{T(ar, 'To send files, allow Google Drive once (files are kept in your own Drive).', 'لإرسال الملفات، اسمح بـ Google Drive مرة واحدة (الملفات تُحفظ في Drive الخاص بك).')}</span>
-          <button
-            type="button"
-            className="min-h-10 px-3 rounded-lg bg-[#1d1d1f] text-white text-xs font-bold"
-            onClick={() => {
-              const f = needDrive;
-              reconnectGoogle()
-                .then(() => addFiles(f))
-                .catch((e) => setErr(String((e as Error).message)));
-            }}
-          >
-            {T(ar, 'Allow', 'السماح')}
-          </button>
-        </div>
-      )}
       {(files.length > 0 || uploading > 0) && (
         <div className="flex flex-wrap gap-2">
           {files.map((a) => (
             <span key={a.id} className="inline-flex items-center gap-1.5 rounded-lg bg-[#f5f5f7] border border-[#e5e5ea] ps-1 pe-1 py-1 text-xs max-w-full">
-              {a.kind === 'image' ? <img src={imageUrl(a.id, 120)} alt="" referrerPolicy="no-referrer" className="w-8 h-8 rounded object-cover" /> : <FileText className="w-4 h-4 ms-1" />}
+              {a.kind === 'image' ? <Pic path={a.id} alt="" className="w-8 h-8 rounded object-cover" /> : <FileText className="w-4 h-4 ms-1" />}
               <span className="truncate max-w-32">{a.name}</span>
-              <button type="button" aria-label={T(ar, 'Remove', 'إزالة')} className="min-h-8 min-w-8 inline-flex items-center justify-center" onClick={() => { setFiles((c) => c.filter((x) => x.id !== a.id)); void deleteFromDrive(a.id); }}>
+              <button type="button" aria-label={T(ar, 'Remove', 'إزالة')} className="min-h-8 min-w-8 inline-flex items-center justify-center" onClick={() => { setFiles((c) => c.filter((x) => x.id !== a.id)); void deleteFile(a.id); }}>
                 <X className="w-3.5 h-3.5" />
               </button>
             </span>
@@ -328,7 +315,7 @@ export const ChatCenter: React.FC<{ locale: 'en' | 'ar'; openWith?: string | nul
   const [composing, setComposing] = useState(false);
   const me = team.profiles.find((p) => p.user_id === team.meId);
   const others = useMemo(() => team.profiles.filter((p) => p.active && p.user_id !== team.meId), [team.profiles, team.meId]);
-  const canBroadcast = me?.role === 'admin' || me?.role === 'manager';
+  const canBroadcast = true;
   const byId = useMemo(() => new Map(team.profiles.map((p) => [p.user_id, p])), [team.profiles]);
 
   // someone's birthday banner (or anywhere else) can ask to open a chat with a person

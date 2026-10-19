@@ -3,17 +3,9 @@ import { Camera, Check, Loader2, Trash2, UserRound } from 'lucide-react';
 import { Fold } from '../settings/Fold';
 import { Avatar } from './Avatar';
 import { getTeam, saveMyProfile, subscribeTeam } from '../../lib/team';
-import { DriveError, MAX_PROFILE_BYTES, deleteFromDrive, imageUrl, shrinkImage, uploadToDrive } from '../../lib/drive';
-import { reconnectGoogle } from '../../lib/googleCalendar';
+import { MAX_PROFILE_BYTES, deleteFile, shrinkImage, uploadFile } from '../../lib/files';
 
 const T = (ar: boolean, en: string, a: string) => (ar ? a : en);
-const driveIdOf = (url: string) => {
-  try {
-    return new URL(url).searchParams.get('id') || '';
-  } catch {
-    return '';
-  }
-};
 const input = 'w-full rounded-xl border border-[#d2d2d7] bg-white px-3 py-2.5 text-base sm:text-sm outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/20';
 
 export const ProfileSettings: React.FC<{ ar: boolean }> = ({ ar }) => {
@@ -25,7 +17,6 @@ export const ProfileSettings: React.FC<{ ar: boolean }> = ({ ar }) => {
   const [busy, setBusy] = useState(false);
   const [photoBusy, setPhotoBusy] = useState(false);
   const [msg, setMsg] = useState<{ ok: boolean; text: string } | null>(null);
-  const [needDrive, setNeedDrive] = useState<File | null>(null);
   const fileRef = useRef<HTMLInputElement>(null);
 
   if (!me) return null;
@@ -55,35 +46,27 @@ export const ProfileSettings: React.FC<{ ar: boolean }> = ({ ar }) => {
     if (file.size > MAX_PROFILE_BYTES) return setMsg({ ok: false, text: T(ar, 'The picture is bigger than 15 MB. Choose a smaller one.', 'الصورة أكبر من 15 ميجابايت. اختر صورة أصغر.') });
     if (!file.type.startsWith('image/')) return setMsg({ ok: false, text: T(ar, 'Please choose a picture.', 'الرجاء اختيار صورة.') });
     setPhotoBusy(true);
-    setNeedDrive(null);
     try {
-      const small = await shrinkImage(file, 640);
-      const att = await uploadToDrive(small, { prefix: 'profile' });
-      const old = driveIdOf(me.avatar_url);
-      await saveMyProfile({ avatar_url: imageUrl(att.id, 480) });
-      if (old) void deleteFromDrive(old);
-      setMsg({ ok: true, text: T(ar, 'Picture updated. It is kept in your Google Drive, folder "Memo System".', 'تم تحديث الصورة. محفوظة في Google Drive الخاص بك داخل مجلد "Memo System".') });
+      // squeezed to a small square-ish picture: about 20-40 KB instead of megabytes
+      const small = await shrinkImage(file, 400, 0.72);
+      const att = await uploadFile(small, { maxBytes: 2 * 1024 * 1024 });
+      const old = me.avatar_url;
+      await saveMyProfile({ avatar_url: att.id });
+      if (old) void deleteFile(old);
+      setMsg({ ok: true, text: T(ar, 'Picture updated.', 'تم تحديث الصورة.') });
     } catch (e) {
-      if (e instanceof DriveError && (e.code === 'NOT_CONNECTED' || e.code === 'NO_PERMISSION')) setNeedDrive(file);
-      else setMsg({ ok: false, text: String((e as Error).message) });
+      setMsg({ ok: false, text: String((e as Error).message) });
     } finally {
       setPhotoBusy(false);
     }
   };
 
-  const allowDrive = () => {
-    const f = needDrive;
-    reconnectGoogle()
-      .then(() => f && upload(f))
-      .catch((e) => setMsg({ ok: false, text: String((e as Error).message) }));
-  };
-
   const removePhoto = async () => {
     setPhotoBusy(true);
     try {
-      const old = driveIdOf(me.avatar_url);
+      const old = me.avatar_url;
       await saveMyProfile({ avatar_url: '' });
-      if (old) void deleteFromDrive(old);
+      if (old) void deleteFile(old);
     } finally {
       setPhotoBusy(false);
     }
@@ -131,17 +114,8 @@ export const ProfileSettings: React.FC<{ ar: boolean }> = ({ ar }) => {
           </div>
         </div>
         <p className="text-xs text-[#6e6e73] leading-relaxed">
-          {T(ar, 'Up to 15 MB. The picture is stored in your own Google Drive (folder "Memo System"), not in the app database.', 'حتى 15 ميجابايت. تُحفظ الصورة في Google Drive الخاص بك (مجلد "Memo System") وليس في قاعدة بيانات التطبيق.')}
+          {T(ar, 'Any picture up to 15 MB. It is shrunk automatically and kept privately for your team.', 'أي صورة حتى 15 ميجابايت. تُصغَّر تلقائياً وتُحفظ بشكل خاص لفريقك.')}
         </p>
-
-        {needDrive && (
-          <div className="rounded-2xl border border-amber-200 bg-amber-50 p-3 text-sm text-amber-900 space-y-2">
-            <p>{T(ar, 'To keep your picture in your Google Drive, allow file storage once.', 'لحفظ صورتك في Google Drive، اسمح بتخزين الملفات مرة واحدة.')}</p>
-            <button type="button" onClick={allowDrive} className="min-h-11 px-4 rounded-xl bg-[#1d1d1f] text-white text-sm font-bold">
-              {T(ar, 'Allow Google Drive', 'السماح بـ Google Drive')}
-            </button>
-          </div>
-        )}
 
         <label className="block space-y-1">
           <span className="text-xs font-bold text-[#515154]">{T(ar, 'Name shown to the team', 'الاسم الظاهر للفريق')}</span>
@@ -156,7 +130,7 @@ export const ProfileSettings: React.FC<{ ar: boolean }> = ({ ar }) => {
           <input className={input} type="date" value={bdV} min="1930-01-01" max={new Date().toISOString().slice(0, 10)} onChange={(e) => setBirthday(e.target.value)} />
         </label>
         <div className="text-xs text-[#6e6e73]">
-          {T(ar, 'E-mail', 'البريد الإلكتروني')}: <span dir="ltr">{me.email}</span> · {T(ar, 'Role', 'الدور')}: <b>{me.role === 'admin' ? T(ar, 'Administrator', 'مدير النظام') : me.role === 'manager' ? T(ar, 'Manager', 'مدير') : T(ar, 'Member', 'عضو')}</b>
+          {T(ar, 'E-mail', 'البريد الإلكتروني')}: <span dir="ltr">{me.email}</span> · {T(ar, 'Role', 'الدور')}: <b>{me.role === 'admin' ? T(ar, 'Administrator', 'مدير النظام') : T(ar, 'Manager', 'مدير')}</b>
         </div>
 
         <div className="flex items-center gap-3">

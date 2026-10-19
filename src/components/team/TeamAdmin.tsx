@@ -8,7 +8,7 @@ import { passwordProblem } from '../../lib/passwordRules';
 
 const T = (ar: boolean, en: string, a: string) => (ar ? a : en);
 const input = 'w-full rounded-xl border border-[#d2d2d7] bg-white px-3 py-2.5 text-base sm:text-sm outline-none focus:border-[#0071e3] focus:ring-2 focus:ring-[#0071e3]/20';
-const roleLabel = (r: Role, ar: boolean) => (r === 'admin' ? T(ar, 'Administrator', 'مدير النظام') : r === 'manager' ? T(ar, 'Manager', 'مدير') : T(ar, 'Member', 'عضو'));
+const roleLabel = (r: Role, ar: boolean) => (r === 'admin' ? T(ar, 'Administrator', 'مدير النظام') : T(ar, 'Manager', 'مدير'));
 
 /** A readable temporary password (letters and numbers, no look-alike characters). */
 function makePassword(): string {
@@ -30,7 +30,7 @@ export const TeamAdmin: React.FC<{ ar: boolean }> = ({ ar }) => {
 
   const [email, setEmail] = useState('');
   const [dname, setDname] = useState('');
-  const [role, setRole] = useState<Role>('member');
+  const [role, setRole] = useState<Role>('manager');
   const [pw, setPw] = useState(makePassword);
   const [creating, setCreating] = useState(false);
   const [given, setGiven] = useState<{ email: string; password: string } | null>(null);
@@ -59,7 +59,7 @@ export const TeamAdmin: React.FC<{ ar: boolean }> = ({ ar }) => {
       setGiven({ email: email.trim().toLowerCase(), password: pw });
       setEmail('');
       setDname('');
-      setRole('member');
+      setRole('manager');
       setPw(makePassword());
       await load();
     } catch (e) {
@@ -114,7 +114,6 @@ export const TeamAdmin: React.FC<{ ar: boolean }> = ({ ar }) => {
           <input className={input} type="email" dir="ltr" placeholder={T(ar, 'E-mail', 'البريد الإلكتروني')} value={email} onChange={(e) => setEmail(e.target.value)} autoCapitalize="none" autoCorrect="off" />
           <input className={input} placeholder={T(ar, 'Full name (optional)', 'الاسم الكامل (اختياري)')} value={dname} onChange={(e) => setDname(e.target.value)} maxLength={80} />
           <select className={input} value={role} onChange={(e) => setRole(e.target.value as Role)}>
-            <option value="member">{roleLabel('member', ar)}</option>
             <option value="manager">{roleLabel('manager', ar)}</option>
             <option value="admin">{roleLabel('admin', ar)}</option>
           </select>
@@ -125,7 +124,7 @@ export const TeamAdmin: React.FC<{ ar: boolean }> = ({ ar }) => {
             </button>
           </div>
           <p className="text-xs text-[#6e6e73]">
-            {T(ar, 'Managers can also send one message to several people. Administrators can also manage this list.', 'يستطيع المدير إرسال رسالة واحدة لعدة أشخاص. ويستطيع مدير النظام أيضاً إدارة هذه القائمة.')}
+            {T(ar, 'Managers use the system with their own private data and can message the team. Administrators can also manage this list.', 'يستخدم المدير النظام ببياناته الخاصة ويستطيع مراسلة الفريق. ويستطيع مدير النظام أيضاً إدارة هذه القائمة.')}
           </p>
           <button type="button" disabled={creating || !email.includes('@')} onClick={create} className="inline-flex items-center gap-2 min-h-11 px-5 rounded-xl bg-[#0071e3] text-white text-sm font-bold disabled:opacity-40">
             {creating ? <Loader2 className="w-4 h-4 animate-spin" /> : <Check className="w-4 h-4" />}
@@ -191,7 +190,6 @@ export const TeamAdmin: React.FC<{ ar: boolean }> = ({ ar }) => {
                     disabled={busyId === p.user_id}
                     onChange={(e) => void act(p.user_id, () => adminSetRole(p.user_id, e.target.value as Role))}
                   >
-                    <option value="member">{roleLabel('member', ar)}</option>
                     <option value="manager">{roleLabel('manager', ar)}</option>
                     <option value="admin">{roleLabel('admin', ar)}</option>
                   </select>
