@@ -68,6 +68,10 @@ import { notifPrefs, setNotifPrefsAccountSaver } from './lib/notifications';
 import type { NotifPrefs } from './lib/notifications';
 import { cachedFeedMeetings, getFeedState, refreshFeed, setFeedUrl, subscribeFeed } from './lib/outlookFeed';
 import { LoginScreen } from './components/auth/LoginScreen';
+import { ChatCenter } from './components/team/ChatCenter';
+import { BirthdayBanner } from './components/team/BirthdayBanner';
+import { claimDevice } from './lib/deviceOwner';
+import { getTeam, refreshTeam, startTeam, stopTeam, subscribeTeam } from './lib/team';
 import { ResetPasswordScreen } from './components/auth/ResetPasswordScreen';
 import { SettingsView } from './components/settings/SettingsView';
 import type { User } from '@supabase/supabase-js';
@@ -146,22 +150,48 @@ export default function App() {
   useEffect(() => {
     if (!isCloudConfigured) return;
     let alive = true;
+    // a different person on a shared device: remove the previous person's local copy first, then start fresh
+    const accept = async (u: User | null): Promise<boolean> => {
+      if (u && (await claimDevice(u.id))) {
+        location.reload();
+        return false;
+      }
+      return alive;
+    };
     getInitialSession()
-      .then((session) => {
+      .then(async (session) => {
         if (!alive) return;
-        setUser(session?.user ?? null);
+        const u = session?.user ?? null;
+        if (await accept(u)) setUser(u);
       })
       .finally(() => alive && setAuthReady(true));
     const off = onAuthChange((u, ev) => {
       if (!alive) return;
       if (ev === 'PASSWORD_RECOVERY') setRecovering(true);
-      setUser(u);
+      void accept(u).then((ok) => ok && setUser(u));
     });
     return () => {
       alive = false;
       off();
     };
   }, []);
+
+  // Team: profiles + chat for the signed-in person (only when the cloud is on)
+  const team = useSyncExternalStore(subscribeTeam, getTeam);
+  const [chatWith, setChatWith] = useState<string | null>(null);
+  useEffect(() => {
+    if (!isCloudConfigured) return;
+    if (!user) {
+      stopTeam();
+      return;
+    }
+    void startTeam(user.id);
+    const onVisible = () => document.visibilityState === 'visible' && void refreshTeam();
+    document.addEventListener('visibilitychange', onVisible);
+    return () => document.removeEventListener('visibilitychange', onVisible);
+  }, [user]);
+  // the first password was given by an administrator: the person must choose their own before anything else
+  const mustChangePassword = !!user && user.user_metadata?.must_change_password === true;
 
   // Build the assistant greeting from real data only
   const buildGreeting = useCallback(
@@ -1619,8 +1649,8 @@ export default function App() {
     );
   }
 
-  if (isCloudConfigured && recovering && user) {
-    return <ResetPasswordScreen onDone={() => setRecovering(false)} />;
+  if (isCloudConfigured && user && (recovering || mustChangePassword)) {
+    return <ResetPasswordScreen welcome={mustChangePassword && !recovering} onDone={() => setRecovering(false)} />;
   }
 
   if (isCloudConfigured && !user) {
@@ -1639,6 +1669,8 @@ export default function App() {
   return (
     <AppShell
       currentTab={currentTab}
+      chatEnabled={isCloudConfigured}
+      chatUnread={team.unreadTotal}
       locale={locale}
       isCloudConnected={isCloudConnected}
       undoToast={undoToast}
@@ -1675,6 +1707,18 @@ export default function App() {
       }
     >
       {/* Tab Views */}
+      {currentTab === 'today' && isCloudConfigured && (
+        <BirthdayBanner
+          ar={locale === 'ar'}
+          today={getCairoDateString()}
+          onWish={(id) => {
+            setChatWith(id);
+            setCurrentTab('chat');
+          }}
+        />
+      )}
+      {currentTab === 'chat' && isCloudConfigured && <ChatCenter locale={locale} openWith={chatWith} onOpened={() => setChatWith(null)} />}
+
       {currentTab === 'today' && (
         <TodayBriefing
           tasks={tasks}
