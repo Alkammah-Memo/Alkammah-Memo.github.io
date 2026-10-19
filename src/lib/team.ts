@@ -1,9 +1,9 @@
 /** Team: profiles, roles and chat, on top of Supabase (row-level security decides who sees what). */
 import type { RealtimeChannel } from '@supabase/supabase-js';
 import { supabase } from './cloud';
-import type { Attachment } from './drive';
+import type { Attachment } from './files';
 
-export type Role = 'admin' | 'manager' | 'member';
+export type Role = 'admin' | 'manager';
 
 export interface Profile {
   user_id: string;
