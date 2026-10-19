@@ -71,7 +71,7 @@ export async function sendPasswordReset(email: string): Promise<void> {
 /** set a new password for the signed-in session (used after the e-mail reset link) */
 export async function setNewPassword(password: string): Promise<void> {
   if (!supabase) throw new Error('Cloud is not configured.');
-  const { error } = await supabase.auth.updateUser({ password });
+  const { error } = await supabase.auth.updateUser({ password, data: { must_change_password: false } });
   if (error) throw error;
 }
 

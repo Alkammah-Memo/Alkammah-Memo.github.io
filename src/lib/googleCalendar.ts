@@ -9,7 +9,10 @@ import { cairoLocalToIso } from './cairoTime';
 import { supabase } from './cloud';
 
 /** read and write events, plus the account's email address (to show which account is linked) */
-export const GOOGLE_SCOPE = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email';
+/** the calendar part is required; Drive (profile pictures and chat files, only files this app creates) is asked together with it but is optional */
+export const DRIVE_SCOPE = 'https://www.googleapis.com/auth/drive.file';
+const REQUIRED_SCOPE = 'https://www.googleapis.com/auth/calendar.events https://www.googleapis.com/auth/userinfo.email';
+export const GOOGLE_SCOPE = `${REQUIRED_SCOPE} ${DRIVE_SCOPE}`;
 /** bump when the scope changes so devices signed in with the old one ask again */
 const SCOPE_VERSION = 2;
 const KEY = 'alkammah_google_link_v1';
@@ -24,6 +27,8 @@ export interface GoogleLink {
   lastCount?: number;
   autoSync: boolean;
   scopeV?: number;
+  /** this sign-in also allows the app to keep pictures and files in the user's own Drive */
+  driveOk?: boolean;
   /** true once the long-lived (server-side) sign-in is set up, so tokens renew by themselves */
   serverLinked?: boolean;
   /** the "Synced from Alkammah Memo system" note has been added to events pushed earlier */
@@ -130,12 +135,12 @@ export async function probeServer(): Promise<ServerState> {
 }
 
 function applyToken(access: string, expiresIn: number, scope: string) {
-  const ok = GOOGLE_SCOPE.split(' ').every((sc) => scope.includes(sc));
+  const ok = REQUIRED_SCOPE.split(' ').every((sc) => scope.includes(sc));
   if (!ok) {
     setGoogleLink({ token: undefined, expiresAt: undefined, scopeV: undefined });
     throw new Error('GOOGLE_SCOPES_MISSING');
   }
-  setGoogleLink({ token: access, expiresAt: Date.now() + (expiresIn || 3600) * 1000, scopeV: SCOPE_VERSION });
+  setGoogleLink({ token: access, expiresAt: Date.now() + (expiresIn || 3600) * 1000, scopeV: SCOPE_VERSION, driveOk: scope.includes(DRIVE_SCOPE) });
   return access;
 }
 
@@ -224,6 +229,13 @@ export function requestGoogleToken(interactive: boolean): Promise<string> {
     return requestBrowserToken(l.scopeV === SCOPE_VERSION ? 'select_account' : 'consent');
   }
   return requestBrowserToken('none');
+}
+
+/** Asks Google again (must be called straight from a tap) so the user can also allow Drive file storage. */
+export function reconnectGoogle(): Promise<string> {
+  const w = window as unknown as { google?: Gis };
+  if (!w.google?.accounts?.oauth2) return Promise.reject(new Error('Google sign-in is still loading, try again in a moment.'));
+  return serverState === 'ready' ? connectViaServer() : requestBrowserToken('consent');
 }
 
 /** Forget the permanent link (also revokes it at Google). */
