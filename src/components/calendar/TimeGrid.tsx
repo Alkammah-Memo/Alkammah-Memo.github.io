@@ -29,6 +29,7 @@ interface TimeGridProps {
   onOpenMeeting: (meeting: Meeting) => void;
 }
 
+const MIN_BLOCK = 50; // tall enough for the time line plus two lines of the title
 const ROW_HEIGHT = 56; // px per hour: a comfortable touch target (28px per half hour)
 const SNAP_MINUTES = 30;
 const GUTTER = 56;
@@ -81,7 +82,7 @@ function placeMeetings(dateStr: string, meetings: Meeting[]): Placed[] {
       placed.push({
         meeting: it.meeting,
         top: (it.start / 60) * ROW_HEIGHT,
-        height: Math.max(26, ((it.end - it.start) / 60) * ROW_HEIGHT - 2),
+        height: Math.max(MIN_BLOCK, ((it.end - it.start) / 60) * ROW_HEIGHT - 2),
         lane,
         lanes: laneEnds.length,
       });
@@ -219,7 +220,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({ days, meetings, ar, nowTime,
                       onOpenMeeting(p.meeting);
                     }
                   }}
-                  className="absolute z-[5] overflow-hidden rounded-lg border border-blue-300 bg-blue-100/95 hover:bg-blue-200 text-blue-950 px-1.5 py-1 text-[11px] leading-tight shadow-2xs cursor-pointer"
+                  className="absolute z-[5] overflow-hidden rounded-lg border border-blue-300 bg-blue-100/95 hover:bg-blue-200 text-blue-950 px-1.5 py-1 text-[11px] sm:text-xs leading-snug shadow-2xs cursor-pointer"
                   style={{
                     top: p.top + 1,
                     height: p.height,
@@ -231,7 +232,7 @@ export const TimeGrid: React.FC<TimeGridProps> = ({ days, meetings, ar, nowTime,
                   <div className="font-mono text-[10px] font-bold text-blue-700">
                     {cairoTimeOf(p.meeting.start)} - {cairoTimeOf(p.meeting.end)}
                   </div>
-                  <div className="font-bold line-clamp-2">{p.meeting.title}</div>
+                  <div className={`font-bold break-words ${days.length === 1 ? 'line-clamp-4' : 'line-clamp-3'}`}>{p.meeting.title}</div>
                   {p.meeting.location && p.height > 64 && (
                     <div className="text-[10px] text-blue-800/70 truncate">{p.meeting.location}</div>
                   )}

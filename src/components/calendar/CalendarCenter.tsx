@@ -425,11 +425,15 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
               return (
                 <div
                   key={`day-${dayNum}`}
-                  onClick={() => openDay(cellDateStr)}
-                  className="p-0.5 sm:p-2 min-h-[72px] sm:min-h-[100px] hover:bg-blue-50/20 transition-colors flex flex-col justify-between group cursor-pointer relative"
+                  className="p-0.5 sm:p-2 min-h-[84px] sm:min-h-[110px] hover:bg-blue-50/20 transition-colors flex flex-col justify-between group cursor-pointer relative"
                   style={(firstDayIndex + i) % 7 >= 5 ? { backgroundImage: WEEKEND_HATCH } : undefined}
                 >
-                  <div className="flex items-center justify-between text-xs font-mono">
+                  <div
+                    onClick={() => openDay(cellDateStr)}
+                    role="button"
+                    aria-label={ar ? `فتح يوم ${dayNum}` : `Open day ${dayNum}`}
+                    className="flex items-center justify-between text-xs font-mono min-h-9 sm:min-h-8 -mx-0.5 -mt-0.5 px-1 rounded-md active:bg-blue-100/60"
+                  >
                     <span
                       className={`font-bold transition-colors ${
                         cellDateStr === todayCairo
@@ -451,7 +455,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                           e.stopPropagation();
                           onOpenMeetingModal(null, cellDateStr);
                         }}
-                        className="opacity-0 group-hover:opacity-100 p-0.5 bg-slate-900 text-white rounded hover:scale-110 transition-all text-[10px] flex items-center justify-center"
+                        className="max-sm:hidden opacity-0 group-hover:opacity-100 p-1 bg-slate-900 text-white rounded hover:scale-110 transition-all text-[10px] flex items-center justify-center"
                         title={locale === 'ar' ? 'إضافة اجتماع جديد في هذا اليوم' : 'Add meeting on this date'}
                       >
                         <Plus className="w-3 h-3" />
@@ -460,7 +464,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                   </div>
 
                   {/* Every meeting and task of the day is listed by name (the cell grows to fit); tapping an item opens it, tapping the day opens the day view */}
-                  <div className="my-1 space-y-0.5 sm:space-y-1 min-w-0">
+                  <div className="mt-1 mb-2 space-y-1 min-w-0">
                     {dayMeetings.map((m) => (
                       <div
                         key={m.id}
@@ -491,7 +495,11 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                     ))}
                   </div>
 
-                  <div />
+                  <div
+                    onClick={() => openDay(cellDateStr)}
+                    aria-hidden
+                    className="flex-1 min-h-3"
+                  />
                 </div>
               );
             })}
