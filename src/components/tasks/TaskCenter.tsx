@@ -53,9 +53,9 @@ const RowControls: React.FC<{
       onPointerDown={sort.startDrag(id)}
       aria-label={ar ? 'اسحب لإعادة الترتيب' : 'Drag to reorder'}
       title={ar ? 'اسحب لإعادة الترتيب' : 'Drag to reorder'}
-      className="touch-none cursor-grab active:cursor-grabbing p-0.5 rounded text-stone-300 hover:text-stone-600 active:text-stone-800"
+      className="touch-none cursor-grab active:cursor-grabbing h-11 w-11 -my-1 inline-flex items-center justify-center rounded-lg text-stone-400 hover:text-stone-700 hover:bg-stone-100 active:bg-stone-200 active:text-stone-900"
     >
-      <GripVertical className="w-3.5 h-3.5" />
+      <GripVertical className="w-5 h-5" />
     </button>
     <span className="min-w-5 text-center font-mono font-bold text-[11px] tabular-nums text-stone-700">{index + 1}</span>
     <div className={`flex ${vertical ? 'flex-row' : 'flex-col'}`}>
@@ -65,9 +65,9 @@ const RowControls: React.FC<{
         onClick={() => sort.move(id, -1)}
         aria-label={ar ? 'نقل لأعلى' : 'Move up'}
         title={ar ? 'نقل لأعلى' : 'Move up'}
-        className="h-4 w-4 inline-flex items-center justify-center rounded text-stone-400 hover:text-stone-800 active:bg-stone-100 disabled:opacity-25"
+        className="h-7 w-9 inline-flex items-center justify-center rounded-md text-stone-500 hover:text-stone-800 active:bg-stone-100 disabled:opacity-25"
       >
-        <ChevronUp className="w-3 h-3" />
+        <ChevronUp className="w-4 h-4" />
       </button>
       <button
         type="button"
@@ -75,9 +75,9 @@ const RowControls: React.FC<{
         onClick={() => sort.move(id, 1)}
         aria-label={ar ? 'نقل لأسفل' : 'Move down'}
         title={ar ? 'نقل لأسفل' : 'Move down'}
-        className="h-4 w-4 inline-flex items-center justify-center rounded text-stone-400 hover:text-stone-800 active:bg-stone-100 disabled:opacity-25"
+        className="h-7 w-9 inline-flex items-center justify-center rounded-md text-stone-500 hover:text-stone-800 active:bg-stone-100 disabled:opacity-25"
       >
-        <ChevronDown className="w-3 h-3" />
+        <ChevronDown className="w-4 h-4" />
       </button>
     </div>
   </div>
