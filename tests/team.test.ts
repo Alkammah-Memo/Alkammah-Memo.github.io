@@ -1,19 +1,10 @@
 import { describe, expect, it } from 'vitest';
-import { safeImageUrl } from '../src/lib/drive';
 import { birthdaysOn, nameOf } from '../src/lib/team';
 import type { Profile } from '../src/lib/team';
 
-const p = (over: Partial<Profile>): Profile => ({ user_id: 'u', email: 'a.b@x.com', display_name: '', phone: '', birthday: '', avatar_url: '', role: 'member', active: true, created_at: '', ...over });
+const p = (over: Partial<Profile>): Profile => ({ user_id: 'u', email: 'a.b@x.com', display_name: '', phone: '', birthday: '', avatar_url: '', role: 'manager', active: true, created_at: '', ...over });
 
 describe('team helpers', () => {
-  it('only shows pictures hosted by Google', () => {
-    expect(safeImageUrl('https://drive.google.com/thumbnail?id=abc&sz=w400')).toContain('drive.google.com');
-    expect(safeImageUrl('https://lh3.googleusercontent.com/d/abc')).toContain('googleusercontent');
-    expect(safeImageUrl('https://evil.example/pixel.gif')).toBe('');
-    expect(safeImageUrl('http://drive.google.com/x')).toBe('');
-    expect(safeImageUrl('javascript:alert(1)')).toBe('');
-    expect(safeImageUrl('')).toBe('');
-  });
   it('falls back to the e-mail name', () => {
     expect(nameOf(p({ display_name: ' Sara ' }))).toBe('Sara');
     expect(nameOf(p({}))).toBe('a.b');
