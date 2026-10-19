@@ -5,6 +5,7 @@ import {
   BookOpen,
   Calendar,
   Building2,
+  MessageCircle,
   Sparkles,
   Database,
   Globe,
@@ -19,6 +20,8 @@ import {
 
 interface AppShellProps {
   currentTab: string;
+  chatEnabled?: boolean;
+  chatUnread?: number;
   locale: Locale;
   isCloudConnected: boolean;
   undoToast: { message: string; onUndo: () => void } | null;
@@ -35,6 +38,8 @@ interface AppShellProps {
 
 export const AppShell: React.FC<AppShellProps> = ({
   currentTab,
+  chatEnabled,
+  chatUnread = 0,
   locale,
   isCloudConnected,
   undoToast,
@@ -78,6 +83,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     { id: 'notebook', label: locale === 'ar' ? 'المفكرة والحبر' : 'Notes & Ink', icon: BookOpen },
     { id: 'planner', label: locale === 'ar' ? 'المهام والتقويم' : 'Tasks & Calendar', icon: Calendar },
     { id: 'directory', label: locale === 'ar' ? 'دليل المؤسسة' : 'Directory', icon: Building2 },
+    ...(chatEnabled ? [{ id: 'chat', label: locale === 'ar' ? 'المحادثات' : 'Chat', icon: MessageCircle }] : []),
   ];
 
   // Mobile bottom bar: the daily-use hubs plus the AI assistant and Settings
@@ -86,6 +92,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     navItems[1],
     navItems[2],
     navItems[3],
+    ...navItems.slice(4),
     { id: 'assistant', label: locale === 'ar' ? 'سبيرو' : 'Spero', icon: Sparkles },
     { id: 'settings', label: locale === 'ar' ? 'الإعدادات' : 'Settings', icon: SettingsIcon },
   ];
@@ -129,7 +136,10 @@ export const AppShell: React.FC<AppShellProps> = ({
                         : 'text-[#515154] hover:text-[#1d1d1f]'
                     }`}
                   >
-                    <Icon className={`w-3.5 h-3.5 ${active ? 'text-[#0071e3]' : 'text-stone-500'}`} />
+                    <span className="relative inline-flex">
+                      <Icon className={`w-3.5 h-3.5 ${active ? 'text-[#0071e3]' : 'text-stone-500'}`} />
+                      {item.id === 'chat' && chatUnread > 0 && <span className="absolute -top-1.5 -end-2 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold inline-flex items-center justify-center">{chatUnread > 99 ? '99+' : chatUnread}</span>}
+                    </span>
                     <span className="hidden xl:inline">{item.label}</span>
                   </button>
                 );
@@ -229,7 +239,7 @@ export const AppShell: React.FC<AppShellProps> = ({
           className={`h-full w-full ${
             hideTopBar || currentTab === 'notebook'
               ? 'p-0 overflow-hidden'
-              : currentTab === 'assistant'
+              : currentTab === 'assistant' || currentTab === 'chat'
               ? 'overflow-hidden p-2 sm:p-6 lg:p-8'
               : 'overflow-y-auto overflow-x-hidden p-3 sm:p-6 lg:p-8 pb-24 sm:pb-8'
           }`}
@@ -254,11 +264,14 @@ export const AppShell: React.FC<AppShellProps> = ({
               <button
                 key={item.id}
                 onClick={() => onNavigateTab(item.id === 'planner' ? 'tasks' : item.id)}
-                className={`flex flex-col items-center justify-center py-1 px-2 rounded-xl transition-colors ${
+                className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-xl transition-colors ${
                   active ? 'text-[#0071e3] font-bold' : 'text-[#515154] hover:text-[#1d1d1f]'
                 }`}
               >
-                <Icon className={`w-4 h-4 ${active ? 'scale-110 text-[#0071e3]' : ''}`} />
+                <span className="relative inline-flex">
+                  <Icon className={`w-4 h-4 ${active ? 'scale-110 text-[#0071e3]' : ''}`} />
+                  {item.id === 'chat' && chatUnread > 0 && <span className="absolute -top-1.5 -end-2.5 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold inline-flex items-center justify-center">{chatUnread > 99 ? '99+' : chatUnread}</span>}
+                </span>
                 <span className="text-[10px] mt-0.5 leading-tight truncate max-w-[64px]">
                   {item.label.split(' ')[0]}
                 </span>
