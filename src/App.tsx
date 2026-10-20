@@ -46,7 +46,9 @@ import {
   deleteProjectFromCloud,
   syncPersonToCloud,
   deletePersonFromCloud,
-  subscribeToWorkspaceCollection,
+  subscribeWorkspace,
+  unsyncedIds,
+  flushPendingPages,
   loadRemoteGeminiSettings,
   saveRemoteGeminiSettings,
   loadAllPrefs,
@@ -56,7 +58,7 @@ import {
   flushRetryQueue,
   OPENED_FROM_RECOVERY_LINK,
 } from './lib/cloud';
-import type { CollectionName } from './lib/cloud';
+import type { CollectionName, DocChange } from './lib/cloud';
 import { mergeRemote } from './lib/merge';
 import { keyManager } from './lib/ai/keyManager';
 import { usage } from './lib/ai/modelQueue';
@@ -71,7 +73,9 @@ import { LoginScreen } from './components/auth/LoginScreen';
 import { ChatCenter } from './components/team/ChatCenter';
 import { BirthdayBanner } from './components/team/BirthdayBanner';
 import { claimDevice } from './lib/deviceOwner';
-import { getTeam, refreshTeam, startTeam, stopTeam, subscribeTeam } from './lib/team';
+import { birthdaysOn, broadcast, getTeam, loadMessages, markRead, nameOf, openDirect, refreshTeam, sendMessage, startTeam, stopTeam, subscribeTeam } from './lib/team';
+import { SetupGuide } from './components/team/SetupGuide';
+import { callAr, callEn, getFemalePref, getSperoUser, setFemalePref, setSperoUser, speroUserFrom, subscribeFemalePref } from './lib/ai/speroUser';
 import { ResetPasswordScreen } from './components/auth/ResetPasswordScreen';
 import { SettingsView } from './components/settings/SettingsView';
 import type { User } from '@supabase/supabase-js';
@@ -144,6 +148,7 @@ export default function App() {
   // Auth gate (only when Supabase is configured)
   const [authReady, setAuthReady] = useState<boolean>(!isCloudConfigured);
   const [user, setUser] = useState<User | null>(null);
+  const userId = user?.id;
   // opened from the "reset my password" e-mail: ask for a new password before anything else
   const [recovering, setRecovering] = useState<boolean>(OPENED_FROM_RECOVERY_LINK);
 
@@ -151,6 +156,11 @@ export default function App() {
     if (!isCloudConfigured) return;
     let alive = true;
     // a different person on a shared device: remove the previous person's local copy first, then start fresh
+    // Supabase reports "signed in" again each time the app returns to the screen, with a new but identical user object.
+    // Keep the old object then, so nothing that depends on the user restarts (cloud sync, calendars, team) for no reason.
+    const same = (a: User | null, b: User | null) =>
+      a === b || (!!a && !!b && a.id === b.id && a.updated_at === b.updated_at && JSON.stringify(a.user_metadata) === JSON.stringify(b.user_metadata));
+    const keepSame = (u: User | null) => setUser((prev) => (same(prev, u) ? prev : u));
     const accept = async (u: User | null): Promise<boolean> => {
       if (u && (await claimDevice(u.id))) {
         location.reload();
@@ -162,13 +172,13 @@ export default function App() {
       .then(async (session) => {
         if (!alive) return;
         const u = session?.user ?? null;
-        if (await accept(u)) setUser(u);
+        if (await accept(u)) keepSame(u);
       })
       .finally(() => alive && setAuthReady(true));
     const off = onAuthChange((u, ev) => {
       if (!alive) return;
       if (ev === 'PASSWORD_RECOVERY') setRecovering(true);
-      void accept(u).then((ok) => ok && setUser(u));
+      void accept(u).then((ok) => ok && keepSame(u));
     });
     return () => {
       alive = false;
@@ -177,19 +187,37 @@ export default function App() {
   }, []);
 
   // Team: profiles + chat for the signed-in person (only when the cloud is on)
-  const team = useSyncExternalStore(subscribeTeam, getTeam);
   const [chatWith, setChatWith] = useState<string | null>(null);
   useEffect(() => {
     if (!isCloudConfigured) return;
-    if (!user) {
+    if (!userId) {
       stopTeam();
       return;
     }
-    void startTeam(user.id);
+    void startTeam(userId);
     const onVisible = () => document.visibilityState === 'visible' && void refreshTeam();
     document.addEventListener('visibilitychange', onVisible);
     return () => document.removeEventListener('visibilitychange', onVisible);
-  }, [user]);
+  }, [userId]);
+  // Spero speaks to whoever is signed in: their profile name and the he/she choice (only re-render when those change)
+  const myProfileKey = useSyncExternalStore(subscribeTeam, () => {
+    const t = getTeam();
+    const me = t.profiles.find((p) => p.user_id === t.meId);
+    return me ? `${me.role}|${me.display_name}` : '';
+  });
+  const femalePref = useSyncExternalStore(subscribeFemalePref, getFemalePref);
+  useEffect(() => {
+    if (!isCloudConfigured || !myProfileKey) return;
+    const [role, ...rest] = myProfileKey.split('|');
+    setSperoUser(speroUserFrom({ role, display_name: rest.join('|') }, femalePref));
+  }, [myProfileKey, femalePref]);
+
+  // leaving a page (or the notebook) sends its waiting ink right away instead of after the quiet period
+  const onNotebook = currentTab === 'notebook';
+  useEffect(() => {
+    flushPendingPages();
+  }, [activePageId, onNotebook]);
+
   // the first password was given by an administrator: the person must choose their own before anything else
   const mustChangePassword = !!user && user.user_metadata?.must_change_password === true;
 
@@ -210,12 +238,12 @@ export default function App() {
             })
           : '';
         return lang === 'ar'
-          ? `مرحباً المهندس محمد، أنا في خدمتك. أُذكّرك بأن لديك اجتماعاً "${nextM.title}" ${timeStr ? `في تمام الساعة ${timeStr}` : ''}. هل ترغب في أن أُعدّ ملخصاً للاجتماع أو أراجع بنود جدول الأعمال؟`
-          : `Good morning, Eng. Mohamed. How can I assist you today? Just reminding you that you have an upcoming meeting "${nextM.title}" ${timeStr ? `at ${timeStr}` : ''}. Would you like me to prepare briefing notes or review agenda items?`;
+          ? `مرحباً ${callAr()}، أنا في خدمتك. أُذكّرك بأن لديك اجتماعاً "${nextM.title}" ${timeStr ? `في تمام الساعة ${timeStr}` : ''}. هل ترغب في أن أُعدّ ملخصاً للاجتماع أو أراجع بنود جدول الأعمال؟`
+          : `Good morning${callEn()}. How can I assist you today? Just reminding you that you have an upcoming meeting "${nextM.title}" ${timeStr ? `at ${timeStr}` : ''}. Would you like me to prepare briefing notes or review agenda items?`;
       }
       return lang === 'ar'
-        ? 'مرحباً المهندس محمد، أنا في خدمتك. لا توجد اجتماعات مسجلة في جدولك للفترة القادمة. هل ترغب في مراجعة المهام المعلقة أو التخطيط لمهام جديدة؟'
-        : 'Good morning, Eng. Mohamed. How can I assist you today? You have no upcoming meetings scheduled right now. Would you like help reviewing pending tasks or planning new work?';
+        ? `مرحباً ${callAr()}، أنا في خدمتك. لا توجد اجتماعات مسجلة في جدولك للفترة القادمة. هل ترغب في مراجعة المهام المعلقة أو التخطيط لمهام جديدة؟`
+        : `Good morning${callEn()}. How can I assist you today? You have no upcoming meetings scheduled right now. Would you like help reviewing pending tasks or planning new work?`;
     },
     []
   );
@@ -291,10 +319,10 @@ export default function App() {
 
   // Cloud sync: starts once a user is signed in, stops on sign-out
   useEffect(() => {
-    if (!isCloudConfigured || !user || loading) return;
+    if (!isCloudConfigured || !userId || loading) return;
     let cancelled = false;
     const unsubs: (() => void)[] = [];
-    const LAST_SYNC_KEY = `alkammah_last_cloud_sync_${user.id}`;
+    const LAST_SYNC_KEY = `alkammah_last_cloud_sync_${userId}`;
 
     // remote wins when it has a value; a value that only this device has is sent up (first time after this was added)
     async function pullAccountPrefs() {
@@ -310,6 +338,7 @@ export default function App() {
       if (typeof workRemote === 'string') {
         if (workRemote !== workLocal) setGoogleLink({ workEmail: workRemote, workEmailDone: undefined });
       } else if (workLocal) void savePref('workCalendarEmail', workLocal);
+      if (typeof remote.speroFemale === 'boolean') setFemalePref(remote.speroFemale);
       const np = remote.notifPrefs;
       if (np && typeof np === 'object') notifPrefs.set(np as Partial<NotifPrefs>, true);
       else void savePref('notifPrefs', notifPrefs.shared());
@@ -342,40 +371,63 @@ export default function App() {
         /* ignore */
       }
 
-      const wire = <T extends { id: string; updatedAt?: string; createdAt?: string }>(
+      type Doc = { id: string; updatedAt?: string; createdAt?: string };
+      const stamp = (v?: string) => Date.parse(v || '') || 0;
+      const wire = <T extends Doc>(
         name: CollectionName,
         getLocal: () => T[],
         apply: (merged: T[]) => void,
-        persist: (items: T[]) => Promise<void>,
+        store: string,
         push: (item: T) => Promise<void>
-      ) =>
-        subscribeToWorkspaceCollection<T>(name, (remote, isInitial) => {
-          if (cancelled) return;
-          const local = getLocal();
-          if (isInitial) {
-            const remoteById = new Map(remote.map((r) => [r.id, r]));
-            // upload what this device created/edited while offline (or the whole workspace if the cloud is empty)
-            for (const l of local) {
-              const r = remoteById.get(l.id);
-              const localTime = Math.max(Date.parse(l.updatedAt || '') || 0, Date.parse(l.createdAt || '') || 0);
-              if ((!r && (remote.length === 0 || localTime > lastSync)) || (r && localTime > (Date.parse(r.updatedAt || '') || 0))) {
-                push(l).catch(console.warn);
-              }
+      ) => (remote: T[], isInitial: boolean, change: DocChange<T>) => {
+        if (cancelled) return;
+        const local = getLocal();
+        const waiting = unsyncedIds(name);
+        if (change) {
+          // a live change: touch only those documents, and do nothing at all for the echo of this device's own save
+          const byId = new Map(local.map((i) => [i.id, i]));
+          let touched = false;
+          for (const r of change.upserted) {
+            const l = byId.get(r.id);
+            if (l && (stamp(l.updatedAt) > stamp(r.updatedAt) || (stamp(l.updatedAt) === stamp(r.updatedAt) && (l.updatedAt || r.updatedAt)))) continue;
+            byId.set(r.id, r);
+            void localDB.put(store, r);
+            touched = true;
+          }
+          for (const id of change.deleted) {
+            if (byId.delete(id)) {
+              void localDB.delete(store, id);
+              touched = true;
             }
           }
-          const merged = isInitial && remote.length === 0 ? local : mergeRemote(local, remote);
-          apply(merged);
-          void persist(merged);
-        });
+          if (touched) apply([...byId.values()]);
+          return;
+        }
+        if (isInitial) {
+          const remoteById = new Map(remote.map((r) => [r.id, r]));
+          // upload what this device created/edited while offline (or the whole workspace if the cloud is empty)
+          for (const l of local) {
+            const r = remoteById.get(l.id);
+            const localTime = Math.max(stamp(l.updatedAt), stamp(l.createdAt));
+            if (waiting.has(l.id) || (!r && (remote.length === 0 || localTime > lastSync)) || (r && localTime > stamp(r.updatedAt))) {
+              push(l).catch(console.warn);
+            }
+          }
+        }
+        const merged = isInitial && remote.length === 0 ? local : mergeRemote(local, remote, 20_000, Date.now(), waiting);
+        apply(merged);
+        void localDB.replaceAll(store, merged);
+      };
 
-      unsubs.push(
-        wire<Task>('tasks', () => tasksRef.current, setTasks, async (i) => { await localDB.replaceAll('tasks', i); }, syncTaskToCloud),
-        wire<Meeting>('meetings', () => meetingsRef.current, setMeetings, async (i) => { await localDB.replaceAll('meetings', i); }, syncMeetingToCloud),
-        wire<Notebook>('notebooks', () => notebooksRef.current, setNotebooks, async (i) => { await localDB.replaceAll('notebooks', i); }, syncNotebookToCloud),
-        wire<NotebookPage>('pages', () => pagesRef.current, setPages, async (i) => { await localDB.replaceAll('pages', i); }, syncPageToCloud),
-        wire<Project>('projects', () => projectsRef.current, setProjects, async (i) => { await localDB.replaceAll('projects', i); }, syncProjectToCloud),
-        wire<Person>('people', () => peopleRef.current, setPeople, async (i) => { await localDB.replaceAll('people', i); }, syncPersonToCloud)
-      );
+      const handlers: Record<CollectionName, (items: never[], isInitial: boolean, change: DocChange<never>) => void> = {
+        tasks: wire<Task>('tasks', () => tasksRef.current, setTasks, 'tasks', syncTaskToCloud),
+        meetings: wire<Meeting>('meetings', () => meetingsRef.current, setMeetings, 'meetings', syncMeetingToCloud),
+        notebooks: wire<Notebook>('notebooks', () => notebooksRef.current, setNotebooks, 'notebooks', syncNotebookToCloud),
+        pages: wire<NotebookPage>('pages', () => pagesRef.current, setPages, 'pages', (p) => syncPageToCloud(p, { now: true })),
+        projects: wire<Project>('projects', () => projectsRef.current, setProjects, 'projects', syncProjectToCloud),
+        people: wire<Person>('people', () => peopleRef.current, setPeople, 'people', syncPersonToCloud),
+      };
+      unsubs.push(subscribeWorkspace((c, items, isInitial, change) => handlers[c](items as never[], isInitial, change as DocChange<never>)));
 
       void flushRetryQueue();
       try {
@@ -405,7 +457,7 @@ export default function App() {
       setIsCloudConnected(false);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [user, loading]);
+  }, [userId, loading]);
 
   // Dynamic greeting sync when meetings or locale changes (only while the chat is still just the greeting)
   useEffect(() => {
@@ -688,9 +740,10 @@ export default function App() {
     setFeedMeetings(feed.url ? cachedFeedMeetings() : []);
   }, [feed.url, feed.fetchedAt]);
   useEffect(() => {
-    if (!feed.url || !user) return;
+    if (!feed.url || !userId) return;
     const run = () => void refreshFeed().catch(() => undefined);
-    run();
+    // on open, only if the copy on this device is older than 5 minutes
+    if (Date.now() - Date.parse(getFeedState().fetchedAt || '1970-01-01') > 5 * 60_000) run();
     const t = setInterval(run, 15 * 60_000);
     const vis = () => {
       if (document.visibilityState === 'visible' && Date.now() - Date.parse(getFeedState().fetchedAt || '1970-01-01') > 5 * 60_000) run();
@@ -700,7 +753,7 @@ export default function App() {
       clearInterval(t);
       document.removeEventListener('visibilitychange', vis);
     };
-  }, [feed.url, user]);
+  }, [feed.url, userId]);
   // a meeting made here and invited to the work e-mail comes back through the Outlook link: show it once (same title, same start)
   const shownMeetings = useMemo(() => {
     if (!feedMeetings.length) return meetings;
@@ -708,12 +761,21 @@ export default function App() {
     const own = new Set(meetings.map(key));
     return [...meetings, ...feedMeetings.filter((f) => !own.has(key(f)))];
   }, [meetings, feedMeetings]);
+  const shownMeetingsRef = useRef(shownMeetings);
+  shownMeetingsRef.current = shownMeetings;
 
-  // Quietly refresh from Google when the app opens and every 10 minutes, as long as the sign-in is still valid
+  // Quietly refresh from Google when the app opens, every 10 minutes and on return (at most every 3 minutes), only when signed in
   useEffect(() => {
+    if (isCloudConfigured && !userId) return;
+    let lastRun = 0;
+    let lastProbe = 0;
     const run = async () => {
-      // the account may already be linked from another device: find out before deciding
-      if (!getGoogleLink().serverLinked) await probeServer().catch(() => undefined);
+      lastRun = Date.now();
+      // the account may already be linked from another device: ask the server, but not more than every 30 minutes
+      if (!getGoogleLink().serverLinked && Date.now() - lastProbe > 30 * 60_000) {
+        lastProbe = Date.now();
+        await probeServer().catch(() => undefined);
+      }
       const l = getGoogleLink();
       // with the permanent link the token renews by itself; otherwise only while the browser sign-in is still valid
       if (l.autoSync && l.clientId && (l.serverLinked || (l.lastSyncAt && tokenIsValid(l)))) syncGoogleCalendar(false).catch(() => undefined);
@@ -721,7 +783,7 @@ export default function App() {
     const first = setTimeout(run, 4000);
     const t = setInterval(run, 10 * 60_000);
     const onVisible = () => {
-      if (document.visibilityState === 'visible') run();
+      if (document.visibilityState === 'visible' && Date.now() - lastRun > 3 * 60_000) void run();
     };
     document.addEventListener('visibilitychange', onVisible);
     return () => {
@@ -730,7 +792,7 @@ export default function App() {
       document.removeEventListener('visibilitychange', onVisible);
     };
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [userId]);
 
   // 2. Meeting Operations
   const handleSaveMeeting = async (meetingData: Partial<Meeting>) => {
@@ -1209,7 +1271,7 @@ export default function App() {
         end: new Date(endIso).getTime() > new Date(startIso).getTime() ? endIso : new Date(new Date(startIso).getTime() + 60 * 60 * 1000).toISOString(),
         timezone: 'Africa/Cairo',
         location: args.location ? String(args.location) : '',
-        organizer: 'محمد القماح',
+        organizer: getSperoUser().fullName || user?.email || '',
         attendees: Array.isArray(args.attendees) ? (args.attendees as string[]) : [],
         project: String(args.project || ''),
         agenda: String(args.agenda || ''),
@@ -1377,23 +1439,29 @@ export default function App() {
 
     if (toolName === 'navigateTo') {
       const tab = String(args.tab || '');
-      if (!['today', 'notebook', 'planner', 'tasks', 'calendar', 'followup', 'directory', 'settings'].includes(tab)) return { ok: false, error: 'Unknown tab.' };
+      if (!['today', 'notebook', 'planner', 'tasks', 'calendar', 'followup', 'directory', 'chat', 'settings'].includes(tab)) return { ok: false, error: 'Unknown tab.' };
       setCurrentTab(tab);
       return { ok: true, openedTab: tab };
     }
     if (toolName === 'openItem') {
       if (args.kind === 'task') {
-        const t = findTask();
+        const t = tasksRef.current.find((x) => (args.id && x.id === args.id) || (args.keyword && norm(x.title).includes(norm(args.keyword)))) || findTask();
         if (!t) return { ok: false, error: 'No task matched.' };
         setSelectedTaskForModal(t);
+        setIsTaskModalOpen(true);
         return { ok: true, opened: t.title };
       }
-      const m = findMeeting();
+      const m = findMeeting() || shownMeetingsRef.current.find((x) => (args.id && x.id === args.id) || (args.keyword && norm(x.title).includes(norm(args.keyword))));
       if (!m) return { ok: false, error: 'No meeting matched.' };
       setSelectedMeetingForModal(m);
+      setSelectedMeetingInitialDate(undefined);
+      setSelectedMeetingInitialTime(undefined);
+      setIsMeetingModalOpen(true);
       return { ok: true, opened: m.title };
     }
     if (toolName === 'closeWindows') {
+      setIsTaskModalOpen(false);
+      setIsMeetingModalOpen(false);
       setSelectedTaskForModal(null);
       setSelectedMeetingForModal(null);
       setIsBackupModalOpen(false);
@@ -1407,13 +1475,13 @@ export default function App() {
       const kw = norm(args.keyword);
       const from = args.fromDate ? String(args.fromDate) : '';
       const to = args.toDate ? String(args.toDate) : '';
-      const found = meetingsRef.current
+      const found = shownMeetingsRef.current
         .filter((m) => !from || cairoDateOf(m.start) >= from)
         .filter((m) => !to || cairoDateOf(m.start) <= to)
         .filter((m) => !kw || norm(`${m.title} ${m.description} ${m.project} ${(m.attendees || []).join(' ')}`).includes(kw))
         .sort((a, b) => a.start.localeCompare(b.start))
         .slice(0, 30)
-        .map((m) => ({ id: m.id, title: m.title, date: cairoDateOf(m.start), time: cairoTimeOf(m.start), end: cairoTimeOf(m.end), location: m.location, attendees: m.attendees, agenda: m.agenda }));
+        .map((m) => ({ id: m.id, title: m.title, date: cairoDateOf(m.start), time: cairoTimeOf(m.start), end: cairoTimeOf(m.end), location: m.location, attendees: m.attendees, agenda: m.agenda, source: m.id.startsWith('ics_') ? 'Outlook (read-only)' : m.id.startsWith('gcal_') ? 'Google' : 'system' }));
       return { ok: true, count: found.length, meetings: found };
     }
     if (toolName === 'updateMeeting') {
@@ -1441,7 +1509,7 @@ export default function App() {
       return { ok: true, meetingId: match.id, title: updated.title };
     }
     if (toolName === 'getMeetingBriefing') {
-      const m = findMeeting();
+      const m = findMeeting() || shownMeetingsRef.current.find((x) => (args.meetingId && x.id === args.meetingId) || (args.meetingTitleKeyword && norm(x.title).includes(norm(args.meetingTitleKeyword))));
       if (!m) return { ok: false, error: 'No meeting matched.' };
       const words = norm(`${m.title} ${m.project} ${(m.attendees || []).join(' ')}`).split(/[\s,-]+/).filter((w) => w.length > 2);
       const related = tasksRef.current
@@ -1466,6 +1534,122 @@ export default function App() {
         syncTaskToCloud(match).catch(console.warn);
       });
       return { ok: true, title: match.title, archived };
+    }
+
+
+    // ----- team: people, chat, birthdays
+    const teamNow = getTeam();
+    const others = () => teamNow.profiles.filter((p) => p.active && p.user_id !== teamNow.meId);
+    const findPeople = (names: string[]): { found: typeof teamNow.profiles; problem?: string } => {
+      const found: typeof teamNow.profiles = [];
+      for (const raw of names) {
+        const q = norm(raw).replace(/^(م\.|د\.|eng\.?|dr\.?|mr\.?|mrs\.?|ms\.?|المهندس|المهندسة|الدكتور|الدكتورة|الأستاذ|الأستاذة|استاذ|أستاذ)\s*/i, '');
+        if (!q) continue;
+        const hits = others().filter((p) => norm(`${nameOf(p)} ${p.email}`).includes(q) || q.split(/\s+/).every((w) => norm(nameOf(p)).includes(w)));
+        if (hits.length === 0) return { found, problem: `No colleague matches "${raw}". Team: ${others().map((p) => nameOf(p)).join(', ') || 'nobody yet'}` };
+        if (hits.length > 1) return { found, problem: `"${raw}" matches several people: ${hits.map((p) => nameOf(p)).join(', ')}. Ask which one.` };
+        if (!found.some((f) => f.user_id === hits[0].user_id)) found.push(hits[0]);
+      }
+      return { found };
+    };
+    const teamOff = () => ({ ok: false, error: 'Team features need the cloud sign-in; they are not available on this device.' });
+
+    if (toolName === 'listTeam') {
+      if (!teamNow.ready) return teamOff();
+      const kw = norm(args.nameKeyword);
+      const today = getCairoDateString();
+      const list = teamNow.profiles
+        .filter((p) => p.active && (!kw || norm(`${nameOf(p)} ${p.email}`).includes(kw)))
+        .map((p) => ({ name: nameOf(p), isMe: p.user_id === teamNow.meId, role: p.role === 'admin' ? 'administrator' : 'manager', email: p.email, phone: p.phone || undefined, birthday: p.birthday ? p.birthday.slice(5) : undefined }));
+      return { ok: true, count: list.length, people: list, birthdaysToday: birthdaysOn(teamNow.profiles, today).map((p) => nameOf(p)) };
+    }
+    if (toolName === 'sendTeamMessage') {
+      if (!teamNow.ready) return teamOff();
+      const text = String(args.text || '').trim();
+      const names = Array.isArray(args.recipients) ? (args.recipients as unknown[]).map(String) : [];
+      if (!text || names.length === 0) return { ok: false, error: 'Need the message text and at least one recipient.' };
+      const { found, problem } = findPeople(names);
+      if (problem) return { ok: false, error: problem };
+      if (args.confirmed !== true) return { ok: false, needsConfirmation: true, preview: { to: found.map((p) => nameOf(p)), text }, note: 'Read this back to the user and ask for a clear yes, then call again with confirmed=true.' };
+      if (found.length === 1) {
+        const tid = await openDirect(found[0].user_id);
+        await sendMessage(tid, text);
+      } else {
+        await broadcast(found.map((p) => p.user_id), text);
+      }
+      return { ok: true, sentTo: found.map((p) => nameOf(p)), text };
+    }
+    if (toolName === 'readTeamMessages') {
+      if (!teamNow.ready) return teamOff();
+      const from = String(args.fromName || '').trim();
+      const names = new Map(teamNow.profiles.map((p) => [p.user_id, nameOf(p)]));
+      let threads = teamNow.threads;
+      if (from) {
+        const { found, problem } = findPeople([from]);
+        if (problem) return { ok: false, error: problem };
+        const ids = new Set(teamNow.members.filter((m) => m.user_id === found[0].user_id).map((m) => m.thread_id));
+        threads = threads.filter((t) => ids.has(t.id));
+        await Promise.all(threads.map((t) => loadMessages(t.id)));
+      } else {
+        threads = threads.filter((t) => teamNow.unread[t.id]);
+      }
+      const fresh = getTeam();
+      const out = threads.slice(0, 8).map((t) => {
+        const msgs = (fresh.messages[t.id] || []).slice(from ? -6 : -(fresh.unread[t.id] || 0) || -1);
+        return {
+          chat: t.kind === 'group' ? t.title || 'Group' : names.get(teamNow.members.find((m) => m.thread_id === t.id && m.user_id !== teamNow.meId)?.user_id || '') || '—',
+          messages: msgs.map((m) => ({
+            from: m.sender_id === teamNow.meId ? 'me' : names.get(m.sender_id) || '—',
+            when: `${cairoDateOf(m.created_at)} ${cairoTimeOf(m.created_at)}`,
+            text: m.body || (m.attachments.length ? `[${m.attachments.map((a) => (a.kind === 'image' ? 'photo' : a.name)).join(', ')}]` : ''),
+          })),
+        };
+      });
+      if (args.markRead !== false) await Promise.all(threads.map((t) => markRead(t.id)));
+      return { ok: true, chats: out, unreadChats: out.length === 0 && !from ? 0 : undefined };
+    }
+    if (toolName === 'openChat') {
+      if (!teamNow.ready) return teamOff();
+      const name = String(args.name || '').trim();
+      if (name) {
+        const { found, problem } = findPeople([name]);
+        if (problem) return { ok: false, error: problem };
+        setChatWith(found[0].user_id);
+      }
+      setCurrentTab('chat');
+      return { ok: true, opened: name || 'chat list' };
+    }
+    if (toolName === 'refreshCalendars') {
+      const result: Record<string, unknown> = { ok: true };
+      const link = getGoogleLink();
+      if (link.serverLinked || tokenIsValid(link)) {
+        try {
+          const r = await syncGoogleCalendar(false);
+          result.google = { added: r.added, updated: r.updated, removed: r.removed };
+        } catch (e) {
+          result.google = { error: (e as Error)?.message || 'failed' };
+        }
+      } else result.google = 'not connected';
+      if (getFeedState().url) {
+        try {
+          result.outlookMeetings = (await refreshFeed()).length;
+        } catch (e) {
+          result.outlook = { error: (e as Error)?.message || 'failed' };
+        }
+      } else result.outlook = 'not connected';
+      return result;
+    }
+    if (toolName === 'getConnectionStatus') {
+      const link = getGoogleLink();
+      const me = teamNow.profiles.find((p) => p.user_id === teamNow.meId);
+      return {
+        ok: true,
+        aiKeys: keyManager.getSettings().slots.filter((k) => k.key).length,
+        googleCalendar: link.serverLinked || (link.email && link.lastSyncAt) ? `connected (${link.email || 'Google'})` : 'not connected',
+        outlookWorkCalendar: getFeedState().url ? `connected (${getFeedState().count ?? 0} meetings)` : 'not connected',
+        profileName: me?.display_name || 'not set',
+        where: 'Today page card "Get set up", or Settings',
+      };
     }
 
     return { ok: false, error: `Unknown action: ${toolName}` };
@@ -1509,7 +1693,7 @@ export default function App() {
       const botMsg: AssistantMessage = {
         id: newId('msg'),
         role: 'assistant',
-        content: data.content || (toolInvocations.length > 0 ? 'تم تنفيذ الأمر بنجاح، المهندس محمد.' : ''),
+        content: data.content || (toolInvocations.length > 0 ? `تم تنفيذ الأمر بنجاح، ${callAr()}.` : ''),
         toolInvocations,
         timestamp: new Date().toISOString(),
       };
@@ -1547,7 +1731,7 @@ export default function App() {
             : 'Please add at least one Gemini API key in Settings so I can respond.'
           : locale === 'ar'
           ? 'نعتذر، جميع مفاتيح Gemini مشغولة أو بلغت حدّها حالياً. يواصل النظام المحاولة تلقائياً، يُرجى إعادة المحاولة بعد لحظات.'
-          : 'Sorry Eng. Mohamed, all Gemini keys are busy or rate-limited right now. The system keeps retrying; please try again in a moment.',
+          : `Sorry${callEn()}, all Gemini keys are busy or rate-limited right now. The system keeps retrying; please try again in a moment.`,
         timestamp: new Date().toISOString(),
       };
       setMessages((prev) => [...prev, errBotMsg]);
@@ -1670,7 +1854,6 @@ export default function App() {
     <AppShell
       currentTab={currentTab}
       chatEnabled={isCloudConfigured}
-      chatUnread={team.unreadTotal}
       locale={locale}
       isCloudConnected={isCloudConnected}
       undoToast={undoToast}
@@ -1707,6 +1890,7 @@ export default function App() {
       }
     >
       {/* Tab Views */}
+      {currentTab === 'today' && isCloudConfigured && <SetupGuide ar={locale === 'ar'} onSyncGoogle={syncGoogleCalendar} />}
       {currentTab === 'today' && isCloudConfigured && (
         <BirthdayBanner
           ar={locale === 'ar'}
