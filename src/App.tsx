@@ -427,7 +427,20 @@ export default function App() {
         projects: wire<Project>('projects', () => projectsRef.current, setProjects, 'projects', syncProjectToCloud),
         people: wire<Person>('people', () => peopleRef.current, setPeople, 'people', syncPersonToCloud),
       };
-      unsubs.push(subscribeWorkspace((c, items, isInitial, change) => handlers[c](items as never[], isInitial, change as DocChange<never>)));
+      const localOf: Record<CollectionName, () => { id: string }[]> = {
+        tasks: () => tasksRef.current,
+        meetings: () => meetingsRef.current,
+        notebooks: () => notebooksRef.current,
+        pages: () => pagesRef.current,
+        projects: () => projectsRef.current,
+        people: () => peopleRef.current,
+      };
+      unsubs.push(
+        subscribeWorkspace(
+          (c, items, isInitial, change) => handlers[c](items as never[], isInitial, change as DocChange<never>),
+          (c) => localOf[c]()
+        )
+      );
 
       void flushRetryQueue();
       try {
