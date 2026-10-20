@@ -1,4 +1,5 @@
-import React, { useEffect, useRef, useState } from 'react';
+import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import { getTeam, subscribeTeam } from '../../lib/team';
 import { Locale, translations } from '../../lib/translations';
 import {
   LayoutDashboard,
@@ -21,7 +22,6 @@ import {
 interface AppShellProps {
   currentTab: string;
   chatEnabled?: boolean;
-  chatUnread?: number;
   locale: Locale;
   isCloudConnected: boolean;
   undoToast: { message: string; onUndo: () => void } | null;
@@ -39,7 +39,6 @@ interface AppShellProps {
 export const AppShell: React.FC<AppShellProps> = ({
   currentTab,
   chatEnabled,
-  chatUnread = 0,
   locale,
   isCloudConnected,
   undoToast,
@@ -77,6 +76,9 @@ export const AppShell: React.FC<AppShellProps> = ({
   useEffect(() => {
     mainRef.current?.scrollTo({ top: 0 });
   }, [currentTab]);
+
+  // only this number re-renders the bar (a new chat message does not re-render the whole app)
+  const chatUnread = useSyncExternalStore(subscribeTeam, () => getTeam().unreadTotal);
 
   const navItems = [
     { id: 'today', label: locale === 'ar' ? 'الموجز اليومي' : 'Today & Briefing', icon: LayoutDashboard },
