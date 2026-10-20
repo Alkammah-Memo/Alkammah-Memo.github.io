@@ -6,7 +6,7 @@
  * offline source of truth; this layer mirrors it to the cloud and streams remote changes back.
  */
 import { createClient } from '@supabase/supabase-js';
-import type { RealtimeChannel, Session, SupabaseClient, User } from '@supabase/supabase-js';
+import type { Session, SupabaseClient, User } from '@supabase/supabase-js';
 import { Task, Meeting, Notebook, NotebookPage, Person, Project } from '../types';
 import type { GeminiSettings } from './ai/keyManager';
 import { usage } from './ai/modelQueue';
@@ -107,6 +107,37 @@ export async function testCloudConnection(): Promise<boolean> {
 /** Offline writes that failed are retried from this queue on the next successful write or reconnect. */
 const retryQueue = new Map<string, () => Promise<void>>();
 
+/**
+ * Documents changed on this device that the cloud has not confirmed yet ("collection/id"). Kept in browser storage, so after a
+ * reload they are uploaded again and never thrown away by the first merge with the cloud.
+ */
+const UNSYNCED_KEY = 'alkammah_unsynced_v1';
+const unsynced: Set<string> = (() => {
+  try {
+    return new Set<string>(JSON.parse(localStorage.getItem(UNSYNCED_KEY) || '[]'));
+  } catch {
+    return new Set<string>();
+  }
+})();
+const saveUnsynced = () => {
+  try {
+    localStorage.setItem(UNSYNCED_KEY, JSON.stringify([...unsynced]));
+  } catch {
+    /* ignore */
+  }
+};
+const markUnsynced = (key: string, on: boolean) => {
+  if (on === unsynced.has(key)) return;
+  if (on) unsynced.add(key);
+  else unsynced.delete(key);
+  saveUnsynced();
+};
+/** ids of one collection that still wait for the cloud */
+export function unsyncedIds(collection: CollectionName): Set<string> {
+  const pre = `${collection}/`;
+  return new Set([...unsynced].filter((k) => k.startsWith(pre)).map((k) => k.slice(pre.length)));
+}
+
 async function upsertDoc(collection: CollectionName, id: string, data: unknown): Promise<void> {
   if (!supabase || !currentUser) return;
   const key = `${collection}/${id}`;
@@ -123,12 +154,17 @@ async function upsertDoc(collection: CollectionName, id: string, data: unknown):
     );
     if (error) throw error;
   };
+  markUnsynced(key, true);
   try {
     await op();
     retryQueue.delete(key);
+    markUnsynced(key, false);
     void flushRetryQueue();
   } catch (err) {
-    retryQueue.set(key, op); // latest write wins per document
+    retryQueue.set(key, async () => {
+      await op();
+      markUnsynced(key, false);
+    }); // latest write wins per document
     console.warn(`Cloud write deferred [${key}]:`, (err as Error)?.message || err);
   }
 }
@@ -145,6 +181,13 @@ async function removeDoc(collection: CollectionName, id: string): Promise<void> 
       .eq('id', id);
     if (error) throw error;
   };
+  // a pending upload of this document is pointless now
+  const pend = pagePending.get(id);
+  if (collection === 'pages' && pend) {
+    clearTimeout(pend.timer);
+    pagePending.delete(id);
+  }
+  markUnsynced(key, false);
   try {
     await op();
     retryQueue.delete(key);
@@ -182,7 +225,43 @@ export const syncMeetingToCloud = (m: Meeting) => upsertDoc('meetings', m.id, m)
 export const deleteMeetingFromCloud = (id: string) => removeDoc('meetings', id);
 export const syncNotebookToCloud = (n: Notebook) => upsertDoc('notebooks', n.id, n);
 export const deleteNotebookFromCloud = (id: string) => removeDoc('notebooks', id);
-export const syncPageToCloud = (p: NotebookPage) => upsertDoc('pages', p.id, p);
+/**
+ * Notebook pages are big (every pen stroke), so they are uploaded after a short quiet period instead of after every pause in
+ * writing, one upload per page at a time, always the newest copy. The page is marked "unsynced" at once, so even if the app is
+ * closed before the upload, the next start sends it.
+ */
+const PAGE_QUIET_MS = 6000;
+const pagePending = new Map<string, { page: NotebookPage; timer: ReturnType<typeof setTimeout> }>();
+const pageInflight = new Map<string, Promise<void>>();
+async function sendPage(id: string): Promise<void> {
+  const pend = pagePending.get(id);
+  if (!pend) return;
+  clearTimeout(pend.timer);
+  pagePending.delete(id);
+  const prev = pageInflight.get(id);
+  if (prev) await prev.catch(() => undefined);
+  const run = upsertDoc('pages', id, pend.page).finally(() => {
+    if (pageInflight.get(id) === run) pageInflight.delete(id);
+  });
+  pageInflight.set(id, run);
+  return run;
+}
+export function syncPageToCloud(p: NotebookPage, opts: { now?: boolean } = {}): Promise<void> {
+  if (!supabase || !currentUser) return Promise.resolve();
+  const old = pagePending.get(p.id);
+  if (old) clearTimeout(old.timer);
+  markUnsynced(`pages/${p.id}`, true);
+  pagePending.set(p.id, { page: p, timer: setTimeout(() => void sendPage(p.id), opts.now ? 0 : PAGE_QUIET_MS) });
+  return opts.now ? sendPage(p.id) : Promise.resolve();
+}
+/** Send every waiting page now (leaving a page, hiding the app). */
+export function flushPendingPages(): void {
+  for (const id of [...pagePending.keys()]) void sendPage(id);
+}
+if (typeof document !== 'undefined') {
+  document.addEventListener('visibilitychange', () => document.visibilityState === 'hidden' && flushPendingPages());
+  window.addEventListener('pagehide', flushPendingPages);
+}
 export const deletePageFromCloud = (id: string) => removeDoc('pages', id);
 export const syncProjectToCloud = (p: Project) => upsertDoc('projects', p.id, p);
 export const deleteProjectFromCloud = (id: string) => removeDoc('projects', id);
@@ -194,66 +273,114 @@ export async function pushCollection<T extends { id: string }>(collection: Colle
   for (const item of items) await upsertDoc(collection, item.id, item);
 }
 
+export const ALL_COLLECTIONS: CollectionName[] = ['tasks', 'meetings', 'notebooks', 'pages', 'projects', 'people'];
+
+/** What changed in one collection: `null` = a full snapshot (start), otherwise only these documents. */
+export type DocChange<T> = { upserted: T[]; deleted: string[] } | null;
+type WorkspaceListener = (collection: CollectionName, items: unknown[], isInitial: boolean, change: DocChange<unknown>) => void;
+
 /**
- * Streams a collection: emits the full list once loaded, then after every remote change.
- * `onUpdate(items, isInitial)` mirrors the old Firestore snapshot semantics.
+ * The whole workspace over ONE realtime channel (instead of one per collection, which delivered every change six times).
+ * - start: one download of everything, then a full snapshot per collection
+ * - live: only this person's rows (other people's delete events are ignored), passed on as small changes
+ * - after a dropped connection (iOS drops it in the background): a light list of ids + times is compared, and only documents that
+ *   really changed are downloaded, instead of everything again
  */
-export function subscribeToWorkspaceCollection<T extends { id: string }>(
-  collection: CollectionName,
-  onUpdate: (items: T[], isInitial: boolean) => void
-): () => void {
+export function subscribeWorkspace(onUpdate: WorkspaceListener): () => void {
   if (!supabase || !currentUser) return () => undefined;
   const client = supabase;
   const uid = currentUser.id;
-  const docs = new Map<string, T>();
-  let channel: RealtimeChannel | null = null;
+  const docs = new Map<CollectionName, Map<string, { data: unknown; at: string }>>(ALL_COLLECTIONS.map((c) => [c, new Map()]));
   let cancelled = false;
+  let firstSubscribe = true;
+  let ready = false;
 
-  const emit = (initial: boolean) => onUpdate([...docs.values()], initial);
+  const list = (c: CollectionName) => [...(docs.get(c) as Map<string, { data: unknown }>).values()].map((d) => d.data);
+  const isCollection = (c: unknown): c is CollectionName => ALL_COLLECTIONS.includes(c as CollectionName);
 
-  async function load(initial: boolean) {
-    const { data, error } = await client
-      .from('workspace_docs')
-      .select('id,data')
-      .eq('collection', collection)
-      .eq('user_id', uid);
+  async function loadAll() {
+    const { data, error } = await client.from('workspace_docs').select('collection,id,data,updated_at').eq('user_id', uid);
     if (cancelled) return;
     if (error) {
-      console.warn(`Cloud load notice [${collection}]:`, error.message);
+      console.warn('Cloud load notice:', error.message);
       return;
     }
-    docs.clear();
-    for (const row of data || []) docs.set(row.id as string, row.data as T);
-    emit(initial);
+    for (const row of data || []) {
+      if (isCollection(row.collection)) docs.get(row.collection)!.set(row.id as string, { data: row.data, at: row.updated_at as string });
+    }
+    ready = true;
+    for (const c of ALL_COLLECTIONS) onUpdate(c, list(c), true, null);
   }
 
-  void load(true);
-
-  channel = client
-    .channel(`ws-${collection}-${uid}`)
-    .on(
-      'postgres_changes',
-      { event: '*', schema: 'public', table: 'workspace_docs', filter: `user_id=eq.${uid}` },
-      (payload) => {
-        const row = (payload.new && Object.keys(payload.new).length ? payload.new : payload.old) as {
-          collection?: string;
-          id?: string;
-          data?: T;
-        };
-        if (!row || row.collection !== collection || !row.id) return;
-        if (payload.eventType === 'DELETE') docs.delete(row.id);
-        else if (row.data) docs.set(row.id, row.data);
-        emit(false);
+  async function catchUp() {
+    if (!ready) return loadAll();
+    const { data: idx, error } = await client.from('workspace_docs').select('collection,id,updated_at').eq('user_id', uid);
+    if (cancelled || error || !idx) return;
+    const seen = new Map<CollectionName, Set<string>>(ALL_COLLECTIONS.map((c) => [c, new Set()]));
+    const stale: string[] = [];
+    for (const r of idx) {
+      if (!isCollection(r.collection)) continue;
+      seen.get(r.collection)!.add(r.id as string);
+      if (docs.get(r.collection)!.get(r.id as string)?.at !== r.updated_at) stale.push(r.id as string);
+    }
+    const changes = new Map<CollectionName, { upserted: unknown[]; deleted: string[] }>();
+    const bucket = (c: CollectionName) => changes.get(c) || (changes.set(c, { upserted: [], deleted: [] }), changes.get(c)!);
+    for (const c of ALL_COLLECTIONS) {
+      for (const id of [...docs.get(c)!.keys()]) {
+        if (!seen.get(c)!.has(id)) {
+          docs.get(c)!.delete(id);
+          bucket(c).deleted.push(id);
+        }
       }
-    )
+    }
+    for (let k = 0; k < stale.length; k += 100) {
+      const { data } = await client.from('workspace_docs').select('collection,id,data,updated_at').eq('user_id', uid).in('id', stale.slice(k, k + 100));
+      if (cancelled) return;
+      for (const row of data || []) {
+        if (!isCollection(row.collection)) continue;
+        const cur = docs.get(row.collection)!.get(row.id as string);
+        if (cur?.at === row.updated_at) continue;
+        docs.get(row.collection)!.set(row.id as string, { data: row.data, at: row.updated_at as string });
+        bucket(row.collection).upserted.push(row.data);
+      }
+    }
+    for (const [c, ch] of changes) if (ch.upserted.length || ch.deleted.length) onUpdate(c, list(c), false, ch);
+  }
+
+  void loadAll();
+
+  const channel = client
+    .channel(`ws-${uid}`)
+    .on('postgres_changes', { event: '*', schema: 'public', table: 'workspace_docs', filter: `user_id=eq.${uid}` }, (payload) => {
+      const row = (payload.new && Object.keys(payload.new).length ? payload.new : payload.old) as {
+        user_id?: string;
+        collection?: string;
+        id?: string;
+        data?: unknown;
+        updated_at?: string;
+      };
+      // delete events are not filtered by the server: only ever act on this person's own rows
+      if (!row || row.user_id !== uid || !isCollection(row.collection) || !row.id) return;
+      const map = docs.get(row.collection)!;
+      if (payload.eventType === 'DELETE') {
+        if (!map.delete(row.id)) return;
+        onUpdate(row.collection, list(row.collection), false, { upserted: [], deleted: [row.id] });
+      } else if (row.data !== undefined) {
+        if (map.get(row.id)?.at === row.updated_at) return;
+        map.set(row.id, { data: row.data, at: row.updated_at || '' });
+        onUpdate(row.collection, list(row.collection), false, { upserted: [row.data], deleted: [] });
+      }
+    })
     .subscribe((status) => {
-      // after a dropped socket Supabase re-subscribes; re-sync to catch anything missed meanwhile
-      if (status === 'SUBSCRIBED' && !cancelled) void load(false);
+      if (status !== 'SUBSCRIBED' || cancelled) return;
+      // the first time, loadAll() already has everything; after a reconnect only the differences are fetched
+      if (firstSubscribe) firstSubscribe = false;
+      else void catchUp();
     });
 
   return () => {
     cancelled = true;
-    if (channel) void client.removeChannel(channel);
+    void client.removeChannel(channel);
   };
 }
 

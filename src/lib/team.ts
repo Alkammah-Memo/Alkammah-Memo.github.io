@@ -79,6 +79,7 @@ export const getTeam = () => state;
 const PAGE = 40;
 let channel: RealtimeChannel | null = null;
 let startedFor = '';
+let lastRefresh = 0;
 
 async function loadProfiles() {
   if (!supabase) return;
@@ -93,9 +94,31 @@ async function loadThreads() {
   ]);
   if (t.data && m.data) {
     set({ threads: t.data as ChatThread[], members: m.data as Member[] });
-    // newest messages of every chat (for the list preview and the unread counter)
-    await Promise.all((t.data as ChatThread[]).map((th) => (state.messages[th.id] ? Promise.resolve() : loadMessages(th.id))));
+    // newest messages of all chats in ONE request (list preview + unread counter); a chat loads more when it is opened
+    const missing = (t.data as ChatThread[]).filter((th) => !state.messages[th.id]);
+    if (missing.length) await loadRecent(missing.map((th) => th.id));
   }
+}
+
+/** recent messages of several chats in one request (and only those newer than `since`, when given) */
+async function loadRecent(threadIds: string[], since?: string) {
+  if (!supabase || threadIds.length === 0) return;
+  let q = supabase.from('chat_messages').select('*').in('thread_id', threadIds).order('created_at', { ascending: false }).limit(200);
+  if (since) q = q.gt('created_at', since);
+  const { data } = await q;
+  if (!data) return;
+  const next = { ...state.messages };
+  const hasMore = { ...state.hasMore };
+  for (const id of threadIds) if (!next[id]) next[id] = [];
+  for (const msg of (data as ChatMessage[]).reverse()) {
+    const cur = next[msg.thread_id] || [];
+    if (!cur.some((x) => x.id === msg.id)) next[msg.thread_id] = [...cur, msg];
+  }
+  for (const id of threadIds) {
+    next[id] = next[id].sort((a, b) => a.created_at.localeCompare(b.created_at));
+    if (!since && hasMore[id] === undefined) hasMore[id] = next[id].length >= 10;
+  }
+  set({ messages: next, hasMore });
 }
 
 export async function loadMessages(threadId: string, older = false): Promise<void> {
@@ -125,7 +148,9 @@ export async function startTeam(userId: string): Promise<void> {
   startedFor = userId;
   set({ meId: userId });
   await Promise.all([loadProfiles(), loadThreads()]);
+  if (startedFor !== userId) return; // signed out (or someone else signed in) while loading
   set({ ready: true });
+  lastRefresh = Date.now();
   channel = supabase
     .channel(`team-${userId}`)
     .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_messages' }, async (p) => {
@@ -137,10 +162,15 @@ export async function startTeam(userId: string): Promise<void> {
       const id = (p.old as { id?: string }).id;
       if (!id) return;
       const next: Record<string, ChatMessage[]> = {};
-      for (const [k, v] of Object.entries(state.messages)) next[k] = v.filter((x) => x.id !== id);
-      set({ messages: next });
+      let hit = false;
+      for (const [k, v] of Object.entries(state.messages)) {
+        next[k] = v.filter((x) => x.id !== id);
+        if (next[k].length !== v.length) hit = true;
+      }
+      if (hit) set({ messages: next });
     })
-    .on('postgres_changes', { event: '*', schema: 'public', table: 'chat_members' }, () => void loadThreads())
+    // only "I was added to a chat" matters; other people's read marks are not shown, so they are not even received
+    .on('postgres_changes', { event: 'INSERT', schema: 'public', table: 'chat_members', filter: `user_id=eq.${userId}` }, () => void loadThreads())
     .on('postgres_changes', { event: '*', schema: 'public', table: 'profiles' }, () => void loadProfiles())
     .subscribe();
 }
@@ -153,11 +183,20 @@ export function stopTeam(): void {
   listeners.forEach((l) => l());
 }
 
-/** re-read everything (called when the app comes back to the screen) */
+/** catch up when the app comes back to the screen: at most once a minute, and only messages newer than the newest one held */
 export async function refreshTeam(): Promise<void> {
-  if (!startedFor) return;
+  if (!startedFor || Date.now() - lastRefresh < 60_000) return;
+  lastRefresh = Date.now();
   await Promise.all([loadProfiles(), loadThreads()]);
-  await Promise.all(state.threads.map((t) => loadMessages(t.id)));
+  let newest = '';
+  for (const list of Object.values(state.messages)) {
+    const last = list.at(-1);
+    if (last && last.created_at > newest) newest = last.created_at;
+  }
+  await loadRecent(
+    state.threads.map((t) => t.id),
+    newest || undefined
+  );
 }
 
 // ------------------------------------------------------------------ profile
@@ -207,7 +246,7 @@ export async function deleteMessage(m: ChatMessage): Promise<void> {
   set({ messages: { ...state.messages, [m.thread_id]: (state.messages[m.thread_id] || []).filter((x) => x.id !== m.id) } });
 }
 export async function markRead(threadId: string): Promise<void> {
-  if (!supabase || !state.meId) return;
+  if (!supabase || !state.meId || !state.unread[threadId]) return; // nothing new from others: no database write
   const now = new Date().toISOString();
   set({ members: state.members.map((m) => (m.thread_id === threadId && m.user_id === state.meId ? { ...m, last_read_at: now } : m)) });
   await supabase.from('chat_members').update({ last_read_at: now }).eq('thread_id', threadId).eq('user_id', state.meId);

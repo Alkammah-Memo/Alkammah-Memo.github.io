@@ -16,7 +16,7 @@ const ts = (v?: string) => {
   return Number.isFinite(n) ? n : 0;
 };
 
-export function mergeRemote<T extends Timestamped>(local: T[], remote: T[], graceMs = 20_000, now = Date.now()): T[] {
+export function mergeRemote<T extends Timestamped>(local: T[], remote: T[], graceMs = 20_000, now = Date.now(), keep: Set<string> = new Set()): T[] {
   const localById = new Map(local.map((i) => [i.id, i]));
   const merged = new Map<string, T>();
 
@@ -27,7 +27,8 @@ export function mergeRemote<T extends Timestamped>(local: T[], remote: T[], grac
   for (const l of local) {
     if (merged.has(l.id)) continue;
     const touched = Math.max(ts(l.updatedAt), ts(l.createdAt));
-    if (now - touched < graceMs) merged.set(l.id, l);
+    // kept: just touched (upload still under way) or known to be waiting for the cloud (made offline)
+    if (now - touched < graceMs || keep.has(l.id)) merged.set(l.id, l);
   }
   return [...merged.values()];
 }

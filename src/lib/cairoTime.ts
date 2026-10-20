@@ -8,14 +8,12 @@ export const CAIRO_TIMEZONE = 'Africa/Cairo';
 /**
  * Returns formatted Cairo date string YYYY-MM-DD
  */
+// built once: creating a date formatter is slow, and these run for every meeting on every notification check
+const DATE_FMT = new Intl.DateTimeFormat('en-CA', { timeZone: CAIRO_TIMEZONE, year: 'numeric', month: '2-digit', day: '2-digit' });
+const TIME_FMT = new Intl.DateTimeFormat('en-GB', { timeZone: CAIRO_TIMEZONE, hour: '2-digit', minute: '2-digit', hourCycle: 'h23' });
+
 export function getCairoDateString(date: Date = new Date()): string {
-  const formatter = new Intl.DateTimeFormat('en-CA', {
-    timeZone: CAIRO_TIMEZONE,
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-  });
-  return formatter.format(date);
+  return DATE_FMT.format(date);
 }
 
 /**
@@ -31,13 +29,7 @@ export function getCairoUtcOffsetLabel(date: Date = new Date()): string {
  * Returns formatted Cairo time string HH:mm
  */
 export function getCairoTimeString(date: Date = new Date()): string {
-  const formatter = new Intl.DateTimeFormat('en-GB', {
-    timeZone: CAIRO_TIMEZONE,
-    hour: '2-digit',
-    minute: '2-digit',
-    hourCycle: 'h23',
-  });
-  return formatter.format(date);
+  return TIME_FMT.format(date);
 }
 
 /** True when the string is a real calendar date in YYYY-MM-DD form (rejects 2026-02-31). */
@@ -72,17 +64,18 @@ export function addDaysToDateString(dateStr: string, days: number): string {
 /**
  * Cairo wall-clock time of an instant, expressed as a UTC-based millisecond value.
  */
+const WALL_FMT = new Intl.DateTimeFormat('en-US', {
+  timeZone: CAIRO_TIMEZONE,
+  hourCycle: 'h23',
+  year: 'numeric',
+  month: '2-digit',
+  day: '2-digit',
+  hour: '2-digit',
+  minute: '2-digit',
+  second: '2-digit',
+});
 function cairoWallClockMs(instantMs: number): number {
-  const parts = new Intl.DateTimeFormat('en-US', {
-    timeZone: CAIRO_TIMEZONE,
-    hourCycle: 'h23',
-    year: 'numeric',
-    month: '2-digit',
-    day: '2-digit',
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  }).formatToParts(new Date(instantMs));
+  const parts = WALL_FMT.formatToParts(new Date(instantMs));
   const get = (type: string) => Number(parts.find((p) => p.type === type)?.value);
   return Date.UTC(get('year'), get('month') - 1, get('day'), get('hour'), get('minute'), get('second'));
 }
