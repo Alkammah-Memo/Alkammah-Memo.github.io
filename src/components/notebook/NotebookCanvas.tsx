@@ -1111,11 +1111,14 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
       if (session && sessionIsTouch) finish({ pointerId: session.pointerId, preventDefault: () => undefined } as PointerEvent, true);
     };
     const ERASER_RADIUS = 16;
+    let eraseRaf: number | null = null;
 
+    // a tenth of a page unit and two pressure digits look identical on screen but make saved pages much smaller
+    const r1 = (v: number) => Math.round(v * 10) / 10;
     const toPoint = (e: PointerEvent, rect: Rect): InkPoint => ({
-      x: (e.clientX - rect.left) * (logicalRef.current.w / (rect.width || 1)),
-      y: (e.clientY - rect.top) * (logicalRef.current.h / (rect.height || 1)),
-      pressure: e.pressure > 0 ? e.pressure : 0.5,
+      x: r1((e.clientX - rect.left) * (logicalRef.current.w / (rect.width || 1))),
+      y: r1((e.clientY - rect.top) * (logicalRef.current.h / (rect.height || 1))),
+      pressure: e.pressure > 0 ? Math.round(e.pressure * 100) / 100 : 0.5,
       time: Date.now(),
     });
 
@@ -1192,7 +1195,13 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
         pushHistory(cur);
       }
       strokesRef.current = next;
-      renderBackgroundCanvas(next);
+      // repaint at most once per frame while the eraser moves (each repaint draws the whole page)
+      if (eraseRaf === null) {
+        eraseRaf = requestAnimationFrame(() => {
+          eraseRaf = null;
+          renderBackgroundCanvas(strokesRef.current);
+        });
+      }
       scheduleSave(next, textNotesRef.current);
     };
 
@@ -1448,6 +1457,7 @@ export const NotebookCanvas: React.FC<NotebookCanvasProps> = ({
     canvas.addEventListener('pointerdown', onPointerDown, { passive: false });
 
     return () => {
+      if (eraseRaf !== null) cancelAnimationFrame(eraseRaf);
       if (session) {
         if (session.lassoRaf !== null) cancelAnimationFrame(session.lassoRaf);
         session = null;
