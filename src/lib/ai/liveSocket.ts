@@ -19,6 +19,15 @@ import { keyManager, classifyError, NoKeysConfiguredError } from './keyManager';
 import type { KeySlot } from './keyManager';
 import { usage } from './modelQueue';
 import { EXECUTIVE_FUNCTION_TOOLS, liveSystemInstruction } from './tools';
+import { getSperoUser } from './speroUser';
+
+/** First words of a voice session, addressed to whoever is signed in. */
+function liveGreeting(): string {
+  const u = getSperoUser();
+  const name = u.address || 'المستخدم';
+  const f = u.female;
+  return `${f ? 'بدأت' : 'بدأ'} ${name} للتو جلسة التحدث الصوتي معكِ يا سبيرو. ${f ? 'رحّبي بها' : 'رحّبي به'} بجملة رسمية موجزة (مثل: "مساء الخير${u.address ? ` ${u.address}` : ''}، أنا في خدمتك. كيف يمكنني مساعدتك؟")، وإن وُجدت اجتماعات قريبة في سياق النظام فاذكري أقربها بدقة بصيغة ${f ? 'المخاطَبة المؤنثة ("لديكِ اجتماع...")' : 'المخاطَب المذكر ("لديك اجتماع...")'} وليس "لديّ"، وإن وُجدت رسائل فريق غير مقروءة فاذكري عددها، وإن لم يوجد شيء فلا تختلقي أي اجتماع.`;
+}
 import { arrayBufferToBase64 } from './audioUtils';
 
 export const LIVE_CONNECTING = 0;
@@ -410,8 +419,7 @@ export class GeminiLiveSocket {
     try {
       if (firstTime) {
         const greeting =
-          this.opts.greeting ||
-          'بدأ المهندس محمد القماح للتو جلسة التحدث الصوتي معكِ يا سبيرو. رحّبي به بجملة رسمية موجزة بالعربية الفصحى المبسّطة (مثل: "مساء الخير المهندس محمد، أنا في خدمتك. كيف يمكنني مساعدتك؟")، وإن وُجدت اجتماعات قريبة في سياق النظام فاذكري أقربها بدقة بصيغة المخاطَب المذكر ("لديك اجتماع..." وليس "لديّ")، وإن لم توجد فلا تختلقي أي اجتماع.';
+          this.opts.greeting || liveGreeting();
         act.session.sendClientContent({ turns: [{ role: 'user', parts: [{ text: greeting }] }], turnComplete: true });
       } else if (this.history.length > 0 && !(this.resumptionHandle && this.resumptionHandle.slotId === act.slot.id)) {
         // New key => new session: replay the recent turns so the conversation continues naturally.

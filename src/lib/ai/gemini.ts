@@ -8,11 +8,13 @@ import { keyManager, runWithFailover, classifyError, DEFAULT_MODELS, AllKeysFail
 import { usage, runnableQueue, earliestResume, formatWait, fullQueue } from './modelQueue';
 import type { QueueEntry } from './modelQueue';
 import type { ModelSettings } from './keyManager';
+import { callAr, callEn } from './speroUser';
 import {
   EXECUTIVE_FUNCTION_TOOLS,
   WORKSTREAMS,
   chatSystemInstruction,
-  SPERO_PERSONA,
+  speroPersona,
+  SPERO_SYSTEM_MAP,
   SPERO_TOOL_RULES,
   cairoNowLabel,
   cairoNowIsoLabel,
@@ -244,10 +246,11 @@ export async function voiceFastQuery(
   context: unknown
 ): Promise<VoiceFastResult> {
   const m = models();
-  const prompt = `${SPERO_PERSONA}
+  const prompt = `${speroPersona()}
+${SPERO_SYSTEM_MAP}
 التوقيت الحالي في القاهرة: ${cairoNowLabel()} (ISO محلي: ${cairoNowIsoLabel()}).
 ${SPERO_TOOL_RULES}
-طلب القماح: "${query}"
+الطلب: "${query}"
 ${context ? `سياق النظام والمواعيد الحالية: ${JSON.stringify(context)}` : 'سياق النظام: لا توجد اجتماعات مسجلة حالياً.'}`;
 
   const res = await generate([m.chat, ...m.chatFallbacks], {
@@ -259,10 +262,10 @@ ${context ? `سياق النظام والمواعيد الحالية: ${JSON.str
   const text =
     res.text ||
     (functionCalls.length > 0
-      ? 'تم تنفيذ الطلب وتسجيله، المهندس محمد.'
+      ? `تم تنفيذ الطلب وتسجيله، ${callAr()}.`
       : locale === 'ar'
-      ? 'أهلاً بحضرتك، المهندس محمد. أنا في خدمتك.'
-      : 'Understood, Eng. Mohamed. I am processing your request.');
+      ? `أهلاً بحضرتك، ${callAr()}. أنا في خدمتك.`
+      : `Understood${callEn()}. I am processing your request.`);
 
   let audio = '';
   try {
@@ -301,11 +304,12 @@ export async function economyVoiceTurn(
   speakLang: 'ar' | 'en' = 'ar',
   audio?: { data: string; mime: string }
 ): Promise<string> {
-  const systemInstruction = `${SPERO_PERSONA}
+  const systemInstruction = `${speroPersona()}
+${SPERO_SYSTEM_MAP}
 التوقيت الحالي في القاهرة: ${cairoNowLabel()} (ISO محلي: ${cairoNowIsoLabel()}).
 ${SPERO_TOOL_RULES}
 لغة هذه المحادثة: ${speakLang === 'en' ? 'الإنجليزية الرسمية الواضحة (ردّي بالإنجليزية)' : 'العربية بلهجة مصرية مهذبة (ردّي بالعربية، مع إبقاء أسماء المشاريع بالإنجليزية كما هي)'}.
-قواعد المحادثة الصوتية: ردّي بجملة أو جملتين كحد أقصى (نحو ٣٠ كلمة)، بنص عادي فقط بلا نجوم ولا ترقيم ولا قوائم ولا رموز، وبنبرة طبيعية مهذبة تُقرأ بصوت عالٍ. إذا سُئلتِ عن قائمة مهام أو اجتماعات فاذكري أهم ثلاثة عناصر فقط بأسمائها، ثم قولي كم عنصراً آخر يوجد. خاطبيه دائماً بـ "المهندس محمد" أو "حضرتك" فقط، ولا تقولي "بشمهندس" أو "يا". إذا طُلب اجتماع ولم يُذكر مع من أو موضوعه فاسألي عنه أولاً.
+قواعد المحادثة الصوتية: ردّي بجملة أو جملتين كحد أقصى (نحو ٣٠ كلمة)، بنص عادي فقط بلا نجوم ولا ترقيم ولا قوائم ولا رموز، وبنبرة طبيعية مهذبة تُقرأ بصوت عالٍ. إذا سُئلتِ عن قائمة مهام أو اجتماعات فاذكري أهم ثلاثة عناصر فقط بأسمائها، ثم قولي كم عنصراً آخر يوجد. استخدمي صيغة المخاطبة المحددة أعلاه فقط، ولا تقولي "بشمهندس" أو "يا". إذا طُلب اجتماع ولم يُذكر مع من أو موضوعه فاسألي عنه أولاً.
 سياق النظام الحالي: ${JSON.stringify(context)}`;
 
   const contents: { role: string; parts: Record<string, unknown>[] }[] = [
@@ -313,7 +317,7 @@ ${SPERO_TOOL_RULES}
     {
       role: 'user',
       parts: audio
-        ? [{ inlineData: { mimeType: audio.mime.split(';')[0], data: audio.data } }, { text: 'هذا طلب المهندس محمد المنطوق (تسجيل صوتي). افهميه ثم نفّذيه أو أجيبي عليه مباشرة.' }]
+        ? [{ inlineData: { mimeType: audio.mime.split(';')[0], data: audio.data } }, { text: 'هذا طلب المستخدم المنطوق (تسجيل صوتي). افهميه ثم نفّذيه أو أجيبي عليه مباشرة.' }]
         : [{ text: query }],
     },
   ];
@@ -333,7 +337,7 @@ ${SPERO_TOOL_RULES}
   const first = await gen({ contents: contents as never, config });
   const calls = extractCalls(first);
   if (calls.length === 0) {
-    return first.text || (locale === 'ar' ? 'تفضّل، المهندس محمد.' : 'Yes, Eng. Mohamed.');
+    return first.text || (locale === 'ar' ? `تفضّل، ${callAr()}.` : `Yes${callEn()}.`);
   }
 
   const results: { name: string; response: Record<string, unknown> }[] = [];
@@ -352,7 +356,7 @@ ${SPERO_TOOL_RULES}
     { role: 'user', parts: results.map((r) => ({ functionResponse: { name: r.name, response: r.response } })) },
   ];
   const second = await gen({ contents: followUp as never, config });
-  return second.text || (locale === 'ar' ? 'تم، المهندس محمد.' : 'Done, Eng. Mohamed.');
+  return second.text || (locale === 'ar' ? `تم، ${callAr()}.` : `Done${callEn()}.`);
 }
 
 
