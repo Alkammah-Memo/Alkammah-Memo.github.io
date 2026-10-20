@@ -32,6 +32,7 @@ import { NotificationSettings } from './NotificationSettings';
 import { AppearanceSettings } from './AppearanceSettings';
 import { GoogleCalendarSettings } from './GoogleCalendarSettings';
 import { WorkCalendarSettings } from './WorkCalendarSettings';
+import { GeminiQuickKey } from './GeminiQuickKey';
 import { CalendarGuide } from './CalendarGuide';
 import { getVoiceEngine, setVoiceEngine } from '../../lib/ai/voiceEngine';
 import type { VoiceEngine } from '../../lib/ai/voiceEngine';
@@ -388,6 +389,18 @@ export const SettingsView: React.FC<SettingsViewProps> = ({
         }
       >
         <div className="space-y-4">
+          {/* The fast way: open Google AI Studio, copy, come back, paste. Shown in full until the first key exists. */}
+          {configuredCount === 0 ? (
+            <GeminiQuickKey ar={ar} />
+          ) : (
+            <details className="rounded-2xl border border-[#e5e5ea] bg-[#fafafc] p-3">
+              <summary className="text-sm font-bold cursor-pointer min-h-8 flex items-center">{ar ? 'إضافة مفتاح احتياطي مجاني بسرعة' : 'Quickly add a free backup key'}</summary>
+              <p className="text-xs text-[#515154] my-2">
+                {ar ? 'مفتاح ثانٍ في مشروع Google جديد (اختر "إنشاء مفتاح في مشروع جديد") يضاعف الحصة المجانية: إذا انشغل مفتاح يتحوّل النظام للتالي.' : 'A second key in a new Google project (choose "Create API key in new project") doubles the free allowance: when one key is busy the system moves to the next.'}
+              </p>
+              <GeminiQuickKey ar={ar} />
+            </details>
+          )}
           {draftSlots.map((slot) => {
             const chip = statusChip(slot);
             const res = results[slot.id];
