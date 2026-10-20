@@ -286,7 +286,17 @@ type WorkspaceListener = (collection: CollectionName, items: unknown[], isInitia
  * - after a dropped connection (iOS drops it in the background): a light list of ids + times is compared, and only documents that
  *   really changed are downloaded, instead of everything again
  */
-export function subscribeWorkspace(onUpdate: WorkspaceListener): () => void {
+/** What this device last received from the cloud: "collection/id" → server time. Lets a cold start skip unchanged documents. */
+const metaKey = (uid: string) => `alkammah_doc_meta_${uid}`;
+function readMeta(uid: string): Record<string, string> {
+  try {
+    return JSON.parse(localStorage.getItem(metaKey(uid)) || '{}') as Record<string, string>;
+  } catch {
+    return {};
+  }
+}
+
+export function subscribeWorkspace(onUpdate: WorkspaceListener, localCopy?: (c: CollectionName) => { id: string }[]): () => void {
   if (!supabase || !currentUser) return () => undefined;
   const client = supabase;
   const uid = currentUser.id;
@@ -298,7 +308,62 @@ export function subscribeWorkspace(onUpdate: WorkspaceListener): () => void {
   const list = (c: CollectionName) => [...(docs.get(c) as Map<string, { data: unknown }>).values()].map((d) => d.data);
   const isCollection = (c: unknown): c is CollectionName => ALL_COLLECTIONS.includes(c as CollectionName);
 
+  // remember the server time of every document held, so the next cold start only downloads what changed
+  let metaTimer: ReturnType<typeof setTimeout> | null = null;
+  const saveMeta = () => {
+    if (metaTimer) return;
+    metaTimer = setTimeout(() => {
+      metaTimer = null;
+      if (cancelled) return;
+      const m: Record<string, string> = {};
+      for (const [c, map] of docs) for (const [id, d] of map) m[`${c}/${id}`] = d.at;
+      try {
+        localStorage.setItem(metaKey(uid), JSON.stringify(m));
+      } catch {
+        /* storage full or blocked: the next start simply downloads everything */
+      }
+    }, 2000);
+  };
+
+  async function fetchByIds(ids: string[]) {
+    for (let k = 0; k < ids.length; k += 100) {
+      const { data, error } = await client.from('workspace_docs').select('collection,id,data,updated_at').eq('user_id', uid).in('id', ids.slice(k, k + 100));
+      if (error) throw error;
+      if (cancelled) return;
+      for (const row of data || []) {
+        if (isCollection(row.collection)) docs.get(row.collection)!.set(row.id as string, { data: row.data, at: row.updated_at as string });
+      }
+    }
+  }
+
   async function loadAll() {
+    const known = readMeta(uid);
+    // fast start: a light list of ids + times, then only documents this device does not already hold in that exact version
+    if (localCopy && Object.keys(known).length) {
+      const { data: idx, error } = await client.from('workspace_docs').select('collection,id,updated_at').eq('user_id', uid);
+      if (cancelled) return;
+      if (!error && idx) {
+        const local = new Map(ALL_COLLECTIONS.map((c) => [c, new Map(localCopy(c).map((i) => [i.id, i]))]));
+        const need: string[] = [];
+        for (const r of idx) {
+          if (!isCollection(r.collection)) continue;
+          const l = local.get(r.collection)!.get(r.id as string);
+          if (l && known[`${r.collection}/${r.id}`] === r.updated_at) docs.get(r.collection)!.set(r.id as string, { data: l, at: r.updated_at as string });
+          else need.push(r.id as string);
+        }
+        try {
+          await fetchByIds(need);
+          if (cancelled) return;
+          ready = true;
+          saveMeta();
+          for (const c of ALL_COLLECTIONS) onUpdate(c, list(c), true, null);
+          return;
+        } catch (e) {
+          console.warn('Cloud quick start fell back to a full load:', (e as Error)?.message || e);
+          for (const map of docs.values()) map.clear();
+        }
+      }
+    }
     const { data, error } = await client.from('workspace_docs').select('collection,id,data,updated_at').eq('user_id', uid);
     if (cancelled) return;
     if (error) {
@@ -309,6 +374,7 @@ export function subscribeWorkspace(onUpdate: WorkspaceListener): () => void {
       if (isCollection(row.collection)) docs.get(row.collection)!.set(row.id as string, { data: row.data, at: row.updated_at as string });
     }
     ready = true;
+    saveMeta();
     for (const c of ALL_COLLECTIONS) onUpdate(c, list(c), true, null);
   }
 
@@ -344,6 +410,7 @@ export function subscribeWorkspace(onUpdate: WorkspaceListener): () => void {
         bucket(row.collection).upserted.push(row.data);
       }
     }
+    if (changes.size) saveMeta();
     for (const [c, ch] of changes) if (ch.upserted.length || ch.deleted.length) onUpdate(c, list(c), false, ch);
   }
 
@@ -364,10 +431,12 @@ export function subscribeWorkspace(onUpdate: WorkspaceListener): () => void {
       const map = docs.get(row.collection)!;
       if (payload.eventType === 'DELETE') {
         if (!map.delete(row.id)) return;
+        saveMeta();
         onUpdate(row.collection, list(row.collection), false, { upserted: [], deleted: [row.id] });
       } else if (row.data !== undefined) {
         if (map.get(row.id)?.at === row.updated_at) return;
         map.set(row.id, { data: row.data, at: row.updated_at || '' });
+        saveMeta();
         onUpdate(row.collection, list(row.collection), false, { upserted: [row.data], deleted: [] });
       }
     })
@@ -380,6 +449,7 @@ export function subscribeWorkspace(onUpdate: WorkspaceListener): () => void {
 
   return () => {
     cancelled = true;
+    if (metaTimer) clearTimeout(metaTimer);
     void client.removeChannel(channel);
   };
 }
