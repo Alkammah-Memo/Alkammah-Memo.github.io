@@ -319,13 +319,15 @@ export const ChatCenter: React.FC<{ locale: 'en' | 'ar'; openWith?: string | nul
   const byId = useMemo(() => new Map(team.profiles.map((p) => [p.user_id, p])), [team.profiles]);
 
   // someone's birthday banner (or anywhere else) can ask to open a chat with a person
+  const onOpenedRef = useRef(onOpened);
+  onOpenedRef.current = onOpened;
   useEffect(() => {
     if (!openWith) return;
     void openDirect(openWith)
       .then((id) => setActive(id))
       .catch(() => undefined)
-      .finally(() => onOpened?.());
-  }, [openWith, onOpened]);
+      .finally(() => onOpenedRef.current?.());
+  }, [openWith]);
 
   const threadName = (t: ChatThread): string => {
     if (t.kind === 'group') return t.title || T(ar, 'Group', 'مجموعة');

@@ -3,6 +3,8 @@ import { Camera, Check, Loader2, Trash2, UserRound } from 'lucide-react';
 import { Fold } from '../settings/Fold';
 import { Avatar } from './Avatar';
 import { getTeam, saveMyProfile, subscribeTeam } from '../../lib/team';
+import { getFemalePref, setFemalePref, subscribeFemalePref } from '../../lib/ai/speroUser';
+import { savePref } from '../../lib/cloud';
 import { MAX_PROFILE_BYTES, deleteFile, shrinkImage, uploadFile } from '../../lib/files';
 
 const T = (ar: boolean, en: string, a: string) => (ar ? a : en);
@@ -10,6 +12,7 @@ const input = 'w-full rounded-xl border border-[#d2d2d7] bg-white px-3 py-2.5 te
 
 export const ProfileSettings: React.FC<{ ar: boolean }> = ({ ar }) => {
   const team = useSyncExternalStore(subscribeTeam, getTeam);
+  const female = useSyncExternalStore(subscribeFemalePref, getFemalePref);
   const me = team.profiles.find((p) => p.user_id === team.meId);
   const [name, setName] = useState<string | null>(null);
   const [phone, setPhone] = useState<string | null>(null);
@@ -129,6 +132,24 @@ export const ProfileSettings: React.FC<{ ar: boolean }> = ({ ar }) => {
           <span className="text-xs font-bold text-[#515154]">{T(ar, 'Birthday (the team is reminded on the day)', 'تاريخ الميلاد (يُذكَّر الفريق في يومه)')}</span>
           <input className={input} type="date" value={bdV} min="1930-01-01" max={new Date().toISOString().slice(0, 10)} onChange={(e) => setBirthday(e.target.value)} />
         </label>
+        <div className="space-y-1">
+          <span className="text-xs font-bold text-[#515154]">{T(ar, 'Spero speaks to me as', 'يخاطبني سبيرو بصيغة')}</span>
+          <div className="flex gap-1 rounded-xl border border-[#d2d2d7] bg-white p-1 text-sm font-bold max-w-xs">
+            {[false, true].map((v) => (
+              <button
+                key={String(v)}
+                type="button"
+                onClick={() => {
+                  setFemalePref(v);
+                  void savePref('speroFemale', v);
+                }}
+                className={`flex-1 min-h-10 rounded-lg ${female === v ? 'bg-[#0071e3] text-white' : 'text-[#515154]'}`}
+              >
+                {v ? T(ar, 'She / her', 'المؤنث') : T(ar, 'He / him', 'المذكر')}
+              </button>
+            ))}
+          </div>
+        </div>
         <div className="text-xs text-[#6e6e73]">
           {T(ar, 'E-mail', 'البريد الإلكتروني')}: <span dir="ltr">{me.email}</span> · {T(ar, 'Role', 'الدور')}: <b>{me.role === 'admin' ? T(ar, 'Administrator', 'مدير النظام') : T(ar, 'Manager', 'مدير')}</b>
         </div>
