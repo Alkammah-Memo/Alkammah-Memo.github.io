@@ -1,4 +1,6 @@
 import { earliestResume, formatWait, usage } from '../../lib/ai/modelQueue';
+import { callAr, callEn } from '../../lib/ai/speroUser';
+import { birthdaysOn, getTeam, nameOf } from '../../lib/team';
 import { keyManager } from '../../lib/ai/keyManager';
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Locale } from '../../lib/translations';
@@ -171,7 +173,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     });
   }, []);
 
-  // Near-Voice Focus (Meeting Mode) - Listens only to Mohamed in front of the device, blocks distant meeting chatter
+  // Near-Voice Focus (Meeting Mode) - Listens only to the person in front of the device, blocks distant meeting chatter
   const [nearVoiceFocus, setNearVoiceFocus] = useState<boolean>(false);
   const nearVoiceFocusRef = useRef<boolean>(true);
   useEffect(() => {
@@ -722,6 +724,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       .map((m) => ({
         id: m.id,
         title: m.title,
+        source: m.id.startsWith('ics_') ? 'Outlook (read-only)' : m.id.startsWith('gcal_') ? 'Google' : 'system',
         startCairo: new Date(m.start).toLocaleString('en-GB', { timeZone: 'Africa/Cairo', hour12: false }),
         endCairo: new Date(m.end).toLocaleString('en-GB', { timeZone: 'Africa/Cairo', hour12: false }),
       }));
@@ -732,8 +735,23 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       .slice(0, 20)
       .map((t) => ({ id: t.id, title: t.title, status: t.status, owner: t.ownerAlias, due: t.dueDate }));
 
+  // a light picture of the team (names, unread messages, birthdays) so Spero can mention them without a tool call
+  const buildTeamContext = () => {
+    const team = getTeam();
+    if (!team.ready) return '';
+    const names = new Map(team.profiles.map((p) => [p.user_id, nameOf(p)]));
+    const unreadFrom = team.threads
+      .filter((t) => team.unread[t.id])
+      .map((t) => {
+        const last = (team.messages[t.id] || []).filter((m) => m.sender_id !== team.meId).at(-1);
+        return `${last ? names.get(last.sender_id) : t.title} (${team.unread[t.id]})`;
+      });
+    const bdays = birthdaysOn(team.profiles, getCairoDateString()).filter((p) => p.user_id !== team.meId).map((p) => nameOf(p));
+    return `\nالفريق: ${team.profiles.filter((p) => p.active && p.user_id !== team.meId).map((p) => nameOf(p)).join('، ') || 'لا أحد بعد'}\nرسائل غير مقروءة: ${unreadFrom.length ? unreadFrom.join('، ') : 'لا يوجد'}${bdays.length ? `\nعيد ميلاد اليوم: ${bdays.join('، ')}` : ''}`;
+  };
+
   const buildLiveContext = () =>
-    `اليوم (القاهرة): ${getCairoDateString()}\nالاجتماعات: ${JSON.stringify(buildMeetingContext())}\nالمهام المفتوحة: ${JSON.stringify(buildTaskContext())}`;
+    `اليوم (القاهرة): ${getCairoDateString()}\nالاجتماعات: ${JSON.stringify(buildMeetingContext())}\nالمهام المفتوحة: ${JSON.stringify(buildTaskContext())}${buildTeamContext()}`;
 
   // Direct fast voice executive fallback query
   const handleFastVoiceQuery = async (queryText: string) => {
@@ -747,7 +765,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
         meetings: buildMeetingContext(),
         tasks: buildTaskContext(),
       });
-      const reply = data.text || (locale === 'ar' ? 'تم تنفيذ الأمر، المهندس محمد.' : 'Understood, done.');
+      const reply = data.text || (locale === 'ar' ? `تم تنفيذ الأمر، ${callAr()}.` : 'Understood, done.');
       setLastTranscript(reply);
       setStatus('speaking');
       addDebugLog('SUCCESS', 'GeminiLive', `Spero reply received: "${reply}"`);
@@ -895,9 +913,9 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
       const back = allUsedUp ? formatWait((earliestResume() as number) - Date.now(), locale === 'ar') : '';
       const msg = allUsedUp
         ? locale === 'ar'
-          ? `المهندس محمد، حصة جميع نماذج جيميناي انتهت الآن. سيعود أول نموذج بعد ${back}.`
-          : `Eng. Mohamed, every Gemini model is used up right now. The first one returns in ${back}.`
-        : locale === 'ar' ? 'تعذّر تنفيذ الطلب الآن، المهندس محمد. يرجى المحاولة مرة أخرى.' : 'I could not complete that request just now, Eng. Mohamed. Please try again.';
+          ? `${callAr()}، حصة جميع نماذج جيميناي انتهت الآن. سيعود أول نموذج بعد ${back}.`
+          : `Every Gemini model is used up right now${callEn()}. The first one returns in ${back}.`
+        : locale === 'ar' ? `تعذّر تنفيذ الطلب الآن، ${callAr()}. يرجى المحاولة مرة أخرى.` : `I could not complete that request just now${callEn()}. Please try again.`;
       setLastTranscript(msg);
       speakEconomy(msg);
     }
@@ -1891,7 +1909,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
     const captionOnLeft = bubblePos.x > (typeof window !== 'undefined' ? window.innerWidth / 2 : 400);
     const caption =
       phase === 'speaking' || phase === 'listening'
-        ? lastTranscript || userTranscript || (forced ? (ar ? 'تم تسجيل الاجتماع في التقويم، المهندس محمد.' : 'The meeting has been scheduled, Eng. Mohamed.') : '')
+        ? lastTranscript || userTranscript || (forced ? (ar ? `تم تسجيل الاجتماع في التقويم، ${callAr()}.` : `The meeting has been scheduled${callEn()}.`) : '')
         : '';
 
     return (
