@@ -1,4 +1,4 @@
-import React, { useEffect, useRef, useState, useSyncExternalStore } from 'react';
+import React, { useEffect, useLayoutEffect, useRef, useState, useSyncExternalStore } from 'react';
 import { getTeam, subscribeTeam } from '../../lib/team';
 import { Locale, translations } from '../../lib/translations';
 import {
@@ -77,6 +77,42 @@ export const AppShell: React.FC<AppShellProps> = ({
     mainRef.current?.scrollTo({ top: 0 });
   }, [currentTab]);
 
+  /*
+   * The header decides by measuring, not by guessing screen sizes: fonts differ (Windows Chrome is wider than Safari), and so do
+   * zoom levels and display scaling. When the labels do not fit, it switches to icons only (with tooltips), and back when the
+   * window has grown well past the point where it had to shrink.
+   */
+  const headerRef = useRef<HTMLElement>(null);
+  const [compact, setCompact] = useState(false);
+  const compactAt = useRef(0);
+  useLayoutEffect(() => {
+    const h = headerRef.current;
+    if (!h) return;
+    const check = () => {
+      const zones = [...h.children] as HTMLElement[];
+      const w = h.clientWidth;
+      if (!compact) {
+        const overflow = zones.some((z) => z.scrollWidth > z.clientWidth + 1);
+        // real intersection of neighbouring groups (works the same left-to-right and right-to-left)
+        const overlap = zones.slice(1).some((z, i) => {
+          const a = zones[i].getBoundingClientRect();
+          const b = z.getBoundingClientRect();
+          return a.left < b.right - 1 && b.left < a.right - 1;
+        });
+        if (overflow || overlap) {
+          compactAt.current = w;
+          setCompact(true);
+        }
+      } else if (w > compactAt.current + 160) {
+        setCompact(false);
+      }
+    };
+    check();
+    const ro = new ResizeObserver(check);
+    ro.observe(h);
+    return () => ro.disconnect();
+  }, [compact, showBars, chatEnabled, locale]);
+
   // only this number re-renders the bar (a new chat message does not re-render the whole app)
   const chatUnread = useSyncExternalStore(subscribeTeam, () => getTeam().unreadTotal);
 
@@ -106,7 +142,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     >
       {/* Top Bar Header (Single Unified Navigation Bar - No Duplicate Sidebars) */}
       {showBars && (
-        <header data-shell="header" className="shrink-0 bg-white/85 backdrop-blur-2xl text-[#1d1d1f] border-b border-[#d2d2d7]/80 px-3 sm:px-5 xl:px-8 h-14 flex items-center justify-between gap-2 sm:gap-4 xl:gap-6 min-w-0 shadow-xs z-40">
+        <header ref={headerRef} data-shell="header" className="shrink-0 bg-white/85 backdrop-blur-2xl text-[#1d1d1f] border-b border-[#d2d2d7]/80 px-3 sm:px-5 xl:px-8 h-14 flex items-center justify-between gap-2 sm:gap-4 xl:gap-6 min-w-0 shadow-xs z-40">
           {/* Zone 1: Brand wordmark */}
           <div className="flex items-center gap-3 shrink-0">
             <button
@@ -132,6 +168,8 @@ export const AppShell: React.FC<AppShellProps> = ({
                   <button
                     key={item.id}
                     onClick={() => onNavigateTab(item.id === 'planner' ? 'tasks' : item.id)}
+                    title={item.label}
+                    aria-label={item.label}
                     className={`flex items-center gap-1.5 whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
                       active
                         ? 'bg-white text-[#0071e3] shadow-xs font-bold'
@@ -142,7 +180,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                       <Icon className={`w-3.5 h-3.5 ${active ? 'text-[#0071e3]' : 'text-stone-500'}`} />
                       {item.id === 'chat' && chatUnread > 0 && <span className="absolute -top-1.5 -end-2 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold inline-flex items-center justify-center">{chatUnread > 99 ? '99+' : chatUnread}</span>}
                     </span>
-                    <span className="hidden xl:inline">{item.label}</span>
+                    <span className={compact ? 'hidden' : 'hidden xl:inline'}>{item.label}</span>
                   </button>
                 );
               })}
@@ -156,19 +194,23 @@ export const AppShell: React.FC<AppShellProps> = ({
               {/* Add Task quick trigger */}
               <button
                 onClick={onOpenQuickTask}
+                title={t.addTask}
+                aria-label={t.addTask}
                 className="hidden sm:flex items-center gap-1 px-3 py-1.5 bg-[#f5f5f7] hover:bg-[#e8e8ed] text-[#1d1d1f] rounded-xl text-xs font-semibold border border-[#d2d2d7]/60 transition-colors whitespace-nowrap shrink-0 shadow-xs"
               >
                 <Plus className="w-3.5 h-3.5 text-[#0071e3]" />
-                <span className="hidden xl:inline">{t.addTask}</span>
+                <span className={compact ? 'hidden' : 'hidden xl:inline'}>{t.addTask}</span>
               </button>
 
               {/* Ask AI primary action */}
               <button
                 onClick={() => onNavigateTab('assistant')}
+                title={t.askAI}
+                aria-label={t.askAI}
                 className="hidden sm:flex items-center gap-1.5 px-3 sm:px-3.5 py-1.5 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-xl text-xs font-bold shadow-xs transition-all whitespace-nowrap shrink-0"
               >
                 <Sparkles className="w-3.5 h-3.5" />
-                <span>{t.askAI}</span>
+                <span className={compact ? 'hidden' : ''}>{t.askAI}</span>
               </button>
 
               {/* Bilingual Switcher */}
@@ -220,7 +262,7 @@ export const AppShell: React.FC<AppShellProps> = ({
 
             {/* Cloud Sync State */}
             <div
-              className="hidden xl:flex items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-xl bg-[#f5f5f7] border border-[#d2d2d7]/60 text-[#515154]"
+              className={`${compact ? 'hidden' : 'hidden xl:flex'} items-center gap-1.5 text-[11px] font-mono px-2.5 py-1 rounded-xl bg-[#f5f5f7] border border-[#d2d2d7]/60 text-[#515154]`}
               title={isCloudConnected ? 'Supabase cloud sync active' : 'Offline / local mode'}
             >
               {isCloudConnected ? (
