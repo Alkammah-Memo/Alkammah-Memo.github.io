@@ -2,6 +2,7 @@
  * Browser-side Gemini client. Replaces the old Express endpoints (/api/ai/*) so the app can be
  * hosted as a static site. Every call is wrapped in key failover (see keyManager.ts).
  */
+import { resolveOwners, directoryHint } from '../directory';
 import { GoogleGenAI, Type, Modality, ThinkingLevel } from '@google/genai';
 import type { GenerateContentParameters, GenerateContentResponse } from '@google/genai';
 import { keyManager, runWithFailover, classifyError, DEFAULT_MODELS, AllKeysFailedError, NoKeysConfiguredError } from './keyManager';
@@ -478,16 +479,19 @@ export async function extractInkCandidates(
   pageId: string,
   boundingBox?: { x: number; y: number; width: number; height: number }
 ): Promise<ExtractedCandidate[]> {
-  const m = models();
-  const res = await generate([m.vision, m.chat, ...m.chatFallbacks], {
-    contents: {
-      parts: [
-        { inlineData: { mimeType: /^data:(image\/[\w+.-]+);base64,/.exec(imageBase64)?.[1] || 'image/png', data: imageBase64.replace(/^data:image\/[\w+.-]+;base64,/, '') } },
-        { text: `${INK_PROMPT}\n\nCurrent Cairo date/time: ${cairoNowIsoLabel()}` },
-      ],
+  // fast path: minimal thinking (reading handwriting needs no deep reasoning), a second model starts if the first is slow
+  const res = await generateQueued(
+    {
+      contents: {
+        parts: [
+          { inlineData: { mimeType: /^data:(image\/[\w+.-]+);base64,/.exec(imageBase64)?.[1] || 'image/png', data: imageBase64.replace(/^data:image\/[\w+.-]+;base64,/, '') } },
+          { text: `${INK_PROMPT}${directoryHint()}\n\nCurrent Cairo date/time: ${cairoNowIsoLabel()}` },
+        ],
+      },
+      config: { responseMimeType: 'application/json', responseSchema: INK_SCHEMA, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } },
     },
-    config: { responseMimeType: 'application/json', responseSchema: INK_SCHEMA },
-  });
+    { hedgeMs: 9000, timeoutMs: 30_000 }
+  );
 
   let parsed: Record<string, unknown>[] = [];
   try {
@@ -513,7 +517,7 @@ export async function extractInkCandidates(
         (isMeeting ? 'Executive Meetings & Decisions' : 'Commercial + New Lands'),
       suggestedDepartment: String(item.suggestedDepartment || 'Executive Office'),
       suggestedProject: String(item.suggestedProject || ''),
-      suggestedOwnerAlias: String(item.suggestedOwnerAlias || 'Unassigned'),
+      suggestedOwnerAlias: resolveOwners(String(item.suggestedOwnerAlias || 'Unassigned')),
       suggestedDueDate: item.suggestedDueDate ? String(item.suggestedDueDate) : undefined,
       suggestedMeetingDate: item.suggestedMeetingDate
         ? String(item.suggestedMeetingDate)
