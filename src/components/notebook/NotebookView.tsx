@@ -366,7 +366,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
     if (viewMode !== 'split' || !autoAnalyze || !activePage) return;
     if (liveCache.current[activePage.id]?.sig === pageSignature) return;
     setLiveStatus((s) => (s === 'analyzing' ? s : 'waiting'));
-    const timer = setTimeout(() => void analyzeLive(pageSignature), 4500);
+    const timer = setTimeout(() => void analyzeLive(pageSignature), 2500);
     return () => clearTimeout(timer);
   }, [pageSignature, viewMode, autoAnalyze, activePage?.id, analyzeLive]); // eslint-disable-line react-hooks/exhaustive-deps
 
