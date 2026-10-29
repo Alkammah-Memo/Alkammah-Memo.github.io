@@ -519,3 +519,16 @@ html[data-theme][data-wallpaper] textarea.nb-text-input-dark {
 }
 html textarea.nb-text-input-dark::placeholder,
 html[data-theme][data-wallpaper] textarea.nb-text-input-dark::placeholder { color: #a1a1aa; }
+
+/* windows over a dimmed backdrop: a lighter dim and a near-solid sheet, so a window never turns grey and always matches the wallpaper tint */
+html[data-theme='glass'] .fixed[class~='bg-black/60'],
+html[data-theme='glass'] .fixed[class~='bg-black/50'],
+html[data-theme='glass'] .fixed[class~='bg-black/40'] {
+  background-color: rgba(30, 36, 70, 0.26) !important;
+}
+html[data-theme='glass'] .fixed [class~='bg-white'][class~='overflow-hidden'][class~='shadow-2xl'] {
+  background-color: rgba(255, 255, 255, 0.93) !important;
+}
+html[data-theme='glass'][data-wallpaper='dark'] .fixed [class~='bg-white'][class~='overflow-hidden'][class~='shadow-2xl'] {
+  background-color: rgba(34, 36, 48, 0.94) !important;
+}

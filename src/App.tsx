@@ -21,7 +21,7 @@ import {
   PaperColor,
 } from './types';
 import { Locale } from './lib/translations';
-import { getCairoDateString, getCairoTimeString, cairoLocalToIso, normalizeToIso, parseTimeTo24h, cairoDateOf, cairoTimeOf } from './lib/cairoTime';
+import { getCairoDateString, cairoLocalToIso, normalizeToIso, parseTimeTo24h, cairoDateOf, cairoTimeOf } from './lib/cairoTime';
 import { localDB } from './lib/indexedDb';
 import type { WorkspaceState } from './lib/indexedDb';
 import { newId, hasDuplicateName, normalizeTask } from './lib/taskLogic';
@@ -571,18 +571,9 @@ export default function App() {
     }
   };
 
-  // Tiny task: just a title and a comment; it is due 15 minutes from now (Cairo time) and lives in its own list on the Calendar page
-  const handleAddTinyTask = (title: string, comment: string) => {
-    const due = new Date(Date.now() + 15 * 60_000);
-    void handleSaveTask({
-      title,
-      description: comment,
-      isTiny: true,
-      status: 'Pending',
-      priority: 'Normal',
-      dueDate: getCairoDateString(due),
-      dueTime: getCairoTimeString(due),
-    });
+  // Tiny task: a title, a comment and a due date/time (picked automatically 15 minutes ahead, editable); lives in its own list on the Calendar page
+  const handleAddTinyTask = (title: string, comment: string, dueDate: string, dueTime: string) => {
+    void handleSaveTask({ title, description: comment, isTiny: true, status: 'Pending', priority: 'Normal', dueDate, dueTime });
   };
 
   const handleUpdateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
