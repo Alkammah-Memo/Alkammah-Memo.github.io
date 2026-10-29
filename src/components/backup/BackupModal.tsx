@@ -166,7 +166,7 @@ export const BackupModal: React.FC<BackupModalProps> = ({
         ${activeTasks
           .map(
             (x) => `<tr>
-          <td><span class="badge ${x.status === 'Done' ? 'status-done' : x.status === 'Waiting' ? 'status-wait' : ''}">${e(x.status)}</span></td>
+          <td><span class="badge ${x.status === 'Closed' ? 'status-done' : x.status === 'Waiting' ? 'status-wait' : ''}">${e(x.status)}</span></td>
           <td><strong>${e(x.title)}</strong></td>
           <td>${e(x.workstream)}</td>
           <td>${e(x.project || '—')}</td>
