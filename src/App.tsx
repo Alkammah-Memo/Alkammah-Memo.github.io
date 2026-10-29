@@ -21,10 +21,10 @@ import {
   PaperColor,
 } from './types';
 import { Locale } from './lib/translations';
-import { getCairoDateString, cairoLocalToIso, normalizeToIso, parseTimeTo24h, cairoDateOf, cairoTimeOf } from './lib/cairoTime';
+import { getCairoDateString, getCairoTimeString, cairoLocalToIso, normalizeToIso, parseTimeTo24h, cairoDateOf, cairoTimeOf } from './lib/cairoTime';
 import { localDB } from './lib/indexedDb';
 import type { WorkspaceState } from './lib/indexedDb';
-import { newId, hasDuplicateName } from './lib/taskLogic';
+import { newId, hasDuplicateName, normalizeTask } from './lib/taskLogic';
 import { PLANNER_CANVAS, findPageForDate, plannerPageDefaults } from './lib/planner';
 import type { PlannerPageRequest } from './lib/planner';
 import { INITIAL_DEPARTMENTS } from './lib/referenceData';
@@ -279,7 +279,7 @@ export default function App() {
         } catch (depErr) {
           console.warn('Could not load departments:', depErr);
         }
-        setTasks(state.tasks);
+        setTasks(state.tasks.map(normalizeTask));
         setMeetings(state.meetings);
         setNotebooks(state.notebooks);
         setPages(state.pages);
@@ -420,7 +420,7 @@ export default function App() {
       };
 
       const handlers: Record<CollectionName, (items: never[], isInitial: boolean, change: DocChange<never>) => void> = {
-        tasks: wire<Task>('tasks', () => tasksRef.current, setTasks, 'tasks', syncTaskToCloud),
+        tasks: wire<Task>('tasks', () => tasksRef.current, (v) => setTasks(v.map(normalizeTask)), 'tasks', syncTaskToCloud),
         meetings: wire<Meeting>('meetings', () => meetingsRef.current, setMeetings, 'meetings', syncMeetingToCloud),
         notebooks: wire<Notebook>('notebooks', () => notebooksRef.current, setNotebooks, 'notebooks', syncNotebookToCloud),
         pages: wire<NotebookPage>('pages', () => pagesRef.current, setPages, 'pages', (p) => syncPageToCloud(p, { now: true })),
@@ -571,6 +571,20 @@ export default function App() {
     }
   };
 
+  // Tiny task: just a title and a comment; it is due 15 minutes from now (Cairo time) and lives in its own list on the Calendar page
+  const handleAddTinyTask = (title: string, comment: string) => {
+    const due = new Date(Date.now() + 15 * 60_000);
+    void handleSaveTask({
+      title,
+      description: comment,
+      isTiny: true,
+      status: 'Pending',
+      priority: 'Normal',
+      dueDate: getCairoDateString(due),
+      dueTime: getCairoTimeString(due),
+    });
+  };
+
   const handleUpdateTaskStatus = async (taskId: string, newStatus: Task['status']) => {
     const task = tasks.find((t) => t.id === taskId);
     if (!task) return;
@@ -579,7 +593,7 @@ export default function App() {
     const updated: Task = {
       ...task,
       status: newStatus,
-      completionDate: newStatus === 'Done' ? new Date().toISOString() : undefined,
+      completionDate: newStatus === 'Closed' ? new Date().toISOString() : undefined,
       updatedAt: new Date().toISOString(),
     };
 
@@ -1207,7 +1221,7 @@ export default function App() {
       ownerAlias: candidate.suggestedOwnerAlias || 'Unassigned',
       isOwnerVerified: false,
       status: candidate.suggestedStatus || 'Pending',
-      completionDate: candidate.suggestedStatus === 'Done' ? new Date().toISOString() : undefined,
+      completionDate: candidate.suggestedStatus === 'Closed' ? new Date().toISOString() : undefined,
       priority: 'Normal',
       dueDate: candidate.suggestedDueDate,
       nextAction: candidate.suggestedNextAction,
@@ -1392,7 +1406,7 @@ export default function App() {
         nextAction: toolName === 'updateTask' && args.nextAction ? String(args.nextAction) : match.nextAction,
         ownerAlias: toolName === 'updateTask' && args.ownerAlias ? String(args.ownerAlias) : match.ownerAlias,
         closureReason: args.closureReason ? String(args.closureReason) : match.closureReason,
-        completionDate: newStatus === 'Done' ? new Date().toISOString() : newStatus ? undefined : match.completionDate,
+        completionDate: newStatus === 'Closed' ? new Date().toISOString() : newStatus ? undefined : match.completionDate,
         version: (match.version || 1) + 1,
         updatedAt: new Date().toISOString(),
       };
@@ -1418,7 +1432,7 @@ export default function App() {
         .filter((t) => !args.status || t.status === args.status)
         .filter((t) => !args.ownerAlias || norm(t.ownerAlias) === norm(args.ownerAlias))
         .filter((t) => !kw || norm(`${t.title} ${t.description} ${t.project}`).includes(kw))
-        .filter((t) => !args.overdueOnly || (!!t.dueDate && t.dueDate < today && t.status !== 'Done' && t.status !== 'Closed'))
+        .filter((t) => !args.overdueOnly || (!!t.dueDate && t.dueDate < today && t.status !== 'Closed'))
         .slice(0, 30)
         .map((t) => ({ id: t.id, title: t.title, status: t.status, owner: t.ownerAlias, dueDate: t.dueDate, project: t.project, nextAction: t.nextAction }));
       return { ok: true, count: found.length, tasks: found };
@@ -1526,7 +1540,7 @@ export default function App() {
       if (!m) return { ok: false, error: 'No meeting matched.' };
       const words = norm(`${m.title} ${m.project} ${(m.attendees || []).join(' ')}`).split(/[\s,-]+/).filter((w) => w.length > 2);
       const related = tasksRef.current
-        .filter((t) => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed')
+        .filter((t) => !t.isArchived && t.status !== 'Closed')
         .filter((t) => { const hay = norm(`${t.title} ${t.project} ${t.ownerAlias} ${t.counterpart}`); return words.some((w) => hay.includes(w)); })
         .slice(0, 10)
         .map((t) => ({ title: t.title, status: t.status, owner: t.ownerAlias, dueDate: t.dueDate, nextAction: t.nextAction }));
@@ -1682,7 +1696,7 @@ export default function App() {
 
     try {
       const workspaceContext = {
-        activeTasksCount: tasks.filter((t) => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed').length,
+        activeTasksCount: tasks.filter((t) => !t.isArchived && t.status !== 'Closed').length,
         topProjects: projects.slice(0, 5).map((p) => p.name),
         recentMeetings: meetings.slice(0, 3).map((m) => ({ id: m.id, title: m.title, start: m.start })),
         recentTasks: tasks.slice(0, 5).map((t) => ({ id: t.id, title: t.title, status: t.status, owner: t.ownerAlias })),
@@ -1975,7 +1989,7 @@ export default function App() {
                   : 'text-[#515154] hover:text-[#1d1d1f]'
               }`}
             >
-              {locale === 'ar' ? 'مركز المهام' : 'Tasks Center'} ({tasks.filter((t) => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed').length})
+              {locale === 'ar' ? 'مركز المهام' : 'Tasks Center'} ({tasks.filter((t) => !t.isArchived && !t.isTiny && t.status !== 'Closed').length})
             </button>
             <button
               onClick={() => setCurrentTab('calendar')}
@@ -2032,6 +2046,9 @@ export default function App() {
             setSelectedTaskForModal(task);
             setIsTaskModalOpen(true);
           }}
+          onAddTinyTask={handleAddTinyTask}
+          onSetTaskStatus={handleUpdateTaskStatus}
+          onDeleteTask={handleDeleteTask}
         />
       )}
 
@@ -2120,6 +2137,8 @@ export default function App() {
         onSave={handleSaveTask}
         onDelete={handleDeleteTask}
         departments={departments}
+        people={people}
+        projects={projects}
       />
 
       <MeetingModal
