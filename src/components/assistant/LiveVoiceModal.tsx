@@ -731,7 +731,7 @@ export const LiveVoiceModal: React.FC<LiveVoiceModalProps> = ({
 
   const buildTaskContext = () =>
     (tasksRef.current || [])
-      .filter((t) => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed')
+      .filter((t) => !t.isArchived && t.status !== 'Closed')
       .slice(0, 20)
       .map((t) => ({ id: t.id, title: t.title, status: t.status, owner: t.ownerAlias, due: t.dueDate }));
 
