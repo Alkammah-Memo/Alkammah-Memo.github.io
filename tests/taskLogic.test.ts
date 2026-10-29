@@ -13,7 +13,7 @@ describe('rankTopPriorities', () => {
       task({ id: 'a', priority: 'Urgent', dueDate: addDaysToDateString(today, 30) }),
       task({ id: 'b', priority: 'Low', dueDate: addDaysToDateString(today, -2) }),
       task({ id: 'c', priority: 'High', dueDate: addDaysToDateString(today, 1) }),
-      task({ id: 'd', priority: 'Urgent', status: 'Done' }),
+      task({ id: 'd', priority: 'Urgent', status: 'Closed' }),
       task({ id: 'e', priority: 'Urgent', isArchived: true }),
       task({ id: 'f', priority: 'Urgent', dueDate: addDaysToDateString(today, 2) }),
     ];
@@ -33,7 +33,7 @@ describe('selectFollowUps', () => {
       task({ id: 'future', followUpDate: addDaysToDateString(today, 3) }),
       task({ id: 'o', dueDate: addDaysToDateString(today, -1) }),
       task({ id: 'plain' }),
-      task({ id: 'done', status: 'Done', followUpDate: today }),
+      task({ id: 'done', status: 'Closed', followUpDate: today }),
     ];
     expect(selectFollowUps(list, today).map((t) => t.id).sort()).toEqual(['f', 'o', 'w']);
   });
@@ -54,5 +54,14 @@ describe('helpers', () => {
     expect(isValidDateString('2026-02-28')).toBe(true);
     expect(() => cairoLocalToIso('2026-02-31', '10:00')).toThrow();
     expect(addDaysToDateString('2026-12-31', 1)).toBe('2027-01-01');
+  });
+});
+
+describe('normalizeTask', () => {
+  it('reads the old "Done" status as Closed and leaves the rest alone', async () => {
+    const { normalizeTask } = await import('../src/lib/taskLogic');
+    const base = { id: 'a' } as never as import('../src/types').Task;
+    expect(normalizeTask({ ...base, status: 'Done' as never }).status).toBe('Closed');
+    expect(normalizeTask({ ...base, status: 'Waiting' }).status).toBe('Waiting');
   });
 });

@@ -27,7 +27,7 @@ describe('buildNotifications', () => {
       task('late', { dueDate: '2026-10-15' }),
       task('today-passed', { dueDate: '2026-10-17', dueTime: '09:00' }),
       task('today-later', { dueDate: '2026-10-17', dueTime: '18:00' }),
-      task('done', { dueDate: '2026-10-01', status: 'Done' }),
+      task('done', { dueDate: '2026-10-01', status: 'Closed' }),
       task('arch', { dueDate: '2026-10-01', isArchived: true }),
       task('fu', { followUpDate: '2026-10-16' }),
       task('fu-future', { followUpDate: '2026-10-20' }),
