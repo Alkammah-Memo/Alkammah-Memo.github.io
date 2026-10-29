@@ -60,7 +60,7 @@ export const FollowUpCenter: React.FC<FollowUpCenterProps> = ({
   const handleMarkDone = (task: Task) => {
     onUpdateTask({
       ...task,
-      status: 'Done',
+      status: 'Closed',
       completionDate: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     });
