@@ -12,7 +12,7 @@ export const WORKSTREAMS = [
   'Corporate / Personal',
 ];
 
-const TASK_STATUSES = ['Pending', 'In Progress', 'Waiting', 'On Hold', 'Done', 'Closed'];
+const TASK_STATUSES = ['Pending', 'In Progress', 'Waiting', 'On Hold', 'Closed'];
 
 // eslint-disable-next-line @typescript-eslint/no-explicit-any
 export const EXECUTIVE_TOOLS: any = [

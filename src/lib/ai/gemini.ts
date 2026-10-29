@@ -525,7 +525,7 @@ export async function extractInkCandidates(
       suggestedAttendees: Array.isArray(item.suggestedAttendees) ? (item.suggestedAttendees as string[]) : [],
       suggestedLocation: String(item.suggestedLocation || ''),
       suggestedNextAction: String(item.suggestedNextAction || ''),
-      suggestedStatus: item.statusHint === 'Done' ? ('Done' as const) : item.statusHint === 'In Progress' ? ('In Progress' as const) : undefined,
+      suggestedStatus: item.statusHint === 'Done' ? ('Closed' as const) : item.statusHint === 'In Progress' ? ('In Progress' as const) : undefined,
       confidenceScore: typeof item.confidenceScore === 'number' ? item.confidenceScore : 0.7,
       uncertainFields: uncertain,
       status: 'pending_review' as const,
