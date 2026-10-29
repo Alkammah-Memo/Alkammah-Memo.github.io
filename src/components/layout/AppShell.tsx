@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   BookOpen,
   Calendar,
+  CheckSquare,
   Building2,
   MessageCircle,
   Sparkles,
@@ -119,7 +120,8 @@ export const AppShell: React.FC<AppShellProps> = ({
   const navItems = [
     { id: 'today', label: locale === 'ar' ? 'الموجز اليومي' : 'Today & Briefing', icon: LayoutDashboard },
     { id: 'notebook', label: locale === 'ar' ? 'المفكرة والحبر' : 'Notes & Ink', icon: BookOpen },
-    { id: 'planner', label: locale === 'ar' ? 'المهام والتقويم' : 'Tasks & Calendar', icon: Calendar },
+    { id: 'tasks', label: locale === 'ar' ? 'المهام' : 'Tasks', icon: CheckSquare },
+    { id: 'calendar', label: locale === 'ar' ? 'التقويم' : 'Calendar', icon: Calendar },
     { id: 'directory', label: locale === 'ar' ? 'دليل المؤسسة' : 'Directory', icon: Building2 },
     ...(chatEnabled ? [{ id: 'chat', label: locale === 'ar' ? 'المحادثات' : 'Chat', icon: MessageCircle }] : []),
   ];
@@ -130,8 +132,8 @@ export const AppShell: React.FC<AppShellProps> = ({
     navItems[1],
     navItems[2],
     navItems[3],
-    ...navItems.slice(4),
-    { id: 'assistant', label: locale === 'ar' ? 'سبيرو' : 'Spero', icon: Sparkles },
+    navItems[4],
+    ...navItems.slice(5),
     { id: 'settings', label: locale === 'ar' ? 'الإعدادات' : 'Settings', icon: SettingsIcon },
   ];
 
@@ -162,12 +164,12 @@ export const AppShell: React.FC<AppShellProps> = ({
                 const Icon = item.icon;
                 const active =
                   currentTab === item.id ||
-                  (item.id === 'planner' && ['planner', 'tasks', 'calendar', 'followup'].includes(currentTab));
+                  (item.id === 'tasks' && ['planner', 'followup'].includes(currentTab));
 
                 return (
                   <button
                     key={item.id}
-                    onClick={() => onNavigateTab(item.id === 'planner' ? 'tasks' : item.id)}
+                    onClick={() => onNavigateTab(item.id)}
                     title={item.label}
                     aria-label={item.label}
                     className={`flex items-center gap-1.5 whitespace-nowrap px-3 sm:px-3.5 py-1.5 rounded-xl text-xs font-semibold transition-all ${
@@ -302,12 +304,12 @@ export const AppShell: React.FC<AppShellProps> = ({
             const Icon = item.icon;
             const active =
               currentTab === item.id ||
-              (item.id === 'planner' && ['planner', 'tasks', 'calendar', 'followup'].includes(currentTab));
+              (item.id === 'tasks' && ['planner', 'followup'].includes(currentTab));
 
             return (
               <button
                 key={item.id}
-                onClick={() => onNavigateTab(item.id === 'planner' ? 'tasks' : item.id)}
+                onClick={() => onNavigateTab(item.id)}
                 className={`flex flex-col items-center justify-center py-1 px-1.5 rounded-xl transition-colors ${
                   active ? 'text-[#0071e3] font-bold' : 'text-[#515154] hover:text-[#1d1d1f]'
                 }`}
