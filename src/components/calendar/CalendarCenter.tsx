@@ -4,13 +4,16 @@ import { GOOGLE_ID_PREFIX } from '../../lib/googleCalendar';
 import { FEED_ID_PREFIX } from '../../lib/outlookFeed';
 import { Locale, translations } from '../../lib/translations';
 import { formatCairoDateDisplay, getCairoDateString, cairoDateOf, cairoTimeOf } from '../../lib/cairoTime';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import { buildIcs } from '../../lib/exporters';
 import { useCairoClock } from '../../lib/useCairoClock';
 import { TimeGrid, WEEKEND_HATCH } from './TimeGrid';
+import { TinyTaskList, TinyTaskModal } from './TinyTasks';
 import {
   Calendar as CalendarIcon,
   Clock,
   Plus,
+  Zap,
   ChevronLeft,
   ChevronRight,
   Download,
@@ -27,6 +30,9 @@ interface CalendarCenterProps {
   locale: Locale;
   onOpenMeetingModal: (meeting: Meeting | null, initialDate?: string, initialStartTime?: string) => void;
   onOpenTaskModal: (task: Task) => void;
+  onAddTinyTask: (title: string, comment: string) => void;
+  onSetTaskStatus: (id: string, status: Task['status']) => void;
+  onDeleteTask: (id: string) => void;
 }
 
 type CalendarViewMode = 'year' | 'month' | 'week' | 'day' | 'agenda';
@@ -48,6 +54,9 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
   locale,
   onOpenMeetingModal,
   onOpenTaskModal,
+  onAddTinyTask,
+  onSetTaskStatus,
+  onDeleteTask,
 }) => {
   const t = translations[locale];
   // where a meeting came from: events that arrived from Google (phone calendar etc.) vs. ones created in this system
@@ -75,6 +84,8 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
     return new Date(y, m - 1, d);
   };
   const [currentDate, setCurrentDate] = useState<Date>(cairoTodayAsLocalDate);
+  const [tinyOpen, setTinyOpen] = useState(false);
+  const [tinyDelete, setTinyDelete] = useState<Task | null>(null);
   const [showPast, setShowPast] = useState<boolean>(false);
   const intlLocale = ar ? 'ar-EG' : 'en-US';
   // Calendar cells are plain Y-M-D values: format them at UTC noon so no device time zone can shift the day
@@ -269,6 +280,14 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
           </button>
 
           <button
+            onClick={() => setTinyOpen(true)}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition-colors"
+          >
+            <Zap className="w-4 h-4" />
+            <span>{ar ? 'مهمة صغيرة' : 'Add tiny task'}</span>
+          </button>
+
+          <button
             onClick={() => onOpenMeetingModal(null, formatYYYYMMDD(currentDate))}
             className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
           >
@@ -277,6 +296,21 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
           </button>
         </div>
       </div>
+
+      <TinyTaskList tasks={allTasks} locale={locale} onSetStatus={onSetTaskStatus} onDelete={(id) => setTinyDelete(allTasks.find((x) => x.id === id) || null)} onOpen={onOpenTaskModal} />
+      <TinyTaskModal open={tinyOpen} locale={locale} onClose={() => setTinyOpen(false)} onSave={onAddTinyTask} />
+      <ConfirmDialog
+        open={!!tinyDelete}
+        ar={ar}
+        title={ar ? 'حذف هذه المهمة الصغيرة؟' : 'Delete this tiny task?'}
+        detail={tinyDelete?.title}
+        onCancel={() => setTinyDelete(null)}
+        onConfirm={() => {
+          const x = tinyDelete;
+          setTinyDelete(null);
+          if (x) onDeleteTask(x.id);
+        }}
+      />
 
       {/* Source filter: everything, only what was created in this system, or only what came from Google */}
       <div className="flex items-center gap-1 bg-stone-100 p-1 rounded-xl text-xs self-start max-w-full overflow-x-auto" role="group" aria-label={ar ? 'مصدر المواعيد' : 'Meeting source'}>
@@ -419,7 +453,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
               const cellDateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(dayNum).padStart(2, '0')}`;
               const dayMeetings = meetingsOn(cellDateStr);
               const dayTasks = tasks.filter(
-                (t) => t.dueDate === cellDateStr && t.status !== 'Done' && t.status !== 'Closed' && !t.isArchived
+                (t) => t.dueDate === cellDateStr && t.status !== 'Closed' && !t.isArchived
               );
 
               return (
