@@ -63,7 +63,7 @@ export function buildNotifications(meetings: Meeting[], tasks: Task[], prefs: No
     out.sort((a, b) => (a.minutes ?? 0) - (b.minutes ?? 0));
   }
 
-  const open = tasks.filter((t) => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed');
+  const open = tasks.filter((t) => !t.isArchived && t.status !== 'Closed');
   const dayOf = (t: Task) => (t.dueDate || '').slice(0, 10);
   const isOverdueNow = (t: Task) => {
     const d = dayOf(t);

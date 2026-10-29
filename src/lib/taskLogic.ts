@@ -3,7 +3,10 @@ import { isTaskOverdue } from './cairoTime';
 
 const PRIORITY_RANK: Record<string, number> = { Urgent: 0, High: 1, Normal: 2, Low: 3 };
 
-export const isActiveTask = (t: Task): boolean => !t.isArchived && t.status !== 'Done' && t.status !== 'Closed';
+/** Tasks saved before "Done" was merged into "Closed" still carry the old value: read them as Closed */
+export const normalizeTask = (t: Task): Task => ((t.status as string) === 'Done' ? { ...t, status: 'Closed' } : t);
+
+export const isActiveTask = (t: Task): boolean => !t.isArchived && t.status !== 'Closed';
 
 /** Top suggested priorities: overdue first, then priority, then earliest due date/time. Stable and deterministic. */
 export function rankTopPriorities(tasks: Task[], limit = 3): Task[] {

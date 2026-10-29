@@ -200,7 +200,7 @@ export function formatCairoHeaderDateTime(
 
 /**
  * Checks whether a task with a given due date is overdue in Cairo time
- * Note: Done and Closed tasks are never marked overdue.
+ * Note: Closed tasks are never marked overdue.
  */
 export function isTaskOverdue(
   dueDate: string | undefined,
@@ -208,7 +208,7 @@ export function isTaskOverdue(
   status: string
 ): boolean {
   if (!dueDate) return false;
-  if (status === 'Done' || status === 'Closed') return false;
+  if (status === 'Closed') return false;
 
   const todayCairo = getCairoDateString();
   dueDate = dueDate.slice(0, 10); // tolerate full ISO strings
