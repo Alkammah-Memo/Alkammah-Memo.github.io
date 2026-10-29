@@ -30,7 +30,7 @@ interface CalendarCenterProps {
   locale: Locale;
   onOpenMeetingModal: (meeting: Meeting | null, initialDate?: string, initialStartTime?: string) => void;
   onOpenTaskModal: (task: Task) => void;
-  onAddTinyTask: (title: string, comment: string) => void;
+  onAddTinyTask: (title: string, comment: string, date: string, time: string) => void;
   onSetTaskStatus: (id: string, status: Task['status']) => void;
   onDeleteTask: (id: string) => void;
 }
@@ -281,7 +281,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
 
           <button
             onClick={() => setTinyOpen(true)}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold transition-colors"
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0058b0] rounded-xl text-xs font-bold transition-colors"
           >
             <Zap className="w-4 h-4" />
             <span>{ar ? 'مهمة صغيرة' : 'Add tiny task'}</span>
@@ -289,7 +289,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
 
           <button
             onClick={() => onOpenMeetingModal(null, formatYYYYMMDD(currentDate))}
-            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+            className="flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>{t.addMeeting}</span>
@@ -489,7 +489,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                           e.stopPropagation();
                           onOpenMeetingModal(null, cellDateStr);
                         }}
-                        className="max-sm:hidden opacity-0 group-hover:opacity-100 p-1 bg-slate-900 text-white rounded hover:scale-110 transition-all text-[10px] flex items-center justify-center"
+                        className="max-sm:hidden opacity-0 group-hover:opacity-100 p-1 bg-[#0071e3] text-white rounded hover:scale-110 transition-all text-[10px] flex items-center justify-center"
                         title={locale === 'ar' ? 'إضافة اجتماع جديد في هذا اليوم' : 'Add meeting on this date'}
                       >
                         <Plus className="w-3 h-3" />

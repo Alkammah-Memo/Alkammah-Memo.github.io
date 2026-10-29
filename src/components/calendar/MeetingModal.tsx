@@ -321,7 +321,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
 
           {readOnly ? (
             <div className="flex justify-end pt-2.5 pb-1 border-t border-stone-200 sticky bottom-0 bg-white z-10">
-              <button type="button" onClick={onClose} className="px-5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs">
+              <button type="button" onClick={onClose} className="px-5 py-2 text-xs font-bold text-white bg-[#0071e3] hover:bg-[#0062c4] rounded-xl shadow-xs">
                 {ar ? 'إغلاق' : 'Close'}
               </button>
             </div>
@@ -362,7 +362,7 @@ export const MeetingModal: React.FC<MeetingModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs"
+                className="px-5 py-2 text-xs font-bold text-white bg-[#0071e3] hover:bg-[#0062c4] rounded-xl shadow-xs"
               >
                 {t.save}
               </button>
