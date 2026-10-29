@@ -504,7 +504,7 @@ export async function syncTasksToGoogle(token: string, tasks: Task[], fromDay: s
   let removed = 0;
   const eligible = new Map(
     tasks
-      .filter((t) => !t.isArchived && t.status !== 'Closed' && !!t.dueDate && t.dueDate.slice(0, 10) >= fromDay && t.dueDate.slice(0, 10) <= toDay)
+      .filter((t) => !t.isArchived && !t.isTiny && t.status !== 'Closed' && !!t.dueDate && t.dueDate.slice(0, 10) >= fromDay && t.dueDate.slice(0, 10) <= toDay)
       .map((t) => [t.id, t])
   );
   for (const [taskId, link] of Object.entries(map)) {

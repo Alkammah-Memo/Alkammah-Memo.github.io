@@ -6,7 +6,7 @@ const PRIORITY_RANK: Record<string, number> = { Urgent: 0, High: 1, Normal: 2, L
 /** Tasks saved before "Done" was merged into "Closed" still carry the old value: read them as Closed */
 export const normalizeTask = (t: Task): Task => ((t.status as string) === 'Done' ? { ...t, status: 'Closed' } : t);
 
-export const isActiveTask = (t: Task): boolean => !t.isArchived && t.status !== 'Closed';
+export const isActiveTask = (t: Task): boolean => !t.isArchived && !t.isTiny && t.status !== 'Closed';
 
 /** Top suggested priorities: overdue first, then priority, then earliest due date/time. Stable and deterministic. */
 export function rankTopPriorities(tasks: Task[], limit = 3): Task[] {
