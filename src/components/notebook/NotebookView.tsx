@@ -989,7 +989,7 @@ export const NotebookView: React.FC<NotebookViewProps> = ({
 
                         <span
                           className={`shrink-0 text-xs font-semibold px-2.5 py-1 rounded-full ${
-                            task.status === 'Done'
+                            task.status === 'Closed'
                               ? 'bg-emerald-100 text-emerald-800'
                               : task.status === 'Waiting'
                               ? 'bg-amber-100 text-amber-800'
