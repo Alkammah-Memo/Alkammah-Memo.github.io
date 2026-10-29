@@ -1938,6 +1938,13 @@ export default function App() {
             setSelectedTaskForModal(task);
             setIsTaskModalOpen(true);
           }}
+          onNewMeeting={() => {
+            setSelectedMeetingForModal(null);
+            setSelectedMeetingInitialDate(undefined);
+            setSelectedMeetingInitialTime(undefined);
+            setIsMeetingModalOpen(true);
+          }}
+          onSaveQuickAction={handleAddTinyTask}
           onOpenMeetingModal={(meeting) => {
             setSelectedMeetingForModal(meeting);
             setSelectedMeetingInitialDate(undefined);
