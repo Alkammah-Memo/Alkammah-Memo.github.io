@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { Task, Workstream, TaskStatus, TaskPriority, Person, Project } from '../../types';
+import { resolveOwners } from '../../lib/directory';
 import { PickField, PickOption } from '../common/PickField';
 import { Locale, translations } from '../../lib/translations';
 import { INITIAL_WORKSTREAMS, INITIAL_DEPARTMENTS } from '../../lib/referenceData';
@@ -57,7 +58,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
 
   const ownerOptions: PickOption[] = people
     .filter((x) => x.isActive !== false)
-    .map((x) => ({ value: (x.initials || x.name).trim(), label: x.name, hint: [x.initials, x.role].filter(Boolean).join(' · ') }))
+    .map((x) => ({ value: x.name.trim(), label: x.name, hint: [x.initials, x.role].filter(Boolean).join(' · ') }))
     .sort((a, b) => a.label.localeCompare(b.label));
   const projectOptions: PickOption[] = projects
     .map((x) => ({ value: x.name.trim(), label: x.name, hint: [x.city, x.stage].filter(Boolean).join(' · ') }))
@@ -72,7 +73,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
     setDepartment(task?.department || departments[0] || '');
     setProject(task?.project || '');
     setLocation(task?.location || '');
-    setOwnerAlias(task?.ownerAlias && task.ownerAlias !== 'Unassigned' ? task.ownerAlias : '');
+    setOwnerAlias(task?.ownerAlias && task.ownerAlias !== 'Unassigned' ? resolveOwners(task.ownerAlias, people) : '');
     setCounterpart(task?.counterpart || '');
     setStatus(task?.status || 'Pending');
     setPriority(task?.priority || 'Normal');
