@@ -295,7 +295,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
 
           <button
             onClick={() => onOpenTaskModal(null)}
-            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 bg-slate-900 hover:bg-slate-800 text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
+            className="flex-1 sm:flex-initial flex items-center justify-center gap-1.5 px-4 py-2.5 bg-[#0071e3] hover:bg-[#0062c4] text-white rounded-xl text-xs font-bold shadow-xs transition-colors"
           >
             <Plus className="w-4 h-4" />
             <span>{t.addTask}</span>
@@ -310,7 +310,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           <button
             onClick={() => setTabFilter('all')}
             className={`px-3.5 min-h-9 rounded-lg whitespace-nowrap font-medium transition-colors ${
-              tabFilter === 'all' ? 'bg-slate-900 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
+              tabFilter === 'all' ? 'bg-[#0071e3] text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
             {locale === 'en' ? 'All Active' : 'كافة المهام النشطة'}
@@ -318,7 +318,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           <button
             onClick={() => setTabFilter('today')}
             className={`px-3.5 min-h-9 rounded-lg whitespace-nowrap font-medium transition-colors ${
-              tabFilter === 'today' ? 'bg-slate-900 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
+              tabFilter === 'today' ? 'bg-[#0071e3] text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
             {locale === 'en' ? 'Due Today' : 'استحقاق اليوم'}
@@ -326,7 +326,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           <button
             onClick={() => setTabFilter('upcoming')}
             className={`px-3.5 min-h-9 rounded-lg whitespace-nowrap font-medium transition-colors ${
-              tabFilter === 'upcoming' ? 'bg-slate-900 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
+              tabFilter === 'upcoming' ? 'bg-[#0071e3] text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
             {t.upcomingTasks}
@@ -334,7 +334,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           <button
             onClick={() => setTabFilter('overdue')}
             className={`px-3.5 min-h-9 rounded-lg whitespace-nowrap font-medium transition-colors ${
-              tabFilter === 'overdue' ? 'bg-slate-800 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
+              tabFilter === 'overdue' ? 'bg-[#0071e3] text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
             {locale === 'en' ? 'Overdue' : t.overdueTasks}
@@ -342,7 +342,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           <button
             onClick={() => setTabFilter('archived')}
             className={`px-3.5 min-h-9 rounded-lg whitespace-nowrap font-medium transition-colors ${
-              tabFilter === 'archived' ? 'bg-slate-900 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
+              tabFilter === 'archived' ? 'bg-[#0071e3] text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
             <Archive className="w-3.5 h-3.5 inline me-1" />
@@ -366,7 +366,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
             value={statusFilter}
             onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
             aria-label={locale === 'en' ? 'Filter by status' : 'تصفية حسب الحالة'}
-            className={`h-10 px-3 rounded-xl border text-xs font-semibold focus:outline-none ${statusFilter === 'any' ? 'border-stone-200 bg-stone-50' : 'border-slate-900 bg-slate-900 text-white'}`}
+            className={`h-10 px-3 rounded-xl border text-xs font-semibold focus:outline-none ${statusFilter === 'any' ? 'border-stone-200 bg-stone-50' : 'border-[#0071e3] bg-[#0071e3] text-white'}`}
           >
             <option value="any">{locale === 'en' ? 'Any status' : 'كل الحالات'}</option>
             {KANBAN_STATUSES.map((st) => (
@@ -383,7 +383,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           >
             <Filter className="w-3.5 h-3.5" />
             {locale === 'en' ? 'More' : 'المزيد'}
-            {extraActive > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-slate-900 text-white text-[11px] inline-flex items-center justify-center">{extraActive}</span>}
+            {extraActive > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-[#0071e3] text-white text-[11px] inline-flex items-center justify-center">{extraActive}</span>}
           </button>
         </div>
 
@@ -401,7 +401,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                   value={f.v}
                   onChange={(e) => f.set(e.target.value)}
                   aria-label={f.label}
-                  className={`h-10 w-full px-3 rounded-xl border text-xs focus:outline-none ${f.v === 'all' ? 'border-stone-200 bg-stone-50' : 'border-slate-900 bg-white font-semibold'}`}
+                  className={`h-10 w-full px-3 rounded-xl border text-xs focus:outline-none ${f.v === 'all' ? 'border-stone-200 bg-stone-50' : 'border-[#0071e3] bg-white font-semibold'}`}
                 >
                   <option value="all">{f.all}</option>
                   {f.opts.map((o) => (
@@ -456,7 +456,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                   onClick={() => onOpenTaskModal(task)}
                   className={`relative rounded-2xl border p-3 active:bg-stone-50 ${
                     cardSort.dragId === task.id
-                      ? 'bg-amber-50 border-amber-300 shadow-xl z-20'
+                      ? 'bg-[#0071e3]/10 border-[#0071e3]/40 shadow-xl z-20'
                       : overdue
                       ? 'bg-red-50 border-red-300 shadow-xs'
                       : 'bg-white border-stone-200 shadow-xs'
@@ -555,10 +555,10 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                         onClick={() => onOpenTaskModal(task)}
                         className={`transition-colors cursor-pointer group ${
                           tableSort.dragId === task.id
-                            ? 'bg-amber-100 relative z-20 shadow-lg'
+                            ? 'bg-[#0071e3]/10 relative z-20 shadow-lg'
                             : overdue
                             ? 'bg-red-50 hover:bg-red-100/80 shadow-[inset_3px_0_0_#dc2626]'
-                            : 'hover:bg-amber-50/40'
+                            : 'hover:bg-[#0071e3]/5'
                         }`}
                       >
                         {/* Serial number + drag handle + up / down */}
@@ -583,7 +583,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
 
                         {/* Title & Project */}
                         <td className="py-3 px-4 max-w-xs">
-                          <div className="font-semibold text-stone-900 group-hover:text-amber-800 transition-colors truncate">
+                          <div className="font-semibold text-stone-900 group-hover:text-[#0071e3] transition-colors truncate">
                             {task.title}
                           </div>
                           <div className="flex items-center gap-2 text-[11px] text-stone-500 mt-0.5">
@@ -599,7 +599,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                             {task.sourceRef && (
                               <>
                                 <span>·</span>
-                                <span className="text-amber-700 font-mono text-[10px]">
+                                <span className="text-[#0071e3] font-mono text-[10px]">
                                   p.{task.sourceRef.pageNumber} ink
                                 </span>
                               </>
@@ -693,7 +693,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                       key={task.id}
                       onClick={() => onOpenTaskModal(task)}
                       className={`p-3 rounded-xl border transition-all cursor-pointer shadow-xs space-y-2 ${
-                        isTaskOverdue(task.dueDate, task.dueTime, task.status) ? 'bg-red-50 border-red-300 hover:border-red-500' : 'bg-white border-stone-200 hover:border-amber-400'
+                        isTaskOverdue(task.dueDate, task.dueTime, task.status) ? 'bg-red-50 border-red-300 hover:border-red-500' : 'bg-white border-stone-200 hover:border-[#0071e3]'
                       }`}
                     >
                       <div className="flex items-center justify-between text-[10px] text-stone-400">

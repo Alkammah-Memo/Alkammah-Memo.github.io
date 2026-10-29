@@ -434,7 +434,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               </button>
               <button
                 type="submit"
-                className="px-5 py-2 text-xs font-bold text-white bg-slate-900 hover:bg-slate-800 rounded-xl shadow-xs transition-colors"
+                className="px-5 py-2 text-xs font-bold text-white bg-[#0071e3] hover:bg-[#0062c4] rounded-xl shadow-xs transition-colors"
               >
                 {t.save}
               </button>
