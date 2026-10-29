@@ -1,5 +1,6 @@
 import React, { useState, useEffect } from 'react';
-import { Task, Workstream, TaskStatus, TaskPriority } from '../../types';
+import { Task, Workstream, TaskStatus, TaskPriority, Person, Project } from '../../types';
+import { PickField, PickOption } from '../common/PickField';
 import { Locale, translations } from '../../lib/translations';
 import { INITIAL_WORKSTREAMS, INITIAL_DEPARTMENTS } from '../../lib/referenceData';
 import { ConfirmDialog } from '../common/ConfirmDialog';
@@ -14,6 +15,9 @@ interface TaskModalProps {
   onSave: (taskData: Partial<Task>) => void;
   onDelete?: (id: string) => void;
   departments?: string[];
+  /** the directory: owners and projects are picked from these */
+  people?: Person[];
+  projects?: Project[];
 }
 
 export const TaskModal: React.FC<TaskModalProps> = ({
@@ -24,6 +28,8 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   onSave,
   onDelete,
   departments = INITIAL_DEPARTMENTS,
+  people = [],
+  projects = [],
 }) => {
   const t = translations[locale];
   const ar = locale === 'ar';
@@ -48,6 +54,14 @@ export const TaskModal: React.FC<TaskModalProps> = ({
   const [closureReason, setClosureReason] = useState(task?.closureReason || '');
 
   const [formError, setFormError] = useState<string>('');
+
+  const ownerOptions: PickOption[] = people
+    .filter((x) => x.isActive !== false)
+    .map((x) => ({ value: (x.initials || x.name).trim(), label: x.name, hint: [x.initials, x.role].filter(Boolean).join(' · ') }))
+    .sort((a, b) => a.label.localeCompare(b.label));
+  const projectOptions: PickOption[] = projects
+    .map((x) => ({ value: x.name.trim(), label: x.name, hint: [x.city, x.stage].filter(Boolean).join(' · ') }))
+    .sort((a, b) => a.label.localeCompare(b.label));
 
   // Reset the whole form every time the modal opens or a different task is selected
   useEffect(() => {
@@ -82,10 +96,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       setFormError(ar ? 'يرجى تحديد الجهة أو الأمر المنتظر إنجازه.' : 'Please state who or what you are waiting on.');
       return;
     }
-    if (status === 'Closed' && !closureReason.trim()) {
-      setFormError(ar ? 'يرجى إدخال سبب الإغلاق.' : 'Please enter the closure reason.');
-      return;
-    }
 
     onSave({
       ...(task || {}),
@@ -106,7 +116,7 @@ export const TaskModal: React.FC<TaskModalProps> = ({
       expectedDeliverable: expectedDeliverable.trim(),
       blocker: blocker.trim(),
       closureReason: status === 'Closed' ? closureReason.trim() : undefined,
-      completionDate: status === 'Done' ? (task?.completionDate || new Date().toISOString()) : undefined,
+      completionDate: status === 'Closed' ? (task?.completionDate || new Date().toISOString()) : undefined,
       updatedAt: new Date().toISOString(),
     });
     onClose();
@@ -185,23 +195,26 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 ))}
               </select>
             </div>
-            <div>
+            <div className="col-span-2 lg:col-span-1">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.project}
               </label>
-              <input
-                type="text"
+              <PickField
+                options={projectOptions}
                 value={project}
-                onChange={(e) => setProject(e.target.value)}
-                placeholder={locale === 'ar' ? 'اسم المشروع أو المنطقة الاستثمارية' : 'Project or investment zone'}
-                className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
+                onChange={setProject}
+                ar={ar}
+                ariaLabel={t.project}
+                placeholder={ar ? 'اختر مشروعاً من الدليل' : 'Pick a project from the directory'}
+                emptyText={ar ? 'لا توجد مشاريع في الدليل بعد' : 'No projects in the directory yet'}
+                useTypedLabel={(v) => (ar ? `استخدم "${v}"` : `Use "${v}"`)}
               />
             </div>
           </div>
 
           {/* Who and how urgent */}
           <div className="grid grid-cols-2 lg:grid-cols-3 gap-2.5">
-            <div>
+            <div className="col-span-2 lg:col-span-1">
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.counterpart}
               </label>
@@ -226,7 +239,6 @@ export const TaskModal: React.FC<TaskModalProps> = ({
                 <option value="In Progress">{t.inProgress}</option>
                 <option value="Waiting">{t.waiting}</option>
                 <option value="On Hold">{t.onHold}</option>
-                <option value="Done">{t.done}</option>
                 <option value="Closed">{t.closed}</option>
               </select>
             </div>
@@ -253,12 +265,17 @@ export const TaskModal: React.FC<TaskModalProps> = ({
               <label className="block text-xs font-semibold text-stone-700 mb-1">
                 {t.owner}
               </label>
-              <input
-                type="text"
+              <PickField
+                multiple
+                mono
+                options={ownerOptions}
                 value={ownerAlias}
-                onChange={(e) => setOwnerAlias(e.target.value)}
-                placeholder={locale === 'ar' ? 'اسم المسؤول أو رمزه' : 'Owner alias or name'}
-                className="w-full min-w-0 box-border px-3 py-1.5 rounded-xl border border-stone-300 text-xs bg-white focus:outline-none focus:border-[#0071e3] font-mono"
+                onChange={setOwnerAlias}
+                ar={ar}
+                ariaLabel={t.owner}
+                placeholder={ar ? 'اختر من الأشخاص والرموز' : 'Pick from people & aliases'}
+                emptyText={ar ? 'لا يوجد أشخاص في الدليل بعد' : 'No people in the directory yet'}
+                useTypedLabel={(v) => (ar ? `استخدم "${v}"` : `Use "${v}"`)}
               />
             </div>
             <div className="min-w-0 min-[520px]:col-span-2">
@@ -332,12 +349,11 @@ export const TaskModal: React.FC<TaskModalProps> = ({
           {status === 'Closed' && (
             <div>
               <label className="block text-xs font-semibold text-stone-700 mb-1">
-                {locale === 'en' ? 'Closure Reason *' : 'سبب الإغلاق الإداري *'}
+                {locale === 'en' ? 'Closure note (optional)' : 'ملاحظة الإغلاق (اختياري)'}
               </label>
               <input
                 type="text"
                 value={closureReason}
-                required
                 onChange={(e) => setClosureReason(e.target.value)}
                 placeholder={locale === 'ar' ? 'سبب الإغلاق أو الاستبدال' : 'Reason for closure or superseded action'}
                 className="w-full px-3 py-1.5 rounded-xl border border-stone-300 text-xs focus:outline-none"

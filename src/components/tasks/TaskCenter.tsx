@@ -83,7 +83,10 @@ const RowControls: React.FC<{
   </div>
 );
 
-type TabFilter = 'all' | 'today' | 'upcoming' | 'overdue' | 'waiting' | 'no_owner' | 'archived';
+type TabFilter = 'all' | 'today' | 'upcoming' | 'overdue' | 'archived';
+type StatusFilter = 'any' | TaskStatus;
+/** "All Active" shows only these; On Hold and Closed are reached through the status filter */
+const ACTIVE_STATUSES: TaskStatus[] = ['Pending', 'In Progress', 'Waiting'];
 
 export const TaskCenter: React.FC<TaskCenterProps> = ({
   tasks,
@@ -103,12 +106,13 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
     'In Progress': t.inProgress,
     Waiting: t.waiting,
     'On Hold': t.onHold,
-    Done: t.done,
     Closed: t.closed,
   };
 
   const [viewType, setViewType] = useState<'table' | 'kanban'>('table');
   const [tabFilter, setTabFilter] = useState<TabFilter>('all');
+  const [statusFilter, setStatusFilter] = useState<StatusFilter>('any');
+  const [moreFilters, setMoreFilters] = useState(false);
   const [searchQuery, setSearchQuery] = useState('');
   const [selectedWorkstream, setSelectedWorkstream] = useState<string>('all');
   const [selectedDepartment, setSelectedDepartment] = useState<string>('all');
@@ -141,6 +145,9 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
 
   // Filter tasks
   const filteredTasks = tasks.filter((task) => {
+    // tiny tasks live in their own list on the Calendar page
+    if (task.isTiny) return false;
+
     // Archived filter
     if (tabFilter === 'archived') {
       if (!task.isArchived) return false;
@@ -175,17 +182,20 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
       if (dueTo && (!day || day > dueTo)) return false;
     }
 
+    // Status filter: an explicit choice always wins (it is how closed / on-hold tasks are reached)
+    if (statusFilter !== 'any') {
+      if (task.status !== statusFilter) return false;
+    } else if (tabFilter === 'all' && !ACTIVE_STATUSES.includes(task.status)) {
+      return false;
+    }
+
     // Tab filter
     if (tabFilter === 'today') {
-      if ((task.dueDate || '').slice(0, 10) !== todayCairo || task.status === 'Done' || task.status === 'Closed') return false;
+      if ((task.dueDate || '').slice(0, 10) !== todayCairo || (statusFilter === 'any' && task.status === 'Closed')) return false;
     } else if (tabFilter === 'upcoming') {
-      if (!task.dueDate || task.dueDate.slice(0, 10) <= todayCairo || task.status === 'Done' || task.status === 'Closed') return false;
+      if (!task.dueDate || task.dueDate.slice(0, 10) <= todayCairo || (statusFilter === 'any' && task.status === 'Closed')) return false;
     } else if (tabFilter === 'overdue') {
       if (!isTaskOverdue(task.dueDate, task.dueTime, task.status)) return false;
-    } else if (tabFilter === 'waiting') {
-      if (task.status !== 'Waiting') return false;
-    } else if (tabFilter === 'no_owner') {
-      if (task.ownerAlias && task.ownerAlias !== 'Unassigned') return false;
     }
 
     // Search query
@@ -226,14 +236,26 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
   const tableRows = rowsOf(tableSort);
   const cardRows = rowsOf(cardSort);
 
-  const KANBAN_STATUSES: TaskStatus[] = [
-    'Pending',
-    'In Progress',
-    'Waiting',
-    'On Hold',
-    'Done',
-    'Closed',
-  ];
+  const KANBAN_STATUSES: TaskStatus[] = ['Pending', 'In Progress', 'Waiting', 'On Hold', 'Closed'];
+  const statusTone: Record<TaskStatus, string> = {
+    Pending: 'bg-white text-stone-800 border-stone-300',
+    'In Progress': 'bg-sky-50 text-sky-800 border-sky-200',
+    Waiting: 'bg-amber-50 text-amber-800 border-amber-200',
+    'On Hold': 'bg-violet-50 text-violet-800 border-violet-200',
+    Closed: 'bg-emerald-50 text-emerald-800 border-emerald-200',
+  };
+  const extraActive = [selectedWorkstream, selectedDepartment, selectedProject, selectedOwner].filter((v) => v !== 'all').length + (dueFrom || dueTo ? 1 : 0);
+  const anyFilter = extraActive > 0 || statusFilter !== 'any' || !!searchQuery.trim();
+  const resetFilters = () => {
+    setStatusFilter('any');
+    setSelectedWorkstream('all');
+    setSelectedDepartment('all');
+    setSelectedProject('all');
+    setSelectedOwner('all');
+    setDueFrom('');
+    setDueTo('');
+    setSearchQuery('');
+  };
 
   return (
     <div className="space-y-4 max-w-7xl mx-auto pb-16">
@@ -244,7 +266,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
             {t.navTasks}
           </h1>
           <p className="text-xs text-stone-500 mt-0.5">
-            {filteredTasks.length} {locale === 'en' ? 'operational action records' : 'سجلات عمليات تنفيذية'}
+            {filteredTasks.length} {locale === 'en' ? (filteredTasks.length === 1 ? 'task' : 'tasks') : 'مهمة'}
           </p>
         </div>
 
@@ -284,10 +306,10 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
       {/* Filter Tabs & Search Bar */}
       <div className="bg-white p-4 rounded-2xl border border-stone-200 shadow-xs space-y-3">
         {/* Smart Filter Tabs */}
-        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs">
+        <div className="flex items-center gap-1.5 overflow-x-auto pb-1 text-xs -mx-1 px-1">
           <button
             onClick={() => setTabFilter('all')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
+            className={`px-3.5 min-h-9 rounded-lg whitespace-nowrap font-medium transition-colors ${
               tabFilter === 'all' ? 'bg-slate-900 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
@@ -295,7 +317,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           </button>
           <button
             onClick={() => setTabFilter('today')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
+            className={`px-3.5 min-h-9 rounded-lg whitespace-nowrap font-medium transition-colors ${
               tabFilter === 'today' ? 'bg-slate-900 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
@@ -303,7 +325,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           </button>
           <button
             onClick={() => setTabFilter('upcoming')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
+            className={`px-3.5 min-h-9 rounded-lg whitespace-nowrap font-medium transition-colors ${
               tabFilter === 'upcoming' ? 'bg-slate-900 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
@@ -311,31 +333,15 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           </button>
           <button
             onClick={() => setTabFilter('overdue')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
+            className={`px-3.5 min-h-9 rounded-lg whitespace-nowrap font-medium transition-colors ${
               tabFilter === 'overdue' ? 'bg-slate-800 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
-            {t.overdueTasks}
-          </button>
-          <button
-            onClick={() => setTabFilter('waiting')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
-              tabFilter === 'waiting' ? 'bg-slate-900 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            {locale === 'en' ? 'Waiting on Others' : 'بانتظار طرف آخر'}
-          </button>
-          <button
-            onClick={() => setTabFilter('no_owner')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
-              tabFilter === 'no_owner' ? 'bg-slate-900 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
-            }`}
-          >
-            {locale === 'en' ? 'Unassigned' : 'بدون مسؤول'}
+            {locale === 'en' ? 'Overdue' : t.overdueTasks}
           </button>
           <button
             onClick={() => setTabFilter('archived')}
-            className={`px-3 py-1.5 rounded-lg whitespace-nowrap font-medium transition-colors ${
+            className={`px-3.5 min-h-9 rounded-lg whitespace-nowrap font-medium transition-colors ${
               tabFilter === 'archived' ? 'bg-slate-900 text-white' : 'bg-stone-100 text-stone-600 hover:text-stone-900'
             }`}
           >
@@ -344,97 +350,91 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
           </button>
         </div>
 
-        {/* Due date range: by day only */}
-        <div className="flex flex-wrap items-center gap-2 pt-2 border-t border-stone-100">
-          <span className="text-xs font-semibold text-stone-500">{locale === 'en' ? 'Due date (day only):' : 'تاريخ الاستحقاق (اليوم فقط):'}</span>
-          <div className="w-40 max-w-[46%]">
-            <DateTimeField mode="date" locale={locale} date={dueFrom} clearable placeholder={locale === 'en' ? 'From any day' : 'من أي يوم'} onChange={(v) => setDueFrom(v.date)} title={locale === 'en' ? 'From date' : 'من تاريخ'} ariaLabel={locale === 'en' ? 'Due from' : 'من'} />
-          </div>
-          <div className="w-40 max-w-[46%]">
-            <DateTimeField mode="date" locale={locale} date={dueTo} clearable placeholder={locale === 'en' ? 'To any day' : 'إلى أي يوم'} onChange={(v) => setDueTo(v.date)} title={locale === 'en' ? 'To date' : 'إلى تاريخ'} ariaLabel={locale === 'en' ? 'Due to' : 'إلى'} />
-          </div>
-          {(dueFrom || dueTo) && (
-            <button type="button" onClick={() => { setDueFrom(''); setDueTo(''); }} className="min-h-9 px-2.5 text-xs font-semibold text-rose-600 rounded-lg hover:bg-rose-50">
-              {locale === 'en' ? 'Clear dates' : 'مسح التواريخ'}
-            </button>
-          )}
-        </div>
-
-        {/* Search & Dropdown Selectors */}
-        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-2 sm:gap-2.5 pt-2 border-t border-stone-100">
+        {/* Search + status: always visible */}
+        <div className="grid grid-cols-[1fr_auto] sm:grid-cols-[1fr_12rem_auto] gap-2 pt-2 border-t border-stone-100 items-center">
           <div className="relative col-span-2 sm:col-span-1">
-            <Search className="w-4 h-4 text-stone-400 absolute start-3 top-2.5" />
+            <Search className="w-4 h-4 text-stone-400 absolute start-3 top-3" />
             <input
-              type="text"
+              type="search"
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder={t.search}
-              className="w-full ps-9 pe-3 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 focus:bg-white focus:outline-none focus:border-stone-400"
+              className="w-full h-10 ps-9 pe-3 rounded-xl border border-stone-200 text-base sm:text-xs bg-stone-50 focus:bg-white focus:outline-none focus:border-stone-400"
             />
           </div>
-
-          <div>
-            <select
-              value={selectedWorkstream}
-              onChange={(e) => setSelectedWorkstream(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 focus:bg-white focus:outline-none"
-            >
-              <option value="all">{locale === 'en' ? 'All Workstreams' : 'كافة مسارات العمل'}</option>
-              {INITIAL_WORKSTREAMS.map((ws) => (
-                <option key={ws} value={ws}>
-                  {ws}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <select
-              value={selectedDepartment}
-              onChange={(e) => setSelectedDepartment(e.target.value)}
-              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 focus:bg-white focus:outline-none"
-            >
-              <option value="all">{locale === 'en' ? 'All Departments' : 'كافة الإدارات'}</option>
-              {departments.map((dept) => (
-                <option key={dept} value={dept}>
-                  {dept}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <select
-              value={selectedProject}
-              onChange={(e) => setSelectedProject(e.target.value)}
-              aria-label={locale === 'en' ? 'Filter by project' : 'تصفية حسب المشروع'}
-              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 focus:bg-white focus:outline-none"
-            >
-              <option value="all">{locale === 'en' ? 'All Projects' : 'كافة المشاريع'}</option>
-              {projectOptions.map((pr) => (
-                <option key={pr.key} value={pr.key}>
-                  {pr.label}
-                </option>
-              ))}
-            </select>
-          </div>
-
-          <div>
-            <select
-              value={selectedOwner}
-              onChange={(e) => setSelectedOwner(e.target.value)}
-              aria-label={locale === 'en' ? 'Filter by person' : 'تصفية حسب الشخص'}
-              className="w-full px-3 py-2 rounded-xl border border-stone-200 text-xs bg-stone-50 focus:bg-white focus:outline-none"
-            >
-              <option value="all">{locale === 'en' ? 'All People' : 'كل الأشخاص'}</option>
-              {ownerOptions.map((o) => (
-                <option key={o.key} value={o.key}>
-                  {o.label}
-                </option>
-              ))}
-            </select>
-          </div>
+          <select
+            value={statusFilter}
+            onChange={(e) => setStatusFilter(e.target.value as StatusFilter)}
+            aria-label={locale === 'en' ? 'Filter by status' : 'تصفية حسب الحالة'}
+            className={`h-10 px-3 rounded-xl border text-xs font-semibold focus:outline-none ${statusFilter === 'any' ? 'border-stone-200 bg-stone-50' : 'border-slate-900 bg-slate-900 text-white'}`}
+          >
+            <option value="any">{locale === 'en' ? 'Any status' : 'كل الحالات'}</option>
+            {KANBAN_STATUSES.map((st) => (
+              <option key={st} value={st}>
+                {statusLabel[st]}
+              </option>
+            ))}
+          </select>
+          <button
+            type="button"
+            onClick={() => setMoreFilters((v) => !v)}
+            aria-expanded={moreFilters}
+            className="h-10 px-3 rounded-xl border border-stone-200 bg-stone-50 text-xs font-semibold text-stone-700 inline-flex items-center gap-1.5"
+          >
+            <Filter className="w-3.5 h-3.5" />
+            {locale === 'en' ? 'More' : 'المزيد'}
+            {extraActive > 0 && <span className="min-w-5 h-5 px-1 rounded-full bg-slate-900 text-white text-[11px] inline-flex items-center justify-center">{extraActive}</span>}
+          </button>
         </div>
+
+        {moreFilters && (
+          <div className="space-y-2.5 pt-2.5 border-t border-stone-100">
+            <div className="grid grid-cols-1 min-[480px]:grid-cols-2 lg:grid-cols-4 gap-2">
+              {[
+                { v: selectedWorkstream, set: setSelectedWorkstream, all: locale === 'en' ? 'All Workstreams' : 'كافة مسارات العمل', opts: INITIAL_WORKSTREAMS.map((x) => ({ key: x, label: x })), label: t.workstream },
+                { v: selectedDepartment, set: setSelectedDepartment, all: locale === 'en' ? 'All Departments' : 'كافة الإدارات', opts: departments.map((x) => ({ key: x, label: x })), label: t.department },
+                { v: selectedProject, set: setSelectedProject, all: locale === 'en' ? 'All Projects' : 'كافة المشاريع', opts: projectOptions, label: locale === 'en' ? 'Filter by project' : 'تصفية حسب المشروع' },
+                { v: selectedOwner, set: setSelectedOwner, all: locale === 'en' ? 'All People' : 'كل الأشخاص', opts: ownerOptions, label: locale === 'en' ? 'Filter by person' : 'تصفية حسب الشخص' },
+              ].map((f) => (
+                <select
+                  key={f.label}
+                  value={f.v}
+                  onChange={(e) => f.set(e.target.value)}
+                  aria-label={f.label}
+                  className={`h-10 w-full px-3 rounded-xl border text-xs focus:outline-none ${f.v === 'all' ? 'border-stone-200 bg-stone-50' : 'border-slate-900 bg-white font-semibold'}`}
+                >
+                  <option value="all">{f.all}</option>
+                  {f.opts.map((o) => (
+                    <option key={o.key} value={o.key}>
+                      {o.label}
+                    </option>
+                  ))}
+                </select>
+              ))}
+            </div>
+            {/* Due date range: by day only */}
+            <div className="flex flex-wrap items-center gap-2">
+              <span className="text-xs font-semibold text-stone-500">{locale === 'en' ? 'Due date (day only):' : 'تاريخ الاستحقاق (اليوم فقط):'}</span>
+              <div className="w-40 max-w-[46%]">
+                <DateTimeField mode="date" locale={locale} date={dueFrom} clearable placeholder={locale === 'en' ? 'From any day' : 'من أي يوم'} onChange={(v) => setDueFrom(v.date)} title={locale === 'en' ? 'From date' : 'من تاريخ'} ariaLabel={locale === 'en' ? 'Due from' : 'من'} />
+              </div>
+              <div className="w-40 max-w-[46%]">
+                <DateTimeField mode="date" locale={locale} date={dueTo} clearable placeholder={locale === 'en' ? 'To any day' : 'إلى أي يوم'} onChange={(v) => setDueTo(v.date)} title={locale === 'en' ? 'To date' : 'إلى تاريخ'} ariaLabel={locale === 'en' ? 'Due to' : 'إلى'} />
+              </div>
+            </div>
+          </div>
+        )}
+
+        {anyFilter && (
+          <div className="flex items-center justify-between gap-2 text-xs text-stone-600">
+            <span>
+              {filteredTasks.length} {locale === 'en' ? 'matching' : 'نتيجة'}
+            </span>
+            <button type="button" onClick={resetFilters} className="min-h-9 px-3 font-semibold text-rose-600 rounded-lg active:bg-rose-50">
+              {locale === 'en' ? 'Clear all filters' : 'مسح كل الفلاتر'}
+            </button>
+          </div>
+        )}
       </div>
 
       {/* Views */}
@@ -495,7 +495,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                     <select
                       value={task.status}
                       onChange={(e) => onUpdateTaskStatus(task.id, e.target.value as TaskStatus)}
-                      className="h-9 text-xs font-semibold px-2 rounded-lg border border-stone-300 bg-white"
+                      className={`h-10 text-xs font-semibold px-2 rounded-lg border ${statusTone[task.status] || statusTone.Pending}`}
                     >
                       {KANBAN_STATUSES.map((st) => (
                         <option key={st} value={st}>
@@ -571,15 +571,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                           <select
                             value={task.status}
                             onChange={(e) => onUpdateTaskStatus(task.id, e.target.value as TaskStatus)}
-                            className={`text-xs font-semibold px-2 py-1 rounded-lg border focus:outline-none ${
-                              task.status === 'Done'
-                                ? 'bg-emerald-50 text-emerald-800 border-emerald-200'
-                                : task.status === 'Waiting'
-                                ? 'bg-amber-50 text-amber-800 border-amber-200'
-                                : task.status === 'Closed'
-                                ? 'bg-stone-100 text-stone-500 border-stone-200'
-                                : 'bg-white text-stone-800 border-stone-300'
-                            }`}
+                            className={`text-xs font-semibold px-2 py-1.5 rounded-lg border focus:outline-none ${statusTone[task.status] || statusTone.Pending}`}
                           >
                             {KANBAN_STATUSES.map((st) => (
                               <option key={st} value={st}>
@@ -679,14 +671,14 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
         </>
       ) : (
         /* Kanban Board View */
-        <div className="grid grid-cols-1 md:grid-cols-3 lg:grid-cols-6 gap-3 overflow-x-auto pb-4">
+        <div className="flex gap-3 overflow-x-auto snap-x snap-mandatory pb-4 -mx-1 px-1">
           {KANBAN_STATUSES.map((statusCol) => {
             const colTasks = orderedFiltered.filter((t) => t.status === statusCol);
 
             return (
               <div
                 key={statusCol}
-                className="bg-stone-100/70 rounded-2xl p-3 border border-stone-200/80 flex flex-col min-h-[500px]"
+                className="bg-stone-100/70 rounded-2xl p-3 border border-stone-200/80 flex flex-col min-h-40 w-[82%] sm:w-72 lg:w-0 lg:flex-1 lg:min-w-52 shrink-0 snap-start"
               >
                 <div className="flex items-center justify-between pb-2 mb-2 border-b border-stone-200 text-xs font-bold text-stone-700">
                   <span>{statusLabel[statusCol]}</span>
@@ -728,7 +720,7 @@ export const TaskCenter: React.FC<TaskCenterProps> = ({
                         <select
                           value={task.status}
                           onChange={(e) => onUpdateTaskStatus(task.id, e.target.value as TaskStatus)}
-                          className="text-[11px] border border-stone-200 rounded-lg px-1.5 py-0.5 bg-white"
+                          className={`text-[11px] h-8 border rounded-lg px-1.5 ${statusTone[task.status] || statusTone.Pending}`}
                           aria-label={t.status}
                         >
                           {KANBAN_STATUSES.map((st) => (
