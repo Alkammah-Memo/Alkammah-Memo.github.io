@@ -135,7 +135,7 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onQuickStatusChange(item.id, 'Done');
+                      onQuickStatusChange(item.id, 'Closed');
                     }}
                     className="text-emerald-700 hover:text-emerald-800 text-xs flex items-center gap-1 font-bold"
                   >
@@ -249,7 +249,7 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
                   <button
                     onClick={(e) => {
                       e.stopPropagation();
-                      onQuickStatusChange(task.id, 'Done');
+                      onQuickStatusChange(task.id, 'Closed');
                     }}
                     className="shrink-0 p-1.5 text-stone-400 hover:text-emerald-600 rounded-lg hover:bg-stone-50"
                     title={t.markDone}
