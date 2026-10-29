@@ -30,7 +30,7 @@ interface CalendarCenterProps {
   locale: Locale;
   onOpenMeetingModal: (meeting: Meeting | null, initialDate?: string, initialStartTime?: string) => void;
   onOpenTaskModal: (task: Task) => void;
-  onAddTinyTask: (title: string, comment: string, date: string, time: string) => void;
+  onAddTinyTask: (title: string, comment: string, date: string, time: string, id?: string) => void;
   onSetTaskStatus: (id: string, status: Task['status']) => void;
   onDeleteTask: (id: string) => void;
 }
@@ -75,7 +75,8 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
     () => (source === 'all' ? allMeetings : allMeetings.filter((m) => (source === 'google') === isFromGoogle(m))),
     [allMeetings, source]
   );
-  const tasks = source === 'google' ? [] : allTasks;
+  const tasks = source === 'google' ? [] : allTasks.filter((x) => !x.isTiny);
+  const quick = source === 'google' ? [] : allTasks.filter((x) => x.isTiny);
   const [viewMode, setViewMode] = useState<CalendarViewMode>('month');
   const ar = locale === 'ar';
   const { today: todayCairo, time: nowCairoTime } = useCairoClock();
@@ -85,6 +86,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
   };
   const [currentDate, setCurrentDate] = useState<Date>(cairoTodayAsLocalDate);
   const [tinyOpen, setTinyOpen] = useState(false);
+  const [tinyEdit, setTinyEdit] = useState<Task | null>(null);
   const [tinyDelete, setTinyDelete] = useState<Task | null>(null);
   const [showPast, setShowPast] = useState<boolean>(false);
   const intlLocale = ar ? 'ar-EG' : 'en-US';
@@ -280,11 +282,11 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
           </button>
 
           <button
-            onClick={() => setTinyOpen(true)}
-            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-[#0071e3]/10 hover:bg-[#0071e3]/20 text-[#0058b0] rounded-xl text-xs font-bold transition-colors"
+            onClick={() => { setTinyEdit(null); setTinyOpen(true); }}
+            className="flex items-center justify-center gap-1.5 px-3.5 py-2.5 bg-orange-100 hover:bg-orange-200 text-orange-700 rounded-xl text-xs font-bold transition-colors"
           >
             <Zap className="w-4 h-4" />
-            <span>{ar ? 'مهمة صغيرة' : 'Add tiny task'}</span>
+            <span>{ar ? 'إجراء سريع' : 'Quick Action'}</span>
           </button>
 
           <button
@@ -297,12 +299,12 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
         </div>
       </div>
 
-      <TinyTaskList tasks={allTasks} locale={locale} onSetStatus={onSetTaskStatus} onDelete={(id) => setTinyDelete(allTasks.find((x) => x.id === id) || null)} onOpen={onOpenTaskModal} />
-      <TinyTaskModal open={tinyOpen} locale={locale} onClose={() => setTinyOpen(false)} onSave={onAddTinyTask} />
+      <TinyTaskList tasks={allTasks} locale={locale} onSetStatus={onSetTaskStatus} onDelete={(id) => setTinyDelete(allTasks.find((x) => x.id === id) || null)} onOpen={(x) => { setTinyEdit(x); setTinyOpen(true); }} />
+      <TinyTaskModal editing={tinyEdit} open={tinyOpen} locale={locale} onClose={() => setTinyOpen(false)} onSave={onAddTinyTask} />
       <ConfirmDialog
         open={!!tinyDelete}
         ar={ar}
-        title={ar ? 'حذف هذه المهمة الصغيرة؟' : 'Delete this tiny task?'}
+        title={ar ? 'حذف هذا الإجراء السريع؟' : 'Delete this quick action?'}
         detail={tinyDelete?.title}
         onCancel={() => setTinyDelete(null)}
         onConfirm={() => {
@@ -455,6 +457,7 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
               const dayTasks = tasks.filter(
                 (t) => t.dueDate === cellDateStr && t.status !== 'Closed' && !t.isArchived
               );
+              const dayQuick = quick.filter((t) => (t.dueDate || '').slice(0, 10) === cellDateStr && t.status !== 'Closed' && !t.isArchived);
 
               return (
                 <div
@@ -511,6 +514,21 @@ export const CalendarCenter: React.FC<CalendarCenterProps> = ({
                       >
                         <span className="font-mono text-blue-700 font-bold me-0.5 max-sm:hidden">{cairoTimeOf(m.start)}</span>
                         {m.title}
+                      </div>
+                    ))}
+                    {dayQuick.map((t) => (
+                      <div
+                        key={t.id}
+                        onClick={(e) => {
+                          e.stopPropagation();
+                          setTinyEdit(t);
+                          setTinyOpen(true);
+                        }}
+                        className="bg-orange-100 hover:bg-orange-200 border border-orange-300 text-orange-900 text-[9px] sm:text-[10px] leading-tight px-1 py-0.5 sm:p-1 rounded font-medium cursor-pointer transition-colors break-words line-clamp-2 sm:line-clamp-none sm:truncate"
+                        title={t.title}
+                      >
+                        <span className="font-mono font-bold me-0.5 max-sm:hidden">{t.dueTime}</span>
+                        {t.title}
                       </div>
                     ))}
                     {dayTasks.map((t) => (

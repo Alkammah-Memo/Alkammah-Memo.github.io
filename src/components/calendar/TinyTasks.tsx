@@ -7,7 +7,7 @@ import { DateTimeField, formatDateLabel, formatTimeLabel } from '../common/DateT
 import { getCairoDateString, getCairoTimeString, isTaskOverdue } from '../../lib/cairoTime';
 import { useCairoClock } from '../../lib/useCairoClock';
 
-/** A tiny task is only a title, a comment and a date: the date is picked for you (15 minutes from now) and can be changed */
+/** A quick action (stored as a task flagged isTiny, but never shown among tasks) is only a title, a comment and a date: the date is picked for you (15 minutes from now) and can be changed */
 export const TINY_MINUTES = 15;
 const autoDue = () => {
   const d = new Date(Date.now() + TINY_MINUTES * 60_000);
@@ -18,10 +18,12 @@ interface TinyModalProps {
   open: boolean;
   locale: Locale;
   onClose: () => void;
-  onSave: (title: string, comment: string, date: string, time: string) => void;
+  /** the quick action being edited (null = new one) */
+  editing?: Task | null;
+  onSave: (title: string, comment: string, date: string, time: string, id?: string) => void;
 }
 
-export const TinyTaskModal: React.FC<TinyModalProps> = ({ open, locale, onClose, onSave }) => {
+export const TinyTaskModal: React.FC<TinyModalProps> = ({ open, locale, onClose, onSave, editing }) => {
   const ar = locale === 'ar';
   const [title, setTitle] = useState('');
   const [comment, setComment] = useState('');
@@ -30,9 +32,9 @@ export const TinyTaskModal: React.FC<TinyModalProps> = ({ open, locale, onClose,
 
   useEffect(() => {
     if (!open) return;
-    setTitle('');
-    setComment('');
-    setDue(autoDue());
+    setTitle(editing?.title || '');
+    setComment(editing?.description || '');
+    setDue(editing?.dueDate ? { date: editing.dueDate.slice(0, 10), time: editing.dueTime || '09:00' } : autoDue());
     const id = window.setTimeout(() => first.current?.focus(), 50);
     const onKey = (e: KeyboardEvent) => e.key === 'Escape' && onClose();
     window.addEventListener('keydown', onKey);
@@ -40,7 +42,8 @@ export const TinyTaskModal: React.FC<TinyModalProps> = ({ open, locale, onClose,
       window.clearTimeout(id);
       window.removeEventListener('keydown', onKey);
     };
-  }, [open, onClose]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [open, onClose, editing?.id]);
 
   if (!open) return null;
   return createPortal(
@@ -50,19 +53,19 @@ export const TinyTaskModal: React.FC<TinyModalProps> = ({ open, locale, onClose,
         onSubmit={(e) => {
           e.preventDefault();
           if (!title.trim()) return;
-          onSave(title.trim(), comment.trim(), due.date, due.time);
+          onSave(title.trim(), comment.trim(), due.date, due.time, editing?.id);
           onClose();
         }}
         className="w-full sm:max-w-md bg-white rounded-t-3xl sm:rounded-2xl shadow-2xl border border-stone-200 p-4 space-y-3 pb-[max(1rem,env(safe-area-inset-bottom))]"
         role="dialog"
         aria-modal="true"
-        aria-label={ar ? 'مهمة صغيرة' : 'Tiny task'}
+        aria-label={ar ? 'إجراء سريع' : 'Quick action'}
       >
         <div className="flex items-center gap-2">
-          <span className="w-8 h-8 rounded-xl bg-[#0071e3]/10 text-[#0071e3] inline-flex items-center justify-center">
+          <span className="w-8 h-8 rounded-xl bg-orange-100 text-orange-600 inline-flex items-center justify-center">
             <Zap className="w-4 h-4" />
           </span>
-          <h2 className="flex-1 font-bold text-base text-stone-900">{ar ? 'مهمة صغيرة' : 'Tiny task'}</h2>
+          <h2 className="flex-1 font-bold text-base text-stone-900">{ar ? 'إجراء سريع' : 'Quick action'}</h2>
           <button type="button" onClick={onClose} aria-label={ar ? 'إغلاق' : 'Close'} className="w-10 h-10 -me-2 inline-flex items-center justify-center text-stone-500 rounded-lg active:bg-stone-100">
             <X className="w-5 h-5" />
           </button>
@@ -74,7 +77,7 @@ export const TinyTaskModal: React.FC<TinyModalProps> = ({ open, locale, onClose,
           maxLength={160}
           required
           placeholder={ar ? 'ما المطلوب؟' : 'What needs doing?'}
-          className="w-full h-11 px-3 rounded-xl border border-stone-300 text-base sm:text-sm focus:outline-none focus:border-[#0071e3]"
+          className="w-full h-11 px-3 rounded-xl border border-stone-300 text-base sm:text-sm focus:outline-none focus:border-orange-400"
         />
         <textarea
           value={comment}
@@ -82,7 +85,7 @@ export const TinyTaskModal: React.FC<TinyModalProps> = ({ open, locale, onClose,
           rows={2}
           maxLength={500}
           placeholder={ar ? 'تعليق (اختياري)' : 'Comment (optional)'}
-          className="w-full px-3 py-2 rounded-xl border border-stone-300 text-base sm:text-sm focus:outline-none focus:border-[#0071e3] resize-none"
+          className="w-full px-3 py-2 rounded-xl border border-stone-300 text-base sm:text-sm focus:outline-none focus:border-orange-400 resize-none"
         />
         <div>
           <span className="block text-xs font-semibold text-stone-700 mb-1">
@@ -90,8 +93,8 @@ export const TinyTaskModal: React.FC<TinyModalProps> = ({ open, locale, onClose,
           </span>
           <DateTimeField locale={locale} date={due.date} time={due.time} onChange={(v) => setDue({ date: v.date || due.date, time: v.time || due.time })} />
         </div>
-        <button type="submit" disabled={!title.trim()} className="w-full min-h-12 rounded-xl bg-[#0071e3] text-white text-sm font-bold disabled:opacity-40 active:bg-[#0062c4]">
-          {ar ? 'إضافة' : 'Add'}
+        <button type="submit" disabled={!title.trim()} className="w-full min-h-12 rounded-xl bg-orange-500 text-white text-sm font-bold disabled:opacity-40 active:bg-orange-600">
+          {editing ? (ar ? 'حفظ' : 'Save') : ar ? 'إضافة' : 'Add'}
         </button>
       </form>
     </div>,
@@ -153,18 +156,18 @@ export const TinyTaskList: React.FC<ListProps> = ({ tasks, locale, onSetStatus, 
   return (
     <section className="bg-white rounded-2xl border border-stone-200 shadow-xs">
       <button type="button" onClick={() => setOpen((v) => !v)} aria-expanded={open} className="w-full min-h-12 px-4 flex items-center gap-2 text-start">
-        <span className="w-7 h-7 rounded-lg bg-[#0071e3]/10 text-[#0071e3] inline-flex items-center justify-center">
+        <span className="w-7 h-7 rounded-lg bg-orange-100 text-orange-600 inline-flex items-center justify-center">
           <Zap className="w-4 h-4" />
         </span>
         <span className="flex-1 font-bold text-sm text-stone-900">
-          {ar ? 'المهام الصغيرة' : 'Tiny tasks'} <span className="font-mono text-xs text-stone-500">({openOnes.length})</span>
+          {ar ? 'الإجراءات السريعة' : 'Quick actions'} <span className="font-mono text-xs text-stone-500">({openOnes.length})</span>
         </span>
         <ChevronDown className={`w-4 h-4 text-stone-500 transition-transform ${open ? 'rotate-180' : ''}`} />
       </button>
       {open && (
         <div className="px-2 pb-2">
           {openOnes.length === 0 ? (
-            <p className="px-3 py-2 text-xs text-stone-500">{ar ? 'لا مهام صغيرة مفتوحة.' : 'No open tiny tasks.'}</p>
+            <p className="px-3 py-2 text-xs text-stone-500">{ar ? 'لا إجراءات سريعة مفتوحة.' : 'No open quick actions.'}</p>
           ) : (
             <ul>{openOnes.map(row)}</ul>
           )}
