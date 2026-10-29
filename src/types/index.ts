@@ -14,7 +14,6 @@ export type TaskStatus =
   | 'In Progress'
   | 'Waiting'
   | 'On Hold'
-  | 'Done'
   | 'Closed';
 
 export type TaskPriority = 'Urgent' | 'High' | 'Normal' | 'Low';
@@ -61,6 +60,8 @@ export interface Task {
   tags?: string[];
   sourceRef?: SourceReference;
   linkedMeetingIds?: string[];
+  /** tiny task: a quick reminder (title, comment, due 15 minutes after creation) kept in its own list */
+  isTiny?: boolean;
   closureReason?: string;
   completionDate?: string;
   closureDate?: string;
@@ -253,7 +254,7 @@ export interface ExtractedCandidate {
   suggestedLocation?: string;
   suggestedNextAction?: string;
   /** read from the ink: a struck-through line means Done, "ongoing" means In Progress */
-  suggestedStatus?: 'Done' | 'In Progress';
+  suggestedStatus?: 'Closed' | 'In Progress';
   confidenceScore: number;
   uncertainFields: string[];
   status: 'pending_review' | 'accepted' | 'rejected';
