@@ -24,6 +24,7 @@ import { Locale } from './lib/translations';
 import { getCairoDateString, cairoLocalToIso, normalizeToIso, parseTimeTo24h, cairoDateOf, cairoTimeOf } from './lib/cairoTime';
 import { localDB } from './lib/indexedDb';
 import type { WorkspaceState } from './lib/indexedDb';
+import { setDirectoryPeople } from './lib/directory';
 import { newId, hasDuplicateName, normalizeTask } from './lib/taskLogic';
 import { PLANNER_CANVAS, findPageForDate, plannerPageDefaults } from './lib/planner';
 import type { PlannerPageRequest } from './lib/planner';
@@ -141,6 +142,7 @@ export default function App() {
   notebooksRef.current = notebooks;
   projectsRef.current = projects;
   peopleRef.current = people;
+  setDirectoryPeople(people);
   tasksRef.current = tasks;
   meetingsRef.current = meetings;
   pagesRef.current = pages;
@@ -571,8 +573,13 @@ export default function App() {
     }
   };
 
-  // Tiny task: a title, a comment and a due date/time (picked automatically 15 minutes ahead, editable); lives in its own list on the Calendar page
-  const handleAddTinyTask = (title: string, comment: string, dueDate: string, dueTime: string) => {
+  // Quick action: a title, a comment and a due date/time (picked automatically 15 minutes ahead, editable); lives in its own list on the Calendar page
+  const handleAddTinyTask = (title: string, comment: string, dueDate: string, dueTime: string, id?: string) => {
+    const existing = id ? tasks.find((x) => x.id === id) : undefined;
+    if (existing) {
+      void handleSaveTask({ ...existing, title, description: comment, dueDate, dueTime });
+      return;
+    }
     void handleSaveTask({ title, description: comment, isTiny: true, status: 'Pending', priority: 'Normal', dueDate, dueTime });
   };
 
@@ -1968,36 +1975,22 @@ export default function App() {
         />
       )}
 
-      {/* Tasks & Calendar Unified Hub Navigation */}
-      {['planner', 'tasks', 'calendar', 'followup'].includes(currentTab) && (
+      {/* Tasks page: switch between the task list and the follow-up center (the calendar is its own page) */}
+      {['planner', 'tasks', 'followup'].includes(currentTab) && (
         <div className="max-w-6xl mx-auto mb-4 flex items-center justify-between">
           <div className="flex items-center gap-1 bg-white p-1 rounded-2xl border border-[#d2d2d7] shadow-2xs">
             <button
               onClick={() => setCurrentTab('tasks')}
               className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                currentTab === 'tasks' || currentTab === 'planner'
-                  ? 'bg-[#0071e3] text-white shadow-xs font-bold'
-                  : 'text-[#515154] hover:text-[#1d1d1f]'
+                currentTab === 'tasks' || currentTab === 'planner' ? 'bg-[#0071e3] text-white shadow-xs font-bold' : 'text-[#515154] hover:text-[#1d1d1f]'
               }`}
             >
               {locale === 'ar' ? 'مركز المهام' : 'Tasks Center'} ({tasks.filter((t) => !t.isArchived && !t.isTiny && t.status !== 'Closed').length})
             </button>
             <button
-              onClick={() => setCurrentTab('calendar')}
-              className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                currentTab === 'calendar'
-                  ? 'bg-[#0071e3] text-white shadow-xs font-bold'
-                  : 'text-[#515154] hover:text-[#1d1d1f]'
-              }`}
-            >
-              {locale === 'ar' ? 'التقويم التنفيذي' : 'Executive Calendar'} ({meetings.length})
-            </button>
-            <button
               onClick={() => setCurrentTab('followup')}
               className={`px-4 py-1.5 rounded-xl text-xs font-semibold transition-all ${
-                currentTab === 'followup'
-                  ? 'bg-[#0071e3] text-white shadow-xs font-bold'
-                  : 'text-[#515154] hover:text-[#1d1d1f]'
+                currentTab === 'followup' ? 'bg-[#0071e3] text-white shadow-xs font-bold' : 'text-[#515154] hover:text-[#1d1d1f]'
               }`}
             >
               {locale === 'ar' ? 'مركز المتابعة' : 'Follow-up Center'}
