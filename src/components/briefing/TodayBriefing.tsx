@@ -18,7 +18,6 @@ interface TodayBriefingProps {
   onOpenMeetingModal: (meeting: Meeting) => void;
   onNewMeeting: () => void;
   onSaveQuickAction: (title: string, comment: string, date: string, time: string, id?: string) => void;
-  onQuickStatusChange: (taskId: string, newStatus: Task['status']) => void;
 }
 
 type Range = 'today' | 'week' | 'month';
@@ -52,7 +51,6 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
   onOpenMeetingModal,
   onNewMeeting,
   onSaveQuickAction,
-  onQuickStatusChange,
 }) => {
   const t = translations[locale];
   const ar = locale === 'ar';
@@ -186,7 +184,6 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
   const row = (i: Item) => {
     const icon =
       i.kind === 'meeting' ? <Calendar className="w-5 h-5 text-[#0071e3]" /> : i.kind === 'quick' ? <Zap className="w-5 h-5 text-orange-500" /> : <CheckCircle2 className="w-5 h-5 text-emerald-600" />;
-    const checkable = i.kind !== 'meeting' && i.task;
     return (
       <li key={i.key} className={`flex items-center gap-2 rounded-2xl border px-3 min-h-14 py-1.5 ${i.kind === 'quick' ? 'border-orange-200 bg-orange-50/60' : 'border-stone-200 bg-white'} ${i.past ? 'opacity-60' : ''}`}>
         <button type="button" onClick={() => openItem(i)} className="flex-1 min-w-0 flex items-center gap-3 text-start py-1">
@@ -197,16 +194,6 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
             {i.sub && <span className="block text-xs text-stone-500 break-words">{i.sub}</span>}
           </span>
         </button>
-        {checkable && (
-          <button
-            type="button"
-            onClick={() => onQuickStatusChange(i.task!.id, 'Closed')}
-            aria-label={t.markDone}
-            className="w-11 h-11 shrink-0 inline-flex items-center justify-center rounded-xl"
-          >
-            <span className="w-6 h-6 rounded-md border-2 border-stone-300 bg-white" />
-          </button>
-        )}
       </li>
     );
   };
@@ -401,10 +388,7 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
                     {list.length === 0 && <li className="px-2 py-2 text-xs text-stone-500">{ar ? 'لا شيء هنا.' : 'Nothing here.'}</li>}
                     {list.slice(0, 5).map((x) => (
                       <li key={x.id} className="flex items-center gap-1 rounded-xl bg-white border border-stone-200 pe-1">
-                        <button type="button" onClick={() => onQuickStatusChange(x.id, 'Closed')} aria-label={t.markDone} className="w-11 h-11 shrink-0 inline-flex items-center justify-center">
-                          <span className="w-5 h-5 rounded-md border-2 border-stone-300" />
-                        </button>
-                        <button type="button" onClick={() => onOpenTaskModal(x)} className="flex-1 min-w-0 text-start py-2 flex items-center gap-2">
+                        <button type="button" onClick={() => onOpenTaskModal(x)} className="flex-1 min-w-0 text-start px-3 py-2.5 flex items-center gap-2">
                           <span className="flex-1 min-w-0 text-sm font-semibold text-stone-900 truncate">{x.title}</span>
                           <span className="shrink-0 max-w-[40%] text-[11px] text-stone-500 truncate">{x.ownerAlias && x.ownerAlias !== 'Unassigned' ? x.ownerAlias : ''}</span>
                         </button>
