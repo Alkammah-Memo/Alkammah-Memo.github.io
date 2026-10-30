@@ -1951,7 +1951,6 @@ export default function App() {
             setSelectedMeetingInitialTime(undefined);
             setIsMeetingModalOpen(true);
           }}
-          onQuickStatusChange={handleUpdateTaskStatus}
         />
       )}
 
