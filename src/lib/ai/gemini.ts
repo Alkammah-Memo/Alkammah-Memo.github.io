@@ -184,7 +184,7 @@ function extractCalls(res: GenerateContentResponse): FunctionCallResult[] {
 export async function chatWithAssistant(
   message: string,
   context: unknown
-): Promise<{ content: string; functionCalls: FunctionCallResult[] }> {
+): Promise<{ content: string; functionCalls: FunctionCallResult[]; modelContent?: unknown }> {
   const contextSummary = context ? `\n[Current Workspace Summary]: ${JSON.stringify(context)}` : '';
   const res = await generateQueued(
     {
@@ -193,7 +193,28 @@ export async function chatWithAssistant(
     },
     { timeoutMs: 45_000 }
   );
-  return { content: res.text || '', functionCalls: extractCalls(res) };
+  return { content: res.text || '', functionCalls: extractCalls(res), modelContent: res.candidates?.[0]?.content };
+}
+
+/**
+ * Second step of a typed chat that used tools which return information (prices, weather, phrases, team, briefings):
+ * the results go back to the model so the answer says what they contain, instead of a bare "done".
+ */
+export async function answerFromToolResults(
+  message: string,
+  context: unknown,
+  modelContent: unknown,
+  calls: FunctionCallResult[],
+  results: Record<string, unknown>[]
+): Promise<string> {
+  const contextSummary = context ? `\n[Current Workspace Summary]: ${JSON.stringify(context)}` : '';
+  const contents = [
+    { role: 'user', parts: [{ text: `${message}${contextSummary}` }] },
+    modelContent || { role: 'model', parts: calls.map((c) => ({ functionCall: { name: c.name, args: c.args } })) },
+    { role: 'user', parts: calls.map((c, i) => ({ functionResponse: { name: c.name, response: results[i] } })) },
+  ];
+  const res = await generateQueued({ contents: contents as never, config: { systemInstruction: chatSystemInstruction(), tools: EXECUTIVE_FUNCTION_TOOLS } }, { timeoutMs: 45_000 });
+  return res.text || '';
 }
 
 export async function transcribeAudio(audioBase64: string, mimeType?: string): Promise<string> {
