@@ -1671,7 +1671,7 @@ export default function App() {
       const [rates, gold, egx, news] = await Promise.all([
         getRates().catch(() => null),
         getGold().catch(() => null),
-        getEgx30('1mo').catch(() => null),
+        getEgx30().catch(() => null),
         args.topic ? getNews(String(args.topic) as NewsTopic, locale === 'ar').catch(() => null) : Promise.resolve(null),
       ]);
       if (!rates && !gold && !egx && !news) return { ok: false, error: 'Market data could not be reached right now.' };
@@ -1679,7 +1679,7 @@ export default function App() {
         ok: true,
         usdEgp: rates ? { value: Math.round(rates.data.EGP * 100) / 100, source: rates.source, asOf: new Date(rates.asOf).toISOString() } : 'unavailable',
         goldEgyptPerGram: gold ? { gram21: Math.round(gold.data.gram21), gram24: Math.round(gold.data.gram24), goldPound: Math.round(gold.data.pound), source: gold.source } : 'unavailable',
-        egx30: egx ? { value: Math.round(egx.data.price ?? 0), source: egx.source } : 'unavailable',
+        egx30: egx ? { value: Math.round(egx.data.price), dayChangePct: Math.round(egx.data.changePct * 100) / 100, source: egx.source } : 'unavailable',
         headlines: news ? news.data.slice(0, 6).map((h) => ({ title: h.title, source: h.source })) : undefined,
         where: "CEO's Mate page",
       };
