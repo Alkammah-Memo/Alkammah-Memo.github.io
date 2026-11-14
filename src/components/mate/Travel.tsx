@@ -1,6 +1,6 @@
 import React, { useEffect, useMemo, useState } from 'react';
 import { Compass, MapPin, Plus, RotateCcw, Search, Trash2, Volume2 } from 'lucide-react';
-import { COUNTRIES, Country, LANGUAGES, PHRASES, WEATHER_CODES, qiblaBearing } from '../../lib/travelData';
+import { COUNTRIES, Country, LANGUAGES, PHRASES, WEATHER_CODES, hoursFromCairo, qiblaBearing } from '../../lib/travelData';
 import { Place, convert, findPlaces, fmt, getPrayerTimes, getRates, getWeather } from '../../lib/market';
 import { Card, ErrorBox, SourceLine, ToolShell, useLoad } from './parts';
 
@@ -16,16 +16,6 @@ const readDest = (): Dest | null => {
   } catch {
     return null;
   }
-};
-
-/** hours between Cairo and a time zone right now (DST aware) */
-const hoursFromCairo = (tz: string): number => {
-  const now = new Date();
-  const wall = (z: string) => {
-    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: z, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' }).formatToParts(now).map((x) => [x.type, x.value]));
-    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
-  };
-  return Math.round(((wall(tz) - wall('Africa/Cairo')) / 3_600_000) * 2) / 2;
 };
 
 export const TravelTool: React.FC<{ ar: boolean; onBack: () => void; onOpenPhrases: (lang: string) => void }> = ({ ar, onBack, onOpenPhrases }) => {
