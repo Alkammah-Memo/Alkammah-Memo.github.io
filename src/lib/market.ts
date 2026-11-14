@@ -1,4 +1,5 @@
 import { supabase } from './cloud';
+import { CITIES } from './travelData';
 
 /**
  * Data for the CEO's Mate page. Every figure carries its source and the time it refers to, so nothing is shown without saying where it came from.
@@ -426,9 +427,34 @@ export interface Place {
   lon: number;
   tz: string;
 }
+const fold = (t: string) => t.toLowerCase().normalize('NFKD').replace(/[\u0300-\u036f\u064b-\u065f]/g, '').replace(/[أإآ]/g, 'ا').replace(/ة/g, 'ه').replace(/[^a-z0-9\u0600-\u06ff ]/g, '').replace(/\s+/g, ' ').trim();
+
+/** Searches the built-in city list first (works offline, in Arabic and with common spellings), then the world geocoder. */
 export async function findPlaces(q: string, ar: boolean): Promise<Place[]> {
-  const d = (await getJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=${ar ? 'ar' : 'en'}`)) as { results?: { name: string; country?: string; latitude: number; longitude: number; timezone: string }[] };
-  return (d.results || []).map((r) => ({ name: r.name, country: r.country || '', lat: r.latitude, lon: r.longitude, tz: r.timezone }));
+  const term = fold(q);
+  const local: Place[] = term
+    ? CITIES.filter(([en, arName, , , , , alt]) => [en, arName, ...alt.split(' ')].some((n) => n && fold(n).startsWith(term)) || fold(en).includes(term) || fold(arName).includes(term) || fold(alt).includes(term))
+        .slice(0, 6)
+        .map(([en, arName, country, lat, lon, tz]) => ({ name: ar ? arName : en, country, lat, lon, tz }))
+    : [];
+  let remote: Place[] = [];
+  const ask = async (name: string, lang: string) => {
+    const d = (await getJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(name)}&count=6&language=${lang}`)) as { results?: { name: string; country?: string; latitude: number; longitude: number; timezone: string }[] };
+    return (d.results || []).map((r) => ({ name: r.name, country: r.country || '', lat: r.latitude, lon: r.longitude, tz: r.timezone }));
+  };
+  try {
+    remote = await ask(q, ar ? 'ar' : 'en');
+    if (remote.length === 0 && ar) remote = await ask(q, 'en');
+  } catch (e) {
+    if (local.length === 0) throw e;
+  }
+  const seen = new Set<string>();
+  return [...local, ...remote].filter((p) => {
+    const k = `${p.lat.toFixed(1)}${p.lon.toFixed(1)}`;
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  }).slice(0, 8);
 }
 
 export interface Weather {
