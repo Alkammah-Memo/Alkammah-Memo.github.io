@@ -41,11 +41,14 @@ export const PickField: React.FC<PickFieldProps> = ({ options, value, onChange, 
   useEffect(() => {
     if (!open) return;
     const away = (e: PointerEvent) => {
-      if (box.current && !box.current.contains(e.target as Node)) setOpen(false);
+      if (box.current && !box.current.contains(e.target as Node)) {
+        setOpen(false);
+        keepTyped();
+      }
     };
     document.addEventListener('pointerdown', away);
     return () => document.removeEventListener('pointerdown', away);
-  }, [open]);
+  }, [open, q, value]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const commit = (list: string[]) => onChange(multiple ? list.join(', ') : list[0] || '');
   const toggle = (v: string) => {
@@ -58,6 +61,15 @@ export const PickField: React.FC<PickFieldProps> = ({ options, value, onChange, 
       setQ('');
       setOpen(false);
     }
+  };
+  // whatever was typed and not picked is kept as written, so a name or project that is not in the Directory can still be used
+  const keepTyped = () => {
+    const typed = q.trim();
+    if (!typed) return;
+    const hit = options.find((o) => same(o.value, typed) || same(o.label, typed));
+    const v = hit ? hit.value : typed;
+    if (!picked.some((x) => same(x, v))) commit(multiple ? [...picked, v] : [v]);
+    setQ('');
   };
   const needle = q.trim().toLowerCase();
   const shown = options.filter((o) => !needle || `${o.label} ${o.value} ${o.hint || ''}`.toLowerCase().includes(needle));
