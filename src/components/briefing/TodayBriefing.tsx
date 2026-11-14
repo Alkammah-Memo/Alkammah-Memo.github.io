@@ -64,7 +64,6 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
   const [range, setRange] = useState<Range>('today');
   const [kindFilter, setKindFilter] = useState<KindFilter>('all');
   const [showAllToday, setShowAllToday] = useState(false);
-  const [who, setWho] = useState<'mine' | 'delegated'>('mine');
   const [openBucket, setOpenBucket] = useState<Bucket | null>('overdue');
   const [focusOpen, setFocusOpen] = useState(false);
   const [quickOpen, setQuickOpen] = useState(false);
@@ -139,14 +138,8 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
     }
     return set;
   }, [fullName, firstName]);
-  const isMine = (x: Task) => {
-    const owners = splitOwners(x.ownerAlias || '').filter((o) => o !== 'unassigned');
-    if (owners.length === 0) return true;
-    return owners.some((o) => meTokens.has(o) || [...meTokens].some((m) => m && (m.startsWith(`${o} `) || o.startsWith(`${m} `))));
-  };
   const active = tasks.filter(isActiveTask);
-  const mineCount = active.filter(isMine).length;
-  const scoped = active.filter((x) => (who === 'mine') === isMine(x));
+  const scoped = active;
   const soonEnd = addDaysToDateString(today, 2);
   const bucketOf = (x: Task): Bucket => {
     if (isTaskOverdue(x.dueDate, x.dueTime, x.status)) return 'overdue';
@@ -365,21 +358,10 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
       <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-4 sm:p-5">
         <div className="flex items-center gap-2">
           <ListChecks className="w-5 h-5 text-[#0071e3]" />
-          <h2 className="flex-1 min-w-0 text-sm font-bold uppercase tracking-wide text-[#1d1d1f] truncate">{ar ? 'ملخص المهام' : 'Tasks'}</h2>
-          <div className="inline-flex rounded-full bg-[#f5f5f7] p-0.5 border border-[#d2d2d7]/70" role="tablist">
-            {([
-              ['mine', ar ? 'مهامي' : 'My tasks'],
-              ['delegated', ar ? 'المفوّضة' : 'Delegated'],
-            ] as ['mine' | 'delegated', string][]).map(([k, label]) => (
-              <button key={k} role="tab" aria-selected={who === k} onClick={() => setWho(k)} className={`min-h-9 px-3 rounded-full text-xs font-semibold ${who === k ? 'bg-[#0071e3] text-white' : 'text-[#515154]'}`}>
-                {label}
-              </button>
-            ))}
-          </div>
+          <h2 className="flex-1 min-w-0 text-sm font-bold uppercase tracking-wide text-[#1d1d1f] truncate">{ar ? 'كل المهام' : 'All tasks'}</h2>
         </div>
         <p className="mt-2 text-2xl font-bold text-[#1d1d1f]">
           {scoped.length} <span className="text-sm font-semibold text-[#86868b]">{ar ? 'نشطة' : 'active'}</span>
-          {who === 'delegated' && mineCount === active.length && <span className="ms-2 text-xs font-normal text-[#86868b]">{ar ? '(لا مهام مفوّضة)' : '(nothing delegated)'}</span>}
         </p>
 
         <div className="mt-3 space-y-2">
