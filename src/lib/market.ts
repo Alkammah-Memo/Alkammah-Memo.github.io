@@ -393,3 +393,60 @@ export const timeAgo = (ms: number, ar: boolean): string => {
   const d = Math.round(h / 24);
   return ar ? `منذ ${d} يوم` : `${d} d ago`;
 };
+
+// ---------------------------------------------------------------- travel: weather, places, prayer times
+export interface Place {
+  name: string;
+  country: string;
+  lat: number;
+  lon: number;
+  tz: string;
+}
+export async function findPlaces(q: string, ar: boolean): Promise<Place[]> {
+  const d = (await getJson(`https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(q)}&count=6&language=${ar ? 'ar' : 'en'}`)) as { results?: { name: string; country?: string; latitude: number; longitude: number; timezone: string }[] };
+  return (d.results || []).map((r) => ({ name: r.name, country: r.country || '', lat: r.latitude, lon: r.longitude, tz: r.timezone }));
+}
+
+export interface Weather {
+  now: { temp: number; feels: number; code: number; wind: number; humidity: number };
+  days: { date: string; code: number; max: number; min: number; rain: number; sunrise: string; sunset: string }[];
+  tz: string;
+}
+export const getWeather = (lat: number, lon: number, force = false): Promise<Stamped<Weather>> =>
+  cached(
+    `wx_${lat.toFixed(2)}_${lon.toFixed(2)}`,
+    30 * 60_000,
+    async () => {
+      const d = (await getJson(
+        `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lon}&current=temperature_2m,apparent_temperature,weather_code,wind_speed_10m,relative_humidity_2m&daily=weather_code,temperature_2m_max,temperature_2m_min,precipitation_probability_max,sunrise,sunset&timezone=auto&forecast_days=7`
+      )) as {
+        timezone: string;
+        current: { temperature_2m: number; apparent_temperature: number; weather_code: number; wind_speed_10m: number; relative_humidity_2m: number; time: string };
+        daily: { time: string[]; weather_code: number[]; temperature_2m_max: number[]; temperature_2m_min: number[]; precipitation_probability_max: number[]; sunrise: string[]; sunset: string[] };
+      };
+      return {
+        data: {
+          tz: d.timezone,
+          now: { temp: d.current.temperature_2m, feels: d.current.apparent_temperature, code: d.current.weather_code, wind: d.current.wind_speed_10m, humidity: d.current.relative_humidity_2m },
+          days: d.daily.time.map((t, i) => ({ date: t, code: d.daily.weather_code[i], max: d.daily.temperature_2m_max[i], min: d.daily.temperature_2m_min[i], rain: d.daily.precipitation_probability_max[i] ?? 0, sunrise: d.daily.sunrise[i], sunset: d.daily.sunset[i] })),
+        },
+        source: 'Open-Meteo weather forecast (national weather models)',
+        asOf: Date.now(),
+      };
+    },
+    force
+  );
+
+export type Prayers = Record<'Fajr' | 'Sunrise' | 'Dhuhr' | 'Asr' | 'Maghrib' | 'Isha', string>;
+export const getPrayerTimes = (lat: number, lon: number, dateDmy: string, force = false): Promise<Stamped<Prayers>> =>
+  cached(
+    `pray_${lat.toFixed(2)}_${lon.toFixed(2)}_${dateDmy}`,
+    6 * 3600_000,
+    async () => {
+      const d = (await getJson(`https://api.aladhan.com/v1/timings/${dateDmy}?latitude=${lat}&longitude=${lon}&method=5`)) as { data: { timings: Record<string, string> } };
+      const t = d.data.timings;
+      const clean = (s: string) => s.slice(0, 5);
+      return { data: { Fajr: clean(t.Fajr), Sunrise: clean(t.Sunrise), Dhuhr: clean(t.Dhuhr), Asr: clean(t.Asr), Maghrib: clean(t.Maghrib), Isha: clean(t.Isha) }, source: 'Aladhan prayer times (Egyptian General Authority of Survey method)', asOf: Date.now() };
+    },
+    force
+  );
