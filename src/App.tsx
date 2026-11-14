@@ -2100,6 +2100,16 @@ export default function App() {
             await localDB.put('projects', newProj);
             syncProjectToCloud(newProj).catch(console.warn);
           }}
+          onDeletePerson={async (id) => {
+            setPeople((prev) => prev.filter((x) => x.id !== id));
+            await localDB.delete('people', id);
+            deletePersonFromCloud(id).catch(console.warn);
+          }}
+          onDeleteProject={async (id) => {
+            setProjects((prev) => prev.filter((x) => x.id !== id));
+            await localDB.delete('projects', id);
+            deleteProjectFromCloud(id).catch(console.warn);
+          }}
           departments={departments}
           onAddDepartment={handleAddDepartment}
         />
