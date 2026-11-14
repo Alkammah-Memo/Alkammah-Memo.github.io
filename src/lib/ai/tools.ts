@@ -228,6 +228,51 @@ export const EXECUTIVE_TOOLS: any = [
         parameters: { type: Type.OBJECT, properties: { topic: { type: Type.STRING, enum: ['industry', 'land', 'economy', 'global', 'shipping', 'tenders'] } } },
       },
       {
+        name: 'convertCurrency',
+        description: 'Convert an amount between currencies with the live market rate (CEO Mate > Currency). Use for any "how much is X dollars in pounds" question. Codes: USD, EUR, GBP, SAR, AED, KWD, QAR, CNY, JPY, CHF, TRY, INR, RUB, CAD, AUD, EGP.',
+        parameters: { type: Type.OBJECT, properties: { amount: { type: Type.NUMBER }, from: { type: Type.STRING }, to: { type: Type.STRING } }, required: ['amount', 'from', 'to'] },
+      },
+      {
+        name: 'getStockInfo',
+        description: 'Look up a listed stock by company name or code and return its price, change, P/E, dividend yield, 52-week range and performance. Default market is the Egyptian Exchange (EGX); set market=global for US stocks.',
+        parameters: { type: Type.OBJECT, properties: { query: { type: Type.STRING }, market: { type: Type.STRING, enum: ['egypt', 'global'] } }, required: ['query'] },
+      },
+      {
+        name: 'getCommodityPrices',
+        description: 'Current world prices of Brent and WTI oil, copper, aluminium, steel (US benchmark) and natural gas, with one-month change.',
+        parameters: { type: Type.OBJECT, properties: {} },
+      },
+      {
+        name: 'getEconomyIndicators',
+        description: "Egypt's latest yearly economic statistics from the World Bank: inflation, GDP growth, unemployment, government debt.",
+        parameters: { type: Type.OBJECT, properties: {} },
+      },
+      {
+        name: 'getNewsHeadlines',
+        description: 'Latest headlines on a topic: industry (Egypt industry, factories, SCZone), land (land allocation and investment), economy (Egypt economy), global (global manufacturing), shipping (Suez Canal, ports, freight), tenders (tenders and announcements).',
+        parameters: { type: Type.OBJECT, properties: { topic: { type: Type.STRING, enum: ['industry', 'land', 'economy', 'global', 'shipping', 'tenders'] } }, required: ['topic'] },
+      },
+      {
+        name: 'getTravelInfo',
+        description: 'Trip information for a country or city: local time and difference from Cairo, current weather and 5-day forecast, prayer times and Qibla direction, currency, language, plugs and voltage, emergency numbers, local weekend.',
+        parameters: { type: Type.OBJECT, properties: { place: { type: Type.STRING, description: 'country or city name in any language' } }, required: ['place'] },
+      },
+      {
+        name: 'getPhrases',
+        description: 'Useful travel and business phrases in a language with how to pronounce them (Chinese, Russian, Turkish, French, German, Italian, Spanish, Portuguese, Hindi, Japanese, Swahili). Give a phrase (e.g. "thank you", "how much") for one phrase, or omit it for the full list. Say the pronunciation in Latin letters.',
+        parameters: { type: Type.OBJECT, properties: { language: { type: Type.STRING }, phrase: { type: Type.STRING } }, required: ['language'] },
+      },
+      {
+        name: 'getHolidays',
+        description: 'Upcoming Egyptian public holidays (national, Coptic and Islamic) with dates.',
+        parameters: { type: Type.OBJECT, properties: { count: { type: Type.NUMBER } } },
+      },
+      {
+        name: 'manageMarketAlerts',
+        description: 'List, add or remove price alerts. action: list | add | remove. metric: USDEGP (dollar in pounds), GOLD21, GOLD24 (gram), EGX30. direction: above or below. value: the number. Also returns the watchlist.',
+        parameters: { type: Type.OBJECT, properties: { action: { type: Type.STRING, enum: ['list', 'add', 'remove'] }, metric: { type: Type.STRING, enum: ['USDEGP', 'GOLD21', 'GOLD24', 'EGX30'] }, direction: { type: Type.STRING, enum: ['above', 'below'] }, value: { type: Type.NUMBER }, id: { type: Type.STRING } } },
+      },
+      {
         name: 'getConnectionStatus',
         description: 'Tell which connections are set up for this person: AI keys, Google Calendar, Outlook work calendar, team profile. Use it for setup or "is my calendar connected" questions.',
         parameters: { type: Type.OBJECT, properties: {} },
@@ -285,6 +330,7 @@ export const SPERO_TOOL_RULES = `قواعد التنفيذ (يجب استدعا�
 9. الفريق: لأي سؤال عن الزملاء أو أرقام هواتفهم أو أعياد ميلادهم استدعي listTeam. إذا كان اليوم عيد ميلاد أحدهم فاذكري ذلك واقترحي إرسال تهنئة.
 10. رسائل الفريق: لإرسال رسالة استدعي sendTeamMessage، لكن أولاً اقرئي نص الرسالة والمستلمين بدقة واسألي "هل أرسلها؟"، ولا تستدعيها بـ confirmed=true إلا بعد موافقة صريحة. لمعرفة الرسائل الجديدة أو ما كتبه شخص ما استدعي readTeamMessages ثم لخّصيها بإيجاز (من، متى، ماذا). لفتح المحادثات على الشاشة استدعي openChat.
 11. اجتماعات Outlook (المصدر "Outlook") للقراءة فقط: لا تعدّليها ولا تحذفيها؛ أخبري المستخدم أن التعديل يتم من Outlook نفسه. اجتماعات النظام وGoogle يمكن تعديلها.
+13. رفيق المدير: لأسئلة الدولار والعملات استدعي convertCurrency، والذهب أو EGX30 أو الملخص السريع getMarketSnapshot، والأسهم getStockInfo، والسلع getCommodityPrices، والاقتصاد getEconomyIndicators، والأخبار getNewsHeadlines، والطقس أو الوجهة أو مواقيت الصلاة أو معلومات الدولة getTravelInfo، وترجمة عبارة ونطقها getPhrases (اكتبي النطق بالحروف اللاتينية وبالعربية وقولي إن زر الصوت في صفحة العبارات يقرؤها)، والإجازات getHolidays، والتنبيهات manageMarketAlerts. هذه الأدوات تعطي بيانات حيّة؛ استخدميها بدل البحث في الإنترنت، واذكري دائماً مصدر الرقم وأنه سعر سوق مرجعي وليس سعر البنك المركزي الرسمي، وأن الأسهم متأخرة نحو 15 دقيقة، وأن ما يخص الأسهم للاطلاع وليس نصيحة استثمارية. ولا تختلقي رقماً لم تُرجعه الأداة؛ وإن فشلت قولي ذلك بصراحة واقترحي صفحة رفيق المدير.
 12. لتحديث التقويم أو مزامنته استدعي refreshCalendars. لأسئلة الإعداد والربط (مفتاح الذكاء الاصطناعي، Google، Outlook) استدعي getConnectionStatus، ثم وجّهي المستخدم لبطاقة "جهّز حسابك" في الصفحة الرئيسية أو للإعدادات حيث يتم كل ربط بضغطتين.`;
 
 /** What the system can do, so Spero can explain and use every part of it. */
@@ -294,6 +340,7 @@ export const SPERO_SYSTEM_MAP = `خريطة النظام (Alkammah Memo) الت�
 - المهام والتقويم والمتابعة (tasks, calendar, followup): المهام بحالاتها وتواريخ استحقاقها، والتقويم يجمع اجتماعات النظام وGoogle (مزامنة في الاتجاهين) وOutlook (قراءة فقط).
 - دليل المؤسسة (directory): الأشخاص والإدارات.
 - محادثات الفريق (chat): رسائل خاصة ومجموعات وإرسال نفس الرسالة لعدة زملاء، مع صور وملفات.
+- رفيق المدير (mate): الأسعار والأخبار والسفر: العملات والحاسبة، الذهب في مصر، الأسهم (البورصة المصرية وعالمي)، الأخبار الصناعية وأخبار الأراضي والشحن والمناقصات، السلع (نفط ونحاس وألومنيوم وصلب)، مؤشرات الاقتصاد، التنبيهات وقائمة المتابعة، ساعات العالم، الإجازات الرسمية، محوّل الوحدات (فدان ومتر)، السفر (طقس ومواقيت صلاة وقبلة ومعلومات الدولة)، عبارات مفيدة بنطقها بـ11 لغة، وقائمة السفر.
 - الإعدادات (settings): الملف الشخصي (الاسم والصورة والهاتف وتاريخ الميلاد)، إدارة الفريق لمدير النظام، مفاتيح Gemini، ربط Google وOutlook، التنبيهات، قفل Face ID، الأمان.
 كل مستخدم له بياناته الخاصة تماماً؛ لا ترين مهام أو اجتماعات زملائه.`;
 
