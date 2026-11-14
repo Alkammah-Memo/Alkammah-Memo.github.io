@@ -181,18 +181,27 @@ function extractCalls(res: GenerateContentResponse): FunctionCallResult[] {
   }));
 }
 
+/** Typed chat: a quick answer matters more than deep reasoning, so ask for minimal thinking (retry without it if a model refuses the setting). A slow model is backed up by the next one. */
+async function quickChat(params: GenParams): Promise<GenerateContentResponse> {
+  const opts = { hedgeMs: 12_000, timeoutMs: 45_000 };
+  try {
+    return await generateQueued({ ...params, config: { ...params.config, thinkingConfig: { thinkingLevel: ThinkingLevel.MINIMAL } } }, opts);
+  } catch (err) {
+    const kind = classifyError(err).kind;
+    if (kind === 'bad_request' || kind === 'model') return generateQueued(params, opts);
+    throw err;
+  }
+}
+
 export async function chatWithAssistant(
   message: string,
   context: unknown
 ): Promise<{ content: string; functionCalls: FunctionCallResult[]; modelContent?: unknown }> {
   const contextSummary = context ? `\n[Current Workspace Summary]: ${JSON.stringify(context)}` : '';
-  const res = await generateQueued(
-    {
-      contents: `${message}${contextSummary}`,
-      config: { systemInstruction: chatSystemInstruction(), tools: EXECUTIVE_FUNCTION_TOOLS },
-    },
-    { timeoutMs: 45_000 }
-  );
+  const res = await quickChat({
+    contents: `${message}${contextSummary}`,
+    config: { systemInstruction: chatSystemInstruction(), tools: EXECUTIVE_FUNCTION_TOOLS },
+  });
   return { content: res.text || '', functionCalls: extractCalls(res), modelContent: res.candidates?.[0]?.content };
 }
 
@@ -213,7 +222,7 @@ export async function answerFromToolResults(
     modelContent || { role: 'model', parts: calls.map((c) => ({ functionCall: { name: c.name, args: c.args } })) },
     { role: 'user', parts: calls.map((c, i) => ({ functionResponse: { name: c.name, response: results[i] } })) },
   ];
-  const res = await generateQueued({ contents: contents as never, config: { systemInstruction: chatSystemInstruction(), tools: EXECUTIVE_FUNCTION_TOOLS } }, { timeoutMs: 45_000 });
+  const res = await quickChat({ contents: contents as never, config: { systemInstruction: chatSystemInstruction(), tools: EXECUTIVE_FUNCTION_TOOLS } });
   return res.text || '';
 }
 
