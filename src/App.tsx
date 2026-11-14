@@ -65,7 +65,7 @@ import { keyManager } from './lib/ai/keyManager';
 import { usage } from './lib/ai/modelQueue';
 import { NotificationCenter } from './components/notifications/NotificationCenter';
 import { fetchGoogleEvents, fetchPrimaryCalendar, eventsToMeetings, planSync, pushMeeting, deleteGoogleEvent, syncTasksToGoogle, requestGoogleToken, getGoogleLink, setGoogleLink, tokenIsValid, probeServer } from './lib/googleCalendar';
-import { chatWithAssistant } from './lib/ai/gemini';
+import { chatWithAssistant, answerFromToolResults } from './lib/ai/gemini';
 import { disableLock } from './lib/appLock';
 import { notifPrefs, setNotifPrefsAccountSaver } from './lib/notifications';
 import type { NotifPrefs } from './lib/notifications';
@@ -1719,10 +1719,21 @@ export default function App() {
         });
       }
 
+      // Tools that bring back information (prices, weather, phrases, team, briefings): let the model read the results and answer with them
+      let content = data.content;
+      const UI_ONLY = ['navigateTo', 'openItem', 'closeWindows', 'closeAssistant', 'openChat'];
+      if (!content && toolInvocations.some((ti) => !UI_ONLY.includes(ti.toolName))) {
+        try {
+          content = await answerFromToolResults(userText, workspaceContext, data.modelContent, data.functionCalls, toolInvocations.map((ti) => ti.result as Record<string, unknown>));
+        } catch (e) {
+          console.warn('Could not compose the answer from the tool results:', e);
+        }
+      }
+
       const botMsg: AssistantMessage = {
         id: newId('msg'),
         role: 'assistant',
-        content: data.content || (toolInvocations.length > 0 ? `تم تنفيذ الأمر بنجاح، ${callAr()}.` : ''),
+        content: content || (toolInvocations.length > 0 ? `تم تنفيذ الأمر بنجاح، ${callAr()}.` : ''),
         toolInvocations,
         timestamp: new Date().toISOString(),
       };
