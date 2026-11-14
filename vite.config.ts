@@ -12,7 +12,7 @@ const CSP = [
   "font-src 'self' https://fonts.gstatic.com data:",
   "img-src 'self' data: blob: https:",
   "media-src 'self' blob: data:",
-  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://www.googleapis.com https://accounts.google.com",
+  "connect-src 'self' https://*.supabase.co wss://*.supabase.co https://generativelanguage.googleapis.com wss://generativelanguage.googleapis.com https://www.googleapis.com https://accounts.google.com https://open.er-api.com https://api.gold-api.com https://scanner.tradingview.com https://api.open-meteo.com https://geocoding-api.open-meteo.com https://api.aladhan.com",
   'frame-src https://accounts.google.com',
   "worker-src 'self' blob:",
   "object-src 'none'",
