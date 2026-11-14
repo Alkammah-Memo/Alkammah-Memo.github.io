@@ -72,6 +72,9 @@ import type { NotifPrefs } from './lib/notifications';
 import { cachedFeedMeetings, getFeedState, refreshFeed, setFeedUrl, subscribeFeed } from './lib/outlookFeed';
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ChatCenter } from './components/team/ChatCenter';
+import { MateAlertsWatcher, MateCenter } from './components/mate/MateCenter';
+import { getEgx30, getGold, getNews, getRates } from './lib/market';
+import type { NewsTopic } from './lib/market';
 import { BirthdayBanner } from './components/team/BirthdayBanner';
 import { claimDevice } from './lib/deviceOwner';
 import { birthdaysOn, broadcast, getTeam, loadMessages, markRead, nameOf, openDirect, refreshTeam, sendMessage, startTeam, stopTeam, subscribeTeam } from './lib/team';
@@ -1464,7 +1467,7 @@ export default function App() {
 
     if (toolName === 'navigateTo') {
       const tab = String(args.tab || '');
-      if (!['today', 'notebook', 'planner', 'tasks', 'calendar', 'followup', 'directory', 'chat', 'settings'].includes(tab)) return { ok: false, error: 'Unknown tab.' };
+      if (!['today', 'notebook', 'planner', 'tasks', 'calendar', 'followup', 'directory', 'chat', 'mate', 'settings'].includes(tab)) return { ok: false, error: 'Unknown tab.' };
       setCurrentTab(tab);
       return { ok: true, openedTab: tab };
     }
@@ -1663,6 +1666,23 @@ export default function App() {
         }
       } else result.outlook = 'not connected';
       return result;
+    }
+    if (toolName === 'getMarketSnapshot') {
+      const [rates, gold, egx, news] = await Promise.all([
+        getRates().catch(() => null),
+        getGold().catch(() => null),
+        getEgx30('1mo').catch(() => null),
+        args.topic ? getNews(String(args.topic) as NewsTopic, locale === 'ar').catch(() => null) : Promise.resolve(null),
+      ]);
+      if (!rates && !gold && !egx && !news) return { ok: false, error: 'Market data could not be reached right now.' };
+      return {
+        ok: true,
+        usdEgp: rates ? { value: Math.round(rates.data.EGP * 100) / 100, source: rates.source, asOf: new Date(rates.asOf).toISOString() } : 'unavailable',
+        goldEgyptPerGram: gold ? { gram21: Math.round(gold.data.gram21), gram24: Math.round(gold.data.gram24), goldPound: Math.round(gold.data.pound), source: gold.source } : 'unavailable',
+        egx30: egx ? { value: Math.round(egx.data.price ?? 0), source: egx.source } : 'unavailable',
+        headlines: news ? news.data.slice(0, 6).map((h) => ({ title: h.title, source: h.source })) : undefined,
+        where: "CEO's Mate page",
+      };
     }
     if (toolName === 'getConnectionStatus') {
       const link = getGoogleLink();
@@ -1926,6 +1946,8 @@ export default function App() {
           }}
         />
       )}
+      <MateAlertsWatcher ar={locale === 'ar'} />
+      {currentTab === 'mate' && <MateCenter ar={locale === 'ar'} />}
       {currentTab === 'chat' && isCloudConfigured && <ChatCenter locale={locale} openWith={chatWith} onOpened={() => setChatWith(null)} />}
 
       {currentTab === 'today' && (
