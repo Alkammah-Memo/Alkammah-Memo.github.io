@@ -3,6 +3,7 @@ import { Person, Project, Workstream } from '../../types';
 import { Locale, translations } from '../../lib/translations';
 import { INITIAL_WORKSTREAMS } from '../../lib/referenceData';
 import { hasDuplicateName } from '../../lib/taskLogic';
+import { ConfirmDialog } from '../common/ConfirmDialog';
 import {
   Users,
   Building2,
@@ -15,6 +16,7 @@ import {
   Edit2,
   Check,
   X,
+  Trash2,
 } from 'lucide-react';
 
 interface DirectoryCenterProps {
@@ -25,6 +27,8 @@ interface DirectoryCenterProps {
   onAddPerson: (person: Partial<Person>) => void;
   onUpdateProject: (project: Project) => void;
   onAddProject: (project: Partial<Project>) => void;
+  onDeletePerson: (id: string) => void;
+  onDeleteProject: (id: string) => void;
   departments: string[];
   onAddDepartment: (name: string) => void;
 }
@@ -37,6 +41,8 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
   onAddPerson,
   onUpdateProject,
   onAddProject,
+  onDeletePerson,
+  onDeleteProject,
   departments,
   onAddDepartment,
 }) => {
@@ -44,6 +50,7 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
   const ar = locale === 'ar';
   const [activeTab, setActiveTab] = useState<'people' | 'projects' | 'departments'>('people');
   const [editingPerson, setEditingPerson] = useState<Person | null>(null);
+  const [confirmDelete, setConfirmDelete] = useState<{ kind: 'person' | 'project'; id: string; name: string } | null>(null);
 
   const [isAddPersonModalOpen, setIsAddPersonModalOpen] = useState(false);
   const [isAddDeptModalOpen, setIsAddDeptModalOpen] = useState(false);
@@ -522,6 +529,16 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-200">
+                {editingPerson && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete({ kind: 'person', id: editingPerson.id, name: editingPerson.name })}
+                    className="me-auto min-h-10 px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl inline-flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {ar ? 'حذف' : 'Delete'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsAddPersonModalOpen(false)}
@@ -720,6 +737,16 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
               </div>
 
               <div className="flex items-center justify-end gap-2 pt-3 border-t border-stone-200">
+                {editingProject && (
+                  <button
+                    type="button"
+                    onClick={() => setConfirmDelete({ kind: 'project', id: editingProject.id, name: editingProject.name })}
+                    className="me-auto min-h-10 px-3 text-xs font-semibold text-rose-600 hover:bg-rose-50 rounded-xl inline-flex items-center gap-1.5"
+                  >
+                    <Trash2 className="w-3.5 h-3.5" />
+                    {ar ? 'حذف' : 'Delete'}
+                  </button>
+                )}
                 <button
                   type="button"
                   onClick={() => setIsAddProjectModalOpen(false)}
@@ -738,6 +765,27 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
           </div>
         </div>
       )}
+      <ConfirmDialog
+        open={!!confirmDelete}
+        ar={ar}
+        title={confirmDelete?.kind === 'person' ? (ar ? 'حذف هذا الشخص من الدليل؟' : 'Delete this person from the directory?') : ar ? 'حذف هذا المشروع من الدليل؟' : 'Delete this project from the directory?'}
+        detail={confirmDelete ? `${confirmDelete.name} — ${ar ? 'المهام الحالية تحتفظ بالاسم المكتوب.' : 'existing tasks keep the name as written.'}` : undefined}
+        onCancel={() => setConfirmDelete(null)}
+        onConfirm={() => {
+          const c = confirmDelete;
+          setConfirmDelete(null);
+          if (!c) return;
+          if (c.kind === 'person') {
+            onDeletePerson(c.id);
+            setIsAddPersonModalOpen(false);
+            setEditingPerson(null);
+          } else {
+            onDeleteProject(c.id);
+            setIsAddProjectModalOpen(false);
+            setEditingProject(null);
+          }
+        }}
+      />
     </div>
   );
 };
