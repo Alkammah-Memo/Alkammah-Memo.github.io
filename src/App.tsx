@@ -73,8 +73,7 @@ import { cachedFeedMeetings, getFeedState, refreshFeed, setFeedUrl, subscribeFee
 import { LoginScreen } from './components/auth/LoginScreen';
 import { ChatCenter } from './components/team/ChatCenter';
 import { MateAlertsWatcher, MateCenter } from './components/mate/MateCenter';
-import { getEgx30, getGold, getNews, getRates } from './lib/market';
-import type { NewsTopic } from './lib/market';
+import { runMarketTool } from './lib/ai/marketTools';
 import { BirthdayBanner } from './components/team/BirthdayBanner';
 import { claimDevice } from './lib/deviceOwner';
 import { birthdaysOn, broadcast, getTeam, loadMessages, markRead, nameOf, openDirect, refreshTeam, sendMessage, startTeam, stopTeam, subscribeTeam } from './lib/team';
@@ -1270,6 +1269,8 @@ export default function App() {
   // Shared Tool Action Executor for Executive Assistant & Live Voice Spero.
   // Always reads the latest data through refs, because the live voice session outlives many renders.
   const handleExecuteToolAction = async (toolName: string, args: Record<string, unknown>): Promise<Record<string, unknown>> => {
+    const market = await runMarketTool(toolName, args, locale === 'ar');
+    if (market) return market;
     const norm = (v: unknown) => String(v ?? '').trim().toLowerCase();
     const findTask = () =>
       tasksRef.current.find(
@@ -1666,23 +1667,6 @@ export default function App() {
         }
       } else result.outlook = 'not connected';
       return result;
-    }
-    if (toolName === 'getMarketSnapshot') {
-      const [rates, gold, egx, news] = await Promise.all([
-        getRates().catch(() => null),
-        getGold().catch(() => null),
-        getEgx30().catch(() => null),
-        args.topic ? getNews(String(args.topic) as NewsTopic, locale === 'ar').catch(() => null) : Promise.resolve(null),
-      ]);
-      if (!rates && !gold && !egx && !news) return { ok: false, error: 'Market data could not be reached right now.' };
-      return {
-        ok: true,
-        usdEgp: rates ? { value: Math.round(rates.data.EGP * 100) / 100, source: rates.source, asOf: new Date(rates.asOf).toISOString() } : 'unavailable',
-        goldEgyptPerGram: gold ? { gram21: Math.round(gold.data.gram21), gram24: Math.round(gold.data.gram24), goldPound: Math.round(gold.data.pound), source: gold.source } : 'unavailable',
-        egx30: egx ? { value: Math.round(egx.data.price), dayChangePct: Math.round(egx.data.changePct * 100) / 100, source: egx.source } : 'unavailable',
-        headlines: news ? news.data.slice(0, 6).map((h) => ({ title: h.title, source: h.source })) : undefined,
-        where: "CEO's Mate page",
-      };
     }
     if (toolName === 'getConnectionStatus') {
       const link = getGoogleLink();
