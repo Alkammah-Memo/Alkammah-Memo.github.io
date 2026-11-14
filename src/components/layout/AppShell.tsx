@@ -5,6 +5,7 @@ import {
   LayoutDashboard,
   BookOpen,
   Calendar,
+  Compass,
   CheckSquare,
   Building2,
   MessageCircle,
@@ -124,6 +125,7 @@ export const AppShell: React.FC<AppShellProps> = ({
     { id: 'calendar', label: locale === 'ar' ? 'التقويم' : 'Calendar', icon: Calendar },
     { id: 'directory', label: locale === 'ar' ? 'دليل المؤسسة' : 'Directory', icon: Building2 },
     ...(chatEnabled ? [{ id: 'chat', label: locale === 'ar' ? 'المحادثات' : 'Chat', icon: MessageCircle }] : []),
+    { id: 'mate', label: locale === 'ar' ? 'رفيق المدير' : 'CEO’s Mate', short: locale === 'ar' ? 'الرفيق' : 'Mate', icon: Compass },
   ];
 
   // Mobile bottom bar: the daily-use hubs plus the AI assistant and Settings
@@ -319,7 +321,7 @@ export const AppShell: React.FC<AppShellProps> = ({
                   {item.id === 'chat' && chatUnread > 0 && <span className="absolute -top-1.5 -end-2.5 min-w-4 h-4 px-1 rounded-full bg-rose-500 text-white text-[9px] font-bold inline-flex items-center justify-center">{chatUnread > 99 ? '99+' : chatUnread}</span>}
                 </span>
                 <span className="text-[10px] mt-0.5 leading-tight truncate max-w-[64px]">
-                  {item.label.split(' ')[0]}
+                  {(item as { short?: string }).short || item.label.split(' ')[0]}
                 </span>
               </button>
             );
