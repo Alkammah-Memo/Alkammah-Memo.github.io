@@ -2013,7 +2013,7 @@ export default function App() {
                 currentTab === 'tasks' || currentTab === 'planner' ? 'bg-[#0071e3] text-white shadow-xs font-bold' : 'text-[#515154] hover:text-[#1d1d1f]'
               }`}
             >
-              {locale === 'ar' ? 'مركز المهام' : 'Tasks Center'} ({tasks.filter((t) => !t.isArchived && !t.isTiny && t.status !== 'Closed').length})
+              {locale === 'ar' ? 'مركز المهام' : 'Tasks Center'} ({tasks.filter((t) => !t.isArchived && !t.isTiny && ['Pending', 'In Progress', 'Waiting'].includes(t.status)).length})
             </button>
             <button
               onClick={() => setCurrentTab('followup')}
