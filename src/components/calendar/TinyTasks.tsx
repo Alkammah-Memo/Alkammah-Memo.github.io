@@ -89,7 +89,7 @@ export const TinyTaskModal: React.FC<TinyModalProps> = ({ open, locale, onClose,
         />
         <div>
           <span className="block text-xs font-semibold text-stone-700 mb-1">
-            {ar ? `الموعد (تلقائي: بعد ${TINY_MINUTES} دقيقة)` : `Due (auto: in ${TINY_MINUTES} minutes)`}
+            {editing ? (ar ? 'الموعد' : 'Due') : ar ? `الموعد (تلقائي: بعد ${TINY_MINUTES} دقيقة)` : `Due (auto: in ${TINY_MINUTES} minutes)`}
           </span>
           <DateTimeField locale={locale} date={due.date} time={due.time} onChange={(v) => setDue({ date: v.date || due.date, time: v.time || due.time })} />
         </div>
