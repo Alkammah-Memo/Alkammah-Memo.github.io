@@ -43,8 +43,7 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
   const t = translations[locale];
   const ar = locale === 'ar';
   const [activeTab, setActiveTab] = useState<'people' | 'projects' | 'departments'>('people');
-  const [editingPersonId, setEditingPersonId] = useState<string | null>(null);
-  const [editedName, setEditedName] = useState<string>('');
+  const [editingPerson, setEditingPerson] = useState<Person | null>(null);
 
   const [isAddPersonModalOpen, setIsAddPersonModalOpen] = useState(false);
   const [isAddDeptModalOpen, setIsAddDeptModalOpen] = useState(false);
@@ -75,6 +74,7 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
   const [newProjCounterparty, setNewProjCounterparty] = useState('');
 
   const openAddPerson = () => {
+    setEditingPerson(null);
     setNewPersonName('');
     setNewPersonInitials('');
     setNewPersonRole('');
@@ -113,18 +113,16 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
   };
   const stageLabel = (st: string) => (ar ? STAGE_AR[st] || st : st);
 
+  /** the same form as "add", filled with the person: name, alias, title, department and company can all be changed */
   const handleStartEditPerson = (p: Person) => {
-    setEditingPersonId(p.id);
-    setEditedName(p.name);
-  };
-
-  const handleSavePersonName = (p: Person) => {
-    const name = editedName.trim() || p.name;
-    // Resolving an alias to a real name verifies it; saving an unchanged name does not
-    if (name !== p.name) {
-      onUpdatePerson({ ...p, name, isAliasVerified: true, updatedAt: new Date().toISOString() });
-    }
-    setEditingPersonId(null);
+    setEditingPerson(p);
+    setNewPersonName(p.name);
+    setNewPersonInitials(p.initials || '');
+    setNewPersonRole(p.role || '');
+    setNewPersonDept(p.department || departments[0] || '');
+    setNewPersonCompany(p.company || '');
+    setNewPersonVerified(p.isAliasVerified);
+    setIsAddPersonModalOpen(true);
   };
 
   const handleCreatePerson = (e: React.FormEvent) => {
@@ -140,6 +138,22 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
         .join('')
         .slice(0, 3)
         .toUpperCase();
+
+    if (editingPerson) {
+      onUpdatePerson({
+        ...editingPerson,
+        name: newPersonName.trim(),
+        initials,
+        role: newPersonRole.trim(),
+        department: newPersonDept,
+        company: newPersonCompany.trim(),
+        isAliasVerified: newPersonVerified || (editingPerson.isAliasVerified ? true : newPersonName.trim() !== editingPerson.name),
+        updatedAt: new Date().toISOString(),
+      });
+      setEditingPerson(null);
+      setIsAddPersonModalOpen(false);
+      return;
+    }
 
     onAddPerson({
       name: newPersonName.trim(),
@@ -311,46 +325,17 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
                     )}
                   </div>
 
-                  {editingPersonId === p.id ? (
-                    <div className="mt-2.5 flex items-center gap-1.5">
-                      <input
-                        type="text"
-                        value={editedName}
-                        onChange={(e) => setEditedName(e.target.value)}
-                        className="flex-1 px-3 py-1.5 text-xs border border-[#0071e3] rounded-xl focus:outline-none"
-                        autoFocus
-                        onKeyDown={(e) => {
-                          if (e.key === 'Enter') handleSavePersonName(p);
-                          if (e.key === 'Escape') setEditingPersonId(null);
-                        }}
-                      />
-                      <button
-                        onClick={() => handleSavePersonName(p)}
-                        className="p-1.5 bg-[#0071e3] text-white rounded-xl hover:bg-[#0062c4]"
-                        title={t.save}
-                      >
-                        <Check className="w-3.5 h-3.5" />
-                      </button>
-                      <button
-                        onClick={() => setEditingPersonId(null)}
-                        className="p-1.5 bg-stone-100 text-stone-600 rounded-xl hover:bg-stone-200"
-                        title={t.cancel}
-                      >
-                        <X className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  ) : (
-                    <div className="mt-2.5 flex items-center justify-between">
-                      <h3 className="text-sm font-bold text-stone-900">{p.name}</h3>
-                      <button
-                        onClick={() => handleStartEditPerson(p)}
-                        className="p-1 text-stone-400 hover:text-stone-700 rounded-lg hover:bg-[#f5f5f7]"
-                        title={ar ? 'تعديل الاسم / تعيين الرمز' : 'Edit name / resolve alias'}
-                      >
-                        <Edit2 className="w-3.5 h-3.5" />
-                      </button>
-                    </div>
-                  )}
+                  <div className="mt-2.5 flex items-center justify-between gap-2">
+                    <h3 className="text-sm font-bold text-stone-900 min-w-0 break-words">{p.name}</h3>
+                    <button
+                      onClick={() => handleStartEditPerson(p)}
+                      className="w-10 h-10 -me-2 -my-2 shrink-0 inline-flex items-center justify-center text-stone-500 hover:text-stone-800 rounded-xl active:bg-[#f5f5f7]"
+                      title={ar ? 'تعديل (الاسم، الرمز، المسمى، الإدارة)' : 'Edit (name, alias, title, department)'}
+                      aria-label={ar ? 'تعديل' : 'Edit'}
+                    >
+                      <Edit2 className="w-4 h-4" />
+                    </button>
+                  </div>
 
                   <p className="text-xs text-stone-500 mt-1">{p.role}</p>
                 </div>
@@ -440,7 +425,7 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
           <div className="bg-white rounded-3xl p-6 max-w-md w-full shadow-2xl border border-[#d2d2d7] space-y-4">
             <div className="flex items-center justify-between pb-3 border-b border-stone-200">
               <h3 className="text-base font-bold text-stone-900">
-                {locale === 'ar' ? 'إضافة شخص / رمز تنفيذي' : 'Add Person / Stakeholder Alias'}
+                {editingPerson ? (ar ? 'تعديل الشخص / الرمز' : 'Edit Person / Alias') : locale === 'ar' ? 'إضافة شخص / رمز تنفيذي' : 'Add Person / Stakeholder Alias'}
               </h3>
               <button
                 onClick={() => setIsAddPersonModalOpen(false)}
@@ -488,7 +473,7 @@ export const DirectoryCenter: React.FC<DirectoryCenterProps> = ({
                     onChange={(e) => setNewPersonDept(e.target.value)}
                     className="w-full px-3 py-2 rounded-xl border border-stone-300 text-xs focus:outline-none focus:border-[#0071e3]"
                   >
-                    {departments.map((d) => (
+                    {(newPersonDept && !departments.includes(newPersonDept) ? [newPersonDept, ...departments] : departments).map((d) => (
                       <option key={d} value={d}>
                         {d}
                       </option>
