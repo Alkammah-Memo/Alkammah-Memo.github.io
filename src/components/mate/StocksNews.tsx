@@ -67,9 +67,10 @@ export const StocksTool: React.FC<{ ar: boolean; onBack: () => void }> = ({ ar, 
   }, [q]);
   const top = useLoad((f) => getTopStocks(market, f), [market]);
   const found = useLoad(() => (query ? searchStocks(market, query) : Promise.resolve(null)), [market, query]);
-  const index = useLoad((f) => (market === 'egypt' ? getEgx30(range, f) : getCommodityIndex(range, f)), [market, range]);
+  const egx = useLoad((f) => getEgx30(f), []);
+  const index = useLoad((f) => (market === 'global' ? getCommodityIndex(range, f) : Promise.resolve(null)), [market, range]);
   const list = query ? found.data || [] : top.data?.data || [];
-  const idxMove = index.data ? changePct(index.data.data.points) : null;
+  const idxMove = market === 'egypt' ? egx.data?.data.changePct ?? null : index.data ? changePct(index.data.data.points) : null;
   return (
     <ToolShell title={ar ? 'الأسهم' : 'Stocks'} ar={ar} onBack={onBack}>
       <div className="grid grid-cols-2 gap-1 rounded-full bg-[#f5f5f7] p-1 border border-[#d2d2d7]/70" role="tablist">
@@ -84,13 +85,35 @@ export const StocksTool: React.FC<{ ar: boolean; onBack: () => void }> = ({ ar, 
         <div className="flex items-center justify-between gap-2 flex-wrap">
           <div>
             <div className="text-xs font-bold uppercase tracking-wide text-stone-500">{market === 'egypt' ? 'EGX30' : 'S&P 500'}</div>
-            <div className="text-xl font-bold tabular-nums">{index.data ? fmt(index.data.data.price, 0) : '—'}</div>
+            <div className="text-xl font-bold tabular-nums">{market === 'egypt' ? fmt(egx.data?.data.price, 0) : index.data ? fmt(index.data.data.price, 0) : '—'}</div>
             <Change pct={idxMove} />
+            <span className="ms-1 text-[11px] text-stone-500">{market === 'egypt' ? (ar ? 'اليوم' : 'today') : ''}</span>
           </div>
-          <RangeChips value={range} onChange={setRange} ar={ar} />
+          {market === 'global' && <RangeChips value={range} onChange={setRange} ar={ar} />}
         </div>
-        <div className="mt-2">{index.error ? <ErrorBox ar={ar} error={index.error} onRetry={index.reload} /> : index.data ? <TrendChart points={index.data.data.points} ar={ar} digits={0} height={120} /> : <div className="h-28" />}</div>
-        {index.data && <SourceLine ar={ar} stamped={index.data} />}
+        {market === 'egypt' ? (
+          <>
+            {egx.error ? (
+              <div className="mt-2"><ErrorBox ar={ar} error={egx.error} onRetry={egx.reload} /></div>
+            ) : (
+              <div className="mt-3 grid grid-cols-3 gap-2">
+                {(egx.data?.data.perf || []).map((p) => (
+                  <div key={p.id} className="rounded-xl border border-stone-200 py-2 text-center">
+                    <div className="text-[11px] text-stone-500">{p.id === '1W' ? (ar ? 'أسبوع' : '1 week') : p.id === '1M' ? (ar ? 'شهر' : '1 month') : p.id === '3M' ? (ar ? '3 أشهر' : '3 months') : p.id === '6M' ? (ar ? '6 أشهر' : '6 months') : p.id === 'YTD' ? (ar ? 'منذ يناير' : 'This year') : ar ? 'سنة' : '1 year'}</div>
+                    <Change pct={p.value} className="text-sm" />
+                  </div>
+                ))}
+              </div>
+            )}
+            {egx.data && <div className="mt-2"><SourceLine ar={ar} stamped={egx.data} /></div>}
+            <p className="mt-1 text-[11px] text-stone-500">{ar ? 'لا يوجد مصدر مجاني لرسم يومي لمؤشر EGX30، لذلك يظهر أداؤه خلال فترات مختلفة.' : 'No free source has a daily chart of the EGX30, so its performance over different periods is shown instead.'}</p>
+          </>
+        ) : (
+          <>
+            <div className="mt-2">{index.error ? <ErrorBox ar={ar} error={index.error} onRetry={index.reload} /> : index.data ? <TrendChart points={index.data.data.points} ar={ar} digits={0} height={120} /> : <div className="h-28" />}</div>
+            {index.data && <SourceLine ar={ar} stamped={index.data} />}
+          </>
+        )}
       </Card>
 
       <div className="relative">
@@ -131,7 +154,7 @@ export const StocksTool: React.FC<{ ar: boolean; onBack: () => void }> = ({ ar, 
           })}
         </ul>
       </Card>
-      <SourceLine ar={ar} stamped={top.data} sources={top.data ? undefined : [STOCK_SOURCE]} onRefresh={() => { top.reload(); index.reload(); }} loading={top.loading} />
+      <SourceLine ar={ar} stamped={top.data} sources={top.data ? undefined : [STOCK_SOURCE]} onRefresh={() => { top.reload(); index.reload(); egx.reload(); }} loading={top.loading} />
       <p className="text-[11px] text-stone-500">{ar ? 'الأسعار متأخرة نحو 15 دقيقة، وللمعلومة فقط وليست نصيحة استثمارية. البورصة المصرية لا تتيح خدمة بيانات مفتوحة مجانية.' : 'Prices are delayed about 15 minutes, for information only, not investment advice. The Egyptian Exchange offers no free open data service.'}</p>
     </ToolShell>
   );

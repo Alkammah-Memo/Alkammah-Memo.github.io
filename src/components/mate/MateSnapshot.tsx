@@ -6,9 +6,8 @@ import { Change, SourceLine, useLoad } from './parts';
 export const MateSnapshot: React.FC<{ ar: boolean; compact?: boolean }> = ({ ar, compact }) => {
   const rates = useLoad((f) => getRates(f), []);
   const gold = useLoad((f) => getGold(f), []);
-  const egx = useLoad((f) => getEgx30('1mo', f), []);
-  const pts = egx.data?.data.points || [];
-  const dayMove = pts.length > 1 ? ((pts[pts.length - 1][1] - pts[pts.length - 2][1]) / pts[pts.length - 2][1]) * 100 : null;
+  const egx = useLoad((f) => getEgx30(f), []);
+  const dayMove = egx.data ? egx.data.data.changePct : null;
   const tiles = [
     { l: ar ? 'الدولار' : 'USD / EGP', v: fmt(rates.data?.data.EGP, 2), s: 'EGP', c: null as number | null },
     { l: ar ? 'ذهب عيار 21' : 'Gold 21K / g', v: fmt(gold.data?.data.gram21, 0), s: 'EGP', c: null },
@@ -28,7 +27,7 @@ export const MateSnapshot: React.FC<{ ar: boolean; compact?: boolean }> = ({ ar,
       {!compact && (
         <SourceLine
           ar={ar}
-          sources={[ar ? 'ExchangeRate-API · gold-api.com · Yahoo Finance (EGX30)' : 'ExchangeRate-API · gold-api.com · Yahoo Finance (EGX30)']}
+          sources={[ar ? 'ExchangeRate-API · gold-api.com · TradingView (EGX30)' : 'ExchangeRate-API · gold-api.com · TradingView (EGX30)']}
           onRefresh={() => {
             rates.reload();
             gold.reload();
