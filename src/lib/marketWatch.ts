@@ -89,7 +89,7 @@ export async function metricValue(m: Metric): Promise<number | null> {
     if (m === 'USDEGP') return (await getRates()).data.EGP ?? null;
     if (m === 'GOLD21') return (await getGold()).data.gram21;
     if (m === 'GOLD24') return (await getGold()).data.gram24;
-    return (await getEgx30('1mo')).data.price;
+    return (await getEgx30()).data.price;
   } catch {
     return null;
   }

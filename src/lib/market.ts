@@ -275,7 +275,31 @@ export async function searchStocks(market: Market, q: string): Promise<Stock[]> 
   return [...byTicker, ...byName].filter((s) => (seen.has(s.symbol) ? false : (seen.add(s.symbol), true)));
 }
 
-export const getEgx30 = (range: Range, force = false): Promise<Stamped<Chart>> => chartCache('^CASE30', range, 10 * 60_000, force);
+export interface IndexQuote {
+  price: number;
+  changePct: number;
+  /** performance over past periods, in % */
+  perf: { id: '1W' | '1M' | '3M' | '6M' | 'YTD' | '1Y'; value: number }[];
+}
+/** the EGX30 index now and how it did over the past week, month, quarter, half year, this year and last year (no free daily history exists for it) */
+export const getEgx30 = (force = false): Promise<Stamped<IndexQuote>> =>
+  cached(
+    'egx30',
+    10 * 60_000,
+    async () => {
+      const body = { symbols: { tickers: ['EGX:EGX30'] }, columns: ['close', 'change', 'Perf.W', 'Perf.1M', 'Perf.3M', 'Perf.6M', 'Perf.YTD', 'Perf.Y'] };
+      const d = (await getJson('https://scanner.tradingview.com/egypt/scan', { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(body) })) as { data: { d: unknown[] }[] };
+      const v = d.data?.[0]?.d;
+      if (!v || typeof v[0] !== 'number') throw new Error('EGX30_FAILED');
+      const ids = ['1W', '1M', '3M', '6M', 'YTD', '1Y'] as const;
+      return {
+        data: { price: v[0] as number, changePct: num(v[1]) ?? 0, perf: ids.map((id, i) => ({ id, value: num(v[2 + i]) })).filter((p): p is { id: (typeof ids)[number]; value: number } => p.value !== undefined) },
+        source: 'TradingView market scanner (EGX30 index), delayed about 15 minutes',
+        asOf: Date.now(),
+      };
+    },
+    force
+  );
 export const getStockHistory = (symbol: string, range: Range): Promise<Stamped<Chart>> => chartCache(symbol, range);
 
 // ---------------------------------------------------------------- commodities and economy
