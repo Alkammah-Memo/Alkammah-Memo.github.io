@@ -190,3 +190,14 @@ export const WEATHER_CODES: Record<number, { en: string; ar: string; icon: strin
   96: { en: 'Thunderstorm with hail', ar: 'عاصفة رعدية مع برد', icon: '⛈️' },
   99: { en: 'Thunderstorm with hail', ar: 'عاصفة رعدية مع برد', icon: '⛈️' },
 };
+
+/** hours between Cairo and a time zone right now (DST aware) */
+export const hoursFromCairo = (tz: string): number => {
+  const now = new Date();
+  const wall = (z: string) => {
+    const p = Object.fromEntries(new Intl.DateTimeFormat('en-US', { timeZone: z, hourCycle: 'h23', year: 'numeric', month: 'numeric', day: 'numeric', hour: 'numeric', minute: 'numeric' }).formatToParts(now).map((x) => [x.type, x.value]));
+    return Date.UTC(+p.year, +p.month - 1, +p.day, +p.hour, +p.minute);
+  };
+  return Math.round(((wall(tz) - wall('Africa/Cairo')) / 3_600_000) * 2) / 2;
+};
+
