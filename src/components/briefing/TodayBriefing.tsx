@@ -6,6 +6,7 @@ import { isActiveTask, rankTopPriorities } from '../../lib/taskLogic';
 import { useCairoClock } from '../../lib/useCairoClock';
 import { formatTimeLabel } from '../common/DateTimeField';
 import { TinyTaskModal } from '../calendar/TinyTasks';
+import { MateSnapshot } from '../mate/MateSnapshot';
 import { getTeam, subscribeTeam } from '../../lib/team';
 import { AlertTriangle, Calendar, CalendarClock, CheckCircle2, ChevronDown, ChevronRight, CircleDashed, Clock, Hourglass, ListChecks, Plus, Sparkles, Users, Zap } from 'lucide-react';
 
@@ -265,6 +266,18 @@ export const TodayBriefing: React.FC<TodayBriefingProps> = ({
             </div>
           ))}
         </div>
+      </section>
+
+      {/* The market in three numbers; the whole page is under CEO's Mate */}
+      <section className="bg-white rounded-3xl border border-[#d2d2d7] shadow-xs p-4">
+        <div className="flex items-center gap-2 mb-2">
+          <h2 className="flex-1 text-sm font-bold uppercase tracking-wide text-[#1d1d1f]">{ar ? 'السوق الآن' : 'Markets now'}</h2>
+          <button onClick={() => onNavigateToTab('mate')} className="min-h-10 px-1 text-xs font-bold text-[#0071e3] inline-flex items-center gap-1">
+            {ar ? 'رفيق المدير' : 'CEO’s Mate'}
+            <ChevronRight className={`w-3.5 h-3.5 ${ar ? 'rotate-180' : ''}`} />
+          </button>
+        </div>
+        <MateSnapshot ar={ar} compact />
       </section>
 
       {/* What is coming */}
