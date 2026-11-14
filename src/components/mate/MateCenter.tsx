@@ -1,14 +1,18 @@
 import React, { useEffect, useState } from 'react';
-import { Banknote, Bell, CalendarHeart, Clock, Coins, Factory, Landmark, Newspaper, Ruler, TrendingUp } from 'lucide-react';
+import { Banknote, Bell, CalendarHeart, Clock, Coins, Factory, Landmark, Languages, ListChecks, Newspaper, Plane, Ruler, TrendingUp } from 'lucide-react';
 import { evaluateAlerts, useWatchState } from '../../lib/marketWatch';
 import { CurrencyTool, GoldTool } from './FxGold';
 import { CommoditiesTool, EconomyTool, NewsTool, StocksTool } from './StocksNews';
 import { AlertsTool, ClocksTool, ConverterTool, HolidaysTool } from './Extras';
 import { MateSnapshot } from './MateSnapshot';
+import { ChecklistTool, PhrasebookTool, TravelTool } from './Travel';
 
-export type MateTool = 'currency' | 'gold' | 'stocks' | 'news' | 'commodities' | 'economy' | 'alerts' | 'clocks' | 'holidays' | 'converter';
+export type MateTool = 'currency' | 'gold' | 'stocks' | 'news' | 'commodities' | 'economy' | 'alerts' | 'clocks' | 'holidays' | 'converter' | 'travel' | 'phrases' | 'checklist';
 
 const TILES: { id: MateTool; en: string; ar: string; hint: { en: string; ar: string }; icon: React.ReactNode; tone: string }[] = [
+  { id: 'travel', en: 'Travel', ar: 'السفر', hint: { en: 'Weather, prayer times, time & facts', ar: 'الطقس والصلاة والتوقيت ومعلومات' }, icon: <Plane className="w-8 h-8" />, tone: 'bg-cyan-50 text-cyan-700' },
+  { id: 'phrases', en: 'Useful phrases', ar: 'عبارات مفيدة', hint: { en: 'Translation, sound & pronunciation', ar: 'ترجمة ونطق وصوت' }, icon: <Languages className="w-8 h-8" />, tone: 'bg-lime-50 text-lime-700' },
+  { id: 'checklist', en: 'Trip checklist', ar: 'قائمة السفر', hint: { en: 'Never forget the essentials', ar: 'لا تنسَ الأساسيات' }, icon: <ListChecks className="w-8 h-8" />, tone: 'bg-fuchsia-50 text-fuchsia-700' },
   { id: 'currency', en: 'Currency', ar: 'العملات', hint: { en: 'Dollar, euro, riyal… and a calculator', ar: 'الدولار واليورو والريال… وحاسبة' }, icon: <Banknote className="w-8 h-8" />, tone: 'bg-emerald-50 text-emerald-700' },
   { id: 'gold', en: 'Gold', ar: 'الذهب', hint: { en: 'Egypt gram prices and trend', ar: 'أسعار الجرام في مصر والاتجاه' }, icon: <Coins className="w-8 h-8" />, tone: 'bg-amber-50 text-amber-700' },
   { id: 'stocks', en: 'Stocks', ar: 'الأسهم', hint: { en: 'EGX top 20, search, global', ar: 'أكبر 20 سهماً، بحث، عالمي' }, icon: <TrendingUp className="w-8 h-8" />, tone: 'bg-sky-50 text-sky-700' },
@@ -23,6 +27,7 @@ const TILES: { id: MateTool; en: string; ar: string; hint: { en: string; ar: str
 
 export const MateCenter: React.FC<{ ar: boolean }> = ({ ar }) => {
   const [tool, setTool] = useState<MateTool | null>(null);
+  const [phraseLang, setPhraseLang] = useState<string | undefined>(undefined);
   const st = useWatchState();
   useEffect(() => {
     window.scrollTo?.(0, 0);
@@ -38,6 +43,9 @@ export const MateCenter: React.FC<{ ar: boolean }> = ({ ar }) => {
   if (tool === 'clocks') return <ClocksTool ar={ar} onBack={back} />;
   if (tool === 'holidays') return <HolidaysTool ar={ar} onBack={back} />;
   if (tool === 'converter') return <ConverterTool ar={ar} onBack={back} />;
+  if (tool === 'travel') return <TravelTool ar={ar} onBack={back} onOpenPhrases={(l) => { setPhraseLang(l); setTool('phrases'); }} />;
+  if (tool === 'phrases') return <PhrasebookTool ar={ar} onBack={back} initial={phraseLang} />;
+  if (tool === 'checklist') return <ChecklistTool ar={ar} onBack={back} />;
   return (
     <div className="max-w-3xl mx-auto space-y-4 pb-12">
       <div>
@@ -54,7 +62,7 @@ export const MateCenter: React.FC<{ ar: boolean }> = ({ ar }) => {
       <MateSnapshot ar={ar} />
       <div className="grid grid-cols-2 gap-3">
         {TILES.map((t) => (
-          <button key={t.id} type="button" onClick={() => setTool(t.id)} className="text-start rounded-3xl border border-[#d2d2d7] bg-white shadow-xs p-4 min-h-36 flex flex-col gap-2 active:scale-[0.98] transition-transform">
+          <button key={t.id} type="button" onClick={() => { setPhraseLang(undefined); setTool(t.id); }} className="text-start rounded-3xl border border-[#d2d2d7] bg-white shadow-xs p-4 min-h-36 flex flex-col gap-2 active:scale-[0.98] transition-transform">
             <span className={`w-14 h-14 rounded-2xl inline-flex items-center justify-center ${t.tone}`}>{t.icon}</span>
             <span className="text-base font-bold text-[#1d1d1f] leading-tight">{ar ? t.ar : t.en}</span>
             <span className="text-xs text-stone-500 leading-snug">{ar ? t.hint.ar : t.hint.en}</span>
