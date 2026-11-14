@@ -139,8 +139,8 @@ export const EXECUTIVE_TOOLS: any = [
       },
       {
         name: 'navigateTo',
-        description: 'Open a tab/page of the app. tab: today (daily briefing), notebook (notes & ink), planner (tasks & calendar), tasks, calendar, followup, directory, chat (team chat), settings.',
-        parameters: { type: Type.OBJECT, properties: { tab: { type: Type.STRING, enum: ['today', 'notebook', 'planner', 'tasks', 'calendar', 'followup', 'directory', 'chat', 'settings'] } }, required: ['tab'] },
+        description: 'Open a tab/page of the app. tab: today (daily briefing), notebook (notes & ink), planner (tasks & calendar), tasks, calendar, followup, directory, chat (team chat), settings, mate (the CEO Mate page: currency, gold, stocks, news, commodities, economy, alerts, world clock, holidays, converter).',
+        parameters: { type: Type.OBJECT, properties: { tab: { type: Type.STRING, enum: ['today', 'notebook', 'planner', 'tasks', 'calendar', 'followup', 'directory', 'chat', 'mate', 'settings'] } }, required: ['tab'] },
       },
       {
         name: 'openItem',
@@ -221,6 +221,11 @@ export const EXECUTIVE_TOOLS: any = [
         name: 'refreshCalendars',
         description: 'Refresh the calendars now: two-way sync with Google Calendar and re-read the Outlook work calendar. Use it when asked to update or sync the calendar.',
         parameters: { type: Type.OBJECT, properties: {} },
+      },
+      {
+        name: 'getMarketSnapshot',
+        description: "Current market figures from the CEO's Mate page, each with its source: USD/EGP rate, Egypt gold price per gram (21K and 24K), the EGX30 index, and the latest headlines on a topic. Use it for questions about the dollar, gold, the stock market or industrial/land news. topic: industry, land, economy, global, shipping, tenders (optional, default none).",
+        parameters: { type: Type.OBJECT, properties: { topic: { type: Type.STRING, enum: ['industry', 'land', 'economy', 'global', 'shipping', 'tenders'] } } },
       },
       {
         name: 'getConnectionStatus',
