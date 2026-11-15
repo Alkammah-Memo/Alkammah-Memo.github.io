@@ -76,7 +76,7 @@ const sameCity = (a: WatchCity, b: WatchCity) => Math.abs(a.lat - b.lat) < 0.05 
 export const isCityWatched = (list: WatchCity[], c: WatchCity) => list.some((x) => sameCity(x, c));
 export function toggleCity(c: WatchCity) {
   const city = { name: c.name, lat: c.lat, lon: c.lon };
-  commit({ ...state, cities: isCityWatched(state.cities, city) ? state.cities.filter((x) => !sameCity(x, city)) : [...state.cities, city] });
+  commit({ ...state, cities: isCityWatched(state.cities, city) ? state.cities.filter((x) => !sameCity(x, city)) : [city, ...state.cities] });
 }
 export function addAlert(a: Omit<Alert, 'id' | 'active'>) {
   commit({ ...state, alerts: [...state.alerts, { ...a, id: `al-${Date.now().toString(36)}`, active: true }] });
