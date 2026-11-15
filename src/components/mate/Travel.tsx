@@ -1,8 +1,7 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Compass, MapPin, Star, Plus, RotateCcw, Search, Trash2, Volume2 } from 'lucide-react';
+import { Compass, MapPin, Plus, RotateCcw, Search, Trash2, Volume2 } from 'lucide-react';
 import { COUNTRIES, Country, LANGUAGES, PHRASES, WEATHER_CODES, hoursFromCairo, qiblaBearing } from '../../lib/travelData';
 import { Place, convert, findPlaces, fmt, getPrayerTimes, getRates, getWeather } from '../../lib/market';
-import { isCityWatched, toggleCity, useWatchCities } from '../../lib/marketWatch';
 import { Card, ErrorBox, SourceLine, ToolShell, useLoad } from './parts';
 
 const DEST_KEY = 'alkammah_mate_dest';
@@ -21,7 +20,6 @@ const readDest = (): Dest | null => {
 
 export const TravelTool: React.FC<{ ar: boolean; onBack: () => void; onOpenPhrases: (lang: string) => void }> = ({ ar, onBack, onOpenPhrases }) => {
   const [dest, setDest] = useState<Dest>(() => readDest() || { countryId: 'cn', place: placeOf(COUNTRIES.find((c) => c.id === 'cn')!, false) });
-  const cities = useWatchCities();
   const [q, setQ] = useState('');
   const [found, setFound] = useState<Place[] | null>(null);
   const [searching, setSearching] = useState(false);
@@ -111,10 +109,6 @@ export const TravelTool: React.FC<{ ar: boolean; onBack: () => void; onOpenPhras
           <div>
             <div className="text-lg font-bold">{dest.place.name}</div>
             <div className="text-xs text-stone-500">{dest.place.country}</div>
-            <button type="button" onClick={() => toggleCity(dest.place)} className={`mt-2 min-h-10 px-3 rounded-xl border text-sm font-semibold inline-flex items-center gap-1.5 ${isCityWatched(cities, dest.place) ? 'border-[#0071e3] text-[#0071e3] bg-[#0071e3]/5' : 'border-stone-300 text-stone-700'}`}>
-              <Star className={`w-4 h-4 ${isCityWatched(cities, dest.place) ? 'fill-[#0071e3]' : ''}`} />
-              {isCityWatched(cities, dest.place) ? (ar ? 'في طقس المتابعة' : 'On my weather list') : ar ? 'أضف لطقس المتابعة' : 'Add to weather list'}
-            </button>
           </div>
           <div className="text-end">
             <div className="font-mono text-xl font-bold tabular-nums">{local}</div>

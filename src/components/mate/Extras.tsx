@@ -1,9 +1,78 @@
 import React, { useEffect, useMemo, useState } from 'react';
-import { Bell, Plus, Trash2, X } from 'lucide-react';
-import { CURRENCIES, fmt, getRates, convert } from '../../lib/market';
-import { METRICS, Metric, addAlert, clearHits, evaluateAlerts, removeAlert, setAlertActive, toggleWatch, useWatchState, metricValue } from '../../lib/marketWatch';
+import { Bell, MapPin, Plus, Search, Trash2, X } from 'lucide-react';
+import { CURRENCIES, Place, findPlaces, fmt, getRates, getWeather, convert } from '../../lib/market';
+import { WEATHER_CODES } from '../../lib/travelData';
+import { METRICS, Metric, addAlert, clearHits, evaluateAlerts, removeAlert, setAlertActive, toggleWatch, toggleCity, useWatchState, metricValue } from '../../lib/marketWatch';
 import { Card, ToolShell, ErrorBox, useLoad } from './parts';
 import { upcomingHolidays } from '../../lib/holidays';
+
+// ---------------------------------------------------------------- weather cities of the watchlist
+const CityRow: React.FC<{ ar: boolean; city: { name: string; lat: number; lon: number } }> = ({ ar, city }) => {
+  const wx = useLoad((f) => getWeather(city.lat, city.lon, f), [city.lat, city.lon]);
+  const w = wx.data?.data;
+  const c = w ? WEATHER_CODES[w.now.code] : undefined;
+  return (
+    <li className="flex items-center gap-2 py-2">
+      <span className="text-2xl w-8 text-center" aria-hidden>{c?.icon || '🌡️'}</span>
+      <span className="flex-1 min-w-0">
+        <span className="block text-sm font-bold truncate">{city.name}</span>
+        <span className="block text-xs text-stone-500 truncate">{c ? (ar ? c.ar : c.en) : wx.error ? '—' : '…'}</span>
+      </span>
+      {w && <span className="font-mono font-bold tabular-nums">{Math.round(w.now.temp)}°C</span>}
+      <button type="button" onClick={() => toggleCity(city)} aria-label={ar ? 'إزالة' : 'Remove'} className="w-10 h-10 inline-flex items-center justify-center text-stone-400 rounded-lg active:bg-stone-100">
+        <X className="w-4 h-4" />
+      </button>
+    </li>
+  );
+};
+
+const WeatherWatch: React.FC<{ ar: boolean }> = ({ ar }) => {
+  const st = useWatchState();
+  const [q, setQ] = useState('');
+  const [found, setFound] = useState<Place[] | null>(null);
+  useEffect(() => {
+    const t = setTimeout(async () => {
+      if (q.trim().length < 2) return setFound(null);
+      try {
+        setFound(await findPlaces(q.trim(), ar));
+      } catch {
+        setFound([]);
+      }
+    }, 400);
+    return () => clearTimeout(t);
+  }, [q, ar]);
+  return (
+    <Card>
+      <div className="text-xs font-bold uppercase tracking-wide text-stone-500">{ar ? 'قائمة الطقس' : 'Weather cities'}</div>
+      <p className="mt-1 text-xs text-stone-500">{ar ? 'تظهر في بطاقة «السوق الآن» وتتبدّل تلقائياً.' : 'Shown in the “Markets now” card, which rotates through them.'}</p>
+      <ul className="mt-1 divide-y divide-stone-100">
+        {st.cities.length === 0 && <li className="py-2 text-sm text-stone-500">{ar ? 'لا مدن. ابحث لإضافة مدينة.' : 'No cities yet. Search to add one.'}</li>}
+        {st.cities.map((c) => (
+          <CityRow key={`${c.lat}${c.lon}`} ar={ar} city={c} />
+        ))}
+      </ul>
+      <div className="relative mt-2">
+        <Search className="w-4 h-4 text-stone-400 absolute start-3 top-4" />
+        <input value={q} onChange={(e) => setQ(e.target.value)} type="search" placeholder={ar ? 'ابحث عن مدينة لإضافتها' : 'Search a city to add'} className="w-full h-12 ps-9 pe-3 rounded-xl border border-stone-300 text-base sm:text-sm bg-white" />
+      </div>
+      {found && (
+        <ul className="mt-2 rounded-xl border border-stone-200 divide-y divide-stone-100 overflow-hidden">
+          {found.length === 0 && <li className="px-3 py-3 text-sm text-stone-500">{ar ? 'لا نتائج.' : 'No results.'}</li>}
+          {found.map((p, i) => (
+            <li key={`${p.lat}${p.lon}${i}`}>
+              <button type="button" onClick={() => { if (!st.cities.some((c) => Math.abs(c.lat - p.lat) < 0.05 && Math.abs(c.lon - p.lon) < 0.05)) toggleCity(p); setQ(''); setFound(null); }} className="w-full min-h-12 px-3 flex items-center gap-2 text-start active:bg-stone-50">
+                <MapPin className="w-4 h-4 text-[#0071e3]" />
+                <span className="text-sm font-semibold">{p.name}</span>
+                <span className="text-xs text-stone-500">{p.country}</span>
+                <Plus className="w-4 h-4 ms-auto text-stone-400" />
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </Card>
+  );
+};
 
 // ---------------------------------------------------------------- watchlist + alerts
 export const AlertsTool: React.FC<{ ar: boolean; onBack: () => void }> = ({ ar, onBack }) => {
@@ -135,6 +204,7 @@ export const AlertsTool: React.FC<{ ar: boolean; onBack: () => void }> = ({ ar, 
           ))}
         </div>
       </Card>
+      <WeatherWatch ar={ar} />
     </ToolShell>
   );
 };
