@@ -1,39 +1,55 @@
-import React from 'react';
-import { fmt, getEgx30, getGold, getRates } from '../../lib/market';
+import React, { useState } from 'react';
+import { fmt, getEgx30, getRates, getWeather } from '../../lib/market';
+import { WEATHER_CODES } from '../../lib/travelData';
+import { useWatchCities } from '../../lib/marketWatch';
 import { Change, SourceLine, useLoad } from './parts';
 
-/** three numbers every morning: dollar, gold (21K gram) and the EGX30 index, each with where it comes from */
+/** three numbers every morning: dollar, the weather of a watched city (tap to switch) and the EGX30 index, each with where it comes from */
 export const MateSnapshot: React.FC<{ ar: boolean; compact?: boolean }> = ({ ar, compact }) => {
   const rates = useLoad((f) => getRates(f), []);
-  const gold = useLoad((f) => getGold(f), []);
   const egx = useLoad((f) => getEgx30(f), []);
+  const cities = useWatchCities();
+  const [i, setI] = useState(0);
+  const city = cities.length ? cities[i % cities.length] : null;
+  const wx = useLoad((f) => (city ? getWeather(city.lat, city.lon, f) : Promise.reject(new Error('NO_CITY'))), [city?.lat, city?.lon]);
   const dayMove = egx.data ? egx.data.data.changePct : null;
-  const tiles = [
-    { l: ar ? 'الدولار' : 'USD / EGP', v: fmt(rates.data?.data.EGP, 2), s: 'EGP', c: null as number | null },
-    { l: ar ? 'ذهب عيار 21' : 'Gold 21K / g', v: fmt(gold.data?.data.gram21, 0), s: 'EGP', c: null },
-    { l: 'EGX30', v: fmt(egx.data?.data.price, 0), s: '', c: dayMove },
-  ];
+  const w = wx.data?.data;
+  const code = w ? WEATHER_CODES[w.now.code] : undefined;
   return (
     <div className="space-y-1.5">
       <div className="grid grid-cols-3 gap-2">
-        {tiles.map((t) => (
-          <div key={t.l} className="rounded-2xl border border-stone-200 bg-white px-2 py-2.5 text-center min-w-0">
-            <div className="text-[11px] text-stone-500 truncate">{t.l}</div>
-            <div className="text-lg font-bold tabular-nums text-stone-900">{t.v}</div>
-            <div className="h-4 text-[11px] text-stone-400">{t.c !== null ? <Change pct={t.c} className="text-[11px]" /> : t.s}</div>
-          </div>
-        ))}
+        <div className="rounded-2xl border border-stone-200 bg-white px-2 py-2.5 text-center min-w-0">
+          <div className="text-[11px] text-stone-500 truncate">{ar ? 'الدولار' : 'USD / EGP'}</div>
+          <div className="text-lg font-bold tabular-nums text-stone-900">{fmt(rates.data?.data.EGP, 2)}</div>
+          <div className="h-4 text-[11px] text-stone-400">EGP</div>
+        </div>
+        <button
+          type="button"
+          onClick={() => setI((n) => n + 1)}
+          disabled={cities.length < 2}
+          aria-label={ar ? 'الطقس — المس لتغيير المدينة' : 'Weather — tap to switch city'}
+          className="rounded-2xl border border-stone-200 bg-white px-2 py-2.5 text-center min-w-0 disabled:cursor-default"
+        >
+          <div className="text-[11px] text-stone-500 truncate">{city ? city.name : ar ? 'الطقس' : 'Weather'}</div>
+          <div className="text-lg font-bold tabular-nums text-stone-900">{w ? `${Math.round(w.now.temp)}°` : '—'}</div>
+          <div className="h-4 text-[11px] text-stone-400 truncate">{code ? `${code.icon} ${ar ? code.ar : code.en}` : ''}</div>
+        </button>
+        <div className="rounded-2xl border border-stone-200 bg-white px-2 py-2.5 text-center min-w-0">
+          <div className="text-[11px] text-stone-500 truncate">EGX30</div>
+          <div className="text-lg font-bold tabular-nums text-stone-900">{fmt(egx.data?.data.price, 0)}</div>
+          <div className="h-4 text-[11px] text-stone-400">{dayMove !== null ? <Change pct={dayMove} className="text-[11px]" /> : ''}</div>
+        </div>
       </div>
       {!compact && (
         <SourceLine
           ar={ar}
-          sources={[ar ? 'ExchangeRate-API · gold-api.com · TradingView (EGX30)' : 'ExchangeRate-API · gold-api.com · TradingView (EGX30)']}
+          sources={['ExchangeRate-API · Open-Meteo · TradingView (EGX30)']}
           onRefresh={() => {
             rates.reload();
-            gold.reload();
+            wx.reload();
             egx.reload();
           }}
-          loading={rates.loading || gold.loading || egx.loading}
+          loading={rates.loading || wx.loading || egx.loading}
         />
       )}
     </div>
