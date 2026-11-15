@@ -21,8 +21,15 @@ export interface Hit {
   text: string;
   at: number;
 }
+export interface WatchCity {
+  name: string;
+  lat: number;
+  lon: number;
+}
+const CAIRO: WatchCity = { name: 'Cairo', lat: 30.0444, lon: 31.2357 };
 interface State {
   watch: WatchItem[];
+  cities: WatchCity[];
   alerts: Alert[];
   hits: Hit[];
 }
@@ -36,12 +43,12 @@ function load(): State {
     const raw = localStorage.getItem(KEY);
     if (raw) {
       const p = JSON.parse(raw) as Partial<State>;
-      return { watch: p.watch || [], alerts: p.alerts || [], hits: p.hits || [] };
+      return { watch: p.watch || [], cities: p.cities || [CAIRO], alerts: p.alerts || [], hits: p.hits || [] };
     }
   } catch {
     /* ignore */
   }
-  return { watch: [{ kind: 'pair', id: 'USD/EGP', label: 'USD/EGP' }], alerts: [], hits: [] };
+  return { watch: [{ kind: 'pair', id: 'USD/EGP', label: 'USD/EGP' }], cities: [CAIRO], alerts: [], hits: [] };
 }
 function commit(next: State) {
   state = next;
@@ -63,6 +70,13 @@ export const isWatched = (list: WatchItem[], kind: WatchItem['kind'], id: string
 
 export function toggleWatch(kind: WatchItem['kind'], id: string, label: string) {
   commit({ ...state, watch: isWatched(state.watch, kind, id) ? state.watch.filter((w) => !(w.kind === kind && w.id === id)) : [...state.watch, { kind, id, label }] });
+}
+export const useWatchCities = (): WatchCity[] => useWatchState().cities;
+const sameCity = (a: WatchCity, b: WatchCity) => Math.abs(a.lat - b.lat) < 0.05 && Math.abs(a.lon - b.lon) < 0.05;
+export const isCityWatched = (list: WatchCity[], c: WatchCity) => list.some((x) => sameCity(x, c));
+export function toggleCity(c: WatchCity) {
+  const city = { name: c.name, lat: c.lat, lon: c.lon };
+  commit({ ...state, cities: isCityWatched(state.cities, city) ? state.cities.filter((x) => !sameCity(x, city)) : [...state.cities, city] });
 }
 export function addAlert(a: Omit<Alert, 'id' | 'active'>) {
   commit({ ...state, alerts: [...state.alerts, { ...a, id: `al-${Date.now().toString(36)}`, active: true }] });
